@@ -19,6 +19,7 @@ const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn',
 const slug = (v, fb = 'star') => KNOWN.has(v) ? v : (LEGACY[v] || fb);
 const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" class="${cls}" decoding="async">`;
 const SVG = {
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.9"/><circle cx="15" cy="6" r="1.9"/><circle cx="9" cy="12" r="1.9"/><circle cx="15" cy="12" r="1.9"/><circle cx="9" cy="18" r="1.9"/><circle cx="15" cy="18" r="1.9"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 010 6M18 6.5a8 8 0 010 11"/></svg>',
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
@@ -216,7 +217,7 @@ async function viewPlayers(me = ME) {
 // ---------- Lobby da criança ----------
 // A criança vê o ganho na hora (moedas, minutos, meta). O pai confere depois; se rejeitar, o ganho sai.
 async function viewKid(id) {
-  let first = true;
+  let first = true, showDone = false;
   const doneLike = (s) => s === 'approved' || s === 'pending';
   const load = async () => {
     const d = await api('GET', `/kids/${id}/home`);
@@ -226,7 +227,7 @@ async function viewKid(id) {
 
   const render = (d) => {
     const coins = d.balance + d.pending_coins;
-    const todo = d.tasks.filter(t => !doneLike(t.status));
+    const todo = d.tasks.filter(t => !doneLike(t.status)), finished = d.tasks.filter(t => doneLike(t.status));
     const done = d.total - todo.length;
     const order = (t) => doneLike(t.status) ? 0 : 1;
     const segs = [...d.tasks].sort((a, b) => order(a) - order(b))
@@ -245,7 +246,7 @@ async function viewKid(id) {
     };
     const mission = (t, i) => {
       const chips = [
-        t.time ? `<span class="chip hour">${esc(t.time)}</span>` : '',
+        t.time ? `<span class="chip hour">${esc(t.time)}</span>` : t.until && !doneLike(t.status) ? `<span class="chip until">até ${esc(t.until)}</span>` : '',
         t.coins > 0 ? `<span class="chip">${im('coin')}+${num(t.coins)}</span>` : '',
         ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}+${num(r.value)} ${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}+1</span>`),
       ].join('');
@@ -273,18 +274,24 @@ async function viewKid(id) {
         </section>
         ${d.time.length || d.goals.length ? `<section class="panel">${d.time.map(timeMeter).join('')}${d.time.length && d.goals.length ? '<div class="gap"></div>' : ''}${d.goals.map(goalRoad).join('')}</section>` : ''}</div>
         <div class="section-h"><h2 class="d stroke-sm">Missões</h2></div>
-        ${d.tasks.length ? `<div class="missions">${d.tasks.map(mission).join('')}</div>` : `<div class="empty">${im('party')}<p class="d stroke-sm">Nenhuma missão hoje. Aproveite!</p></div>`}
+        ${!d.tasks.length ? `<div class="empty">${im('party')}<p class="d stroke-sm">Nenhuma missão hoje. Aproveite!</p></div>`
+          : todo.length ? `<div class="missions">${todo.map(mission).join('')}</div>` : `<div class="all-done">${im('trophy')}<b class="d stroke-sm">Todas as missões feitas!</b></div>`}
+        ${finished.length ? `<details class="done-list" ${showDone ? 'open' : ''}><summary>${im('check')}<span>Feitas</span><b class="num">${finished.length}</b><i class="chev" aria-hidden="true"></i></summary>
+          <div class="missions">${finished.map(mission).join('')}</div></details>` : ''}
       </div></div>`;
     wireSound();
+    $('.done-list')?.addEventListener('toggle', (e) => { showDone = e.target.open; sfx.tap(); });
     $('#back').onclick = () => { sfx.tap(); location.hash = '#/'; };
     $$('[data-do]').forEach(b => b.onclick = guard(async () => {
       b.disabled = true;
       const r = b.getBoundingClientRect(); sparks(r.left + r.width / 2, r.top + r.height / 2); sfx.done();
       const t = d.tasks.find(x => x.id === +b.dataset.do), last = todo.length === 1;
+      const art = b.closest('.mission'), tile = $(`[data-tile="${t.id}"]`)?.getBoundingClientRect();
       await api('POST', `/kids/${id}/complete`, { task_id: t.id });
+      // a missão sai da lista e vai para "Feitas"
+      if (!reduced && art) await art.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(48px) scale(.94)' }], { duration: 280, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' }).finished;
       const nd = await load();
-      $(`[data-m="${t.id}"]`)?.classList.add('pop');
-      const tile = $(`[data-tile="${t.id}"]`)?.getBoundingClientRect();
+      $('.done-list summary')?.classList.add('bump');
       const newCoins = nd.balance + nd.pending_coins;
       $('#coinNum').textContent = num(coins);
       if (tile) flyTo({ x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 }, $('#coinPill'), t.coins > 0 ? 'coin' : 'glow', t.coins > 0 ? Math.min(8, 3 + Math.round(t.coins)) : 3);
@@ -350,7 +357,7 @@ function viewPin() {
 
 // ---------- Painel dos pais ----------
 let tab = 'pending';
-const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['alarms', 'clock', 'Avisos'], ['wallet', 'moneybag', 'Carteira'], ['history', 'chart', 'Histórico'], ['settings', 'gear', 'Ajustes']];
+const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
 async function viewAdmin() {
   const pendingN = (await api('GET', '/admin/pending')).length;
   const ac = ME.access || {};
@@ -364,8 +371,8 @@ async function viewAdmin() {
   $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); viewAdmin().catch(e => toast(e.message, true)); });
   $('.tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
-  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, alarms: adminAlarms, wallet: adminWallet, history: adminHistory, settings: adminSettings };
-  await fns[tab]($('#pane'), viewAdmin);
+  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wallet: adminWallet, settings: adminSettings };
+  await (fns[tab] || (tab = 'pending', adminPending))($('#pane'), viewAdmin);
 }
 const zero = (icon, text) => `<div class="zero">${im(icon)}<span>${text}</span></div>`;
 
@@ -386,28 +393,100 @@ async function adminKids(pane, refresh) {
   const kids = await api('GET', '/admin/kids');
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><button class="btn green sm" id="new">Adicionar filho</button></div>
     ${kids.length ? `<div class="list">${kids.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
-      <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${k.active ? 'Aparece na tela de jogadores' : 'Inativo'}</div></div>
+      <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${!k.active ? 'Inativo' : k.auto_approve ? 'Tarefas aprovadas automaticamente' : 'Você confere as tarefas'}</div></div>
       <div class="btns"><button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>`;
-  const form = (k = { name: '', avatar: AVATARS[0], color: COLORS[0], active: 1 }) => `
+  const form = (k = { name: '', avatar: AVATARS[0], color: COLORS[0], active: 1, auto_approve: 0 }) => `
     <div class="field"><label for="kn">Nome</label><input id="kn" name="name" value="${esc(k.name)}" required></div>
     <div class="field"><span class="lab">Personagem</span>${picker('avatar', AVATARS, slug(k.avatar, 'fox'))}</div>
     <div class="field"><span class="lab">Cor do card</span>${swatches('color', k.color)}</div>
+    <label class="check"><input type="checkbox" name="auto" ${k.auto_approve ? 'checked' : ''}>Aprovar as tarefas automaticamente</label>
+    <p class="hint">Os ganhos entram assim que ${k.name ? esc(k.name) : 'a criança'} marca a tarefa, sem passar pela aba Aprovar.</p>
     <label class="check"><input type="checkbox" name="active" ${k.active ? 'checked' : ''}>Ativo na tela de jogadores</label>`;
-  const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked });
+  const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked });
   $('#new').onclick = () => sheet('Novo filho', form(), async (f) => { await api('POST', '/admin/kids', read(f)); toast('Jogador adicionado'); refresh(); }, { saveLabel: 'Adicionar' });
   $$('[data-e]').forEach(b => b.onclick = () => { const k = kids.find(x => x.id == b.dataset.e); sheet('Editar ' + k.name, form(k), async (f) => { await api('PUT', '/admin/kids/' + k.id, read(f)); refresh(); }); });
 }
 
 const DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'], DAYN = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+// Arrastar para ordenar (dedo ou mouse pela alça; setas do teclado na alça também movem)
+function sortable(list, onDrop) {
+  const ids = () => $$('.item', list).map(x => +x.dataset.id);
+  list.addEventListener('pointerdown', (e) => {
+    const grip = e.target.closest('.grip'); if (!grip || e.button > 0) return;
+    e.preventDefault();
+    const item = grip.closest('.item'), before = ids().join();
+    const off = e.clientY - item.getBoundingClientRect().top;
+    item.classList.add('dragging'); grip.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const y = ev.clientY;
+      const next = $$('.item', list).filter(x => x !== item).find(s => { const b = s.getBoundingClientRect(); return y < b.top + b.height / 2; }) || null;
+      if (next !== item.nextElementSibling) { list.insertBefore(item, next); sfx.tap(); }
+      item.style.transform = 'none';
+      item.style.transform = `translateY(${y - off - item.getBoundingClientRect().top}px)`;
+      if (y < 70) scrollBy(0, -12); else if (y > innerHeight - 70) scrollBy(0, 12);
+    };
+    let done = false;
+    const up = () => {
+      if (done) return; done = true;
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+      grip.removeEventListener('lostpointercapture', up);
+      item.classList.remove('dragging'); item.style.transform = '';
+      if (ids().join() !== before) onDrop(ids());
+    };
+    // escuta na janela: o fim do gesto às vezes não chega na alça
+    addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+    grip.addEventListener('lostpointercapture', up);
+  });
+  list.addEventListener('keydown', (e) => {
+    const grip = e.target.closest('.grip'); if (!grip || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    e.preventDefault();
+    const item = grip.closest('.item'), sib = e.key === 'ArrowUp' ? item.previousElementSibling : item.nextElementSibling?.nextElementSibling;
+    if (e.key === 'ArrowUp' && !sib) return;
+    if (e.key === 'ArrowDown' && !item.nextElementSibling) return;
+    list.insertBefore(item, sib); onDrop(ids());
+    setTimeout(() => $(`.item[data-id="${item.dataset.id}"] .grip`, list)?.focus(), 0);
+  });
+}
+
+let taskKid = null; // filho escolhido na aba Tarefas ('all' = todas as tarefas)
 async function adminTasks(pane, refresh) {
   const [tasks, kids, rewards] = await Promise.all([api('GET', '/admin/tasks'), api('GET', '/admin/kids'), api('GET', '/admin/rewards')]);
   const kidsOn = kids.filter(k => k.active);
+  if (taskKid !== 'all' && !kidsOn.some(k => k.id === taskKid)) taskKid = kidsOn[0]?.id ?? 'all';
+  const kid = kidsOn.find(k => k.id === taskKid);
+  let order = kid ? await api('GET', `/admin/kids/${kid.id}/order`) : [];
+  const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
   const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
     : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
+  const who = (t) => t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
+  const line = (t, until) => [
+    esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
+    t.coins > 0 ? `${num(t.coins)} moedas` : '',
+    !kid ? t.reward_ids.map(r => esc(rewards.find(x => x.id === r)?.title || '?')).join(', ') : '', !kid ? esc(who(t)) : '',
+  ].filter(Boolean).join(' · ');
+  const untils = (ids) => { const m = {}; let next = null; for (let i = ids.length - 1; i >= 0; i--) { const t = byId[ids[i]]; if (t.time) next = t.time; else m[t.id] = next; } return m; };
+  const rows = () => {
+    if (!kid) return tasks.map(t => `<div class="item ${t.active ? '' : 'off'}"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
+      <div class="s">${line(t)}</div></div><div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`).join('');
+    const u = untils(order);
+    return order.map(id => { const t = byId[id]; return `<div class="item" data-id="${t.id}">
+      <button type="button" class="grip" aria-label="Mover ${esc(t.title)}. Use as setas para subir ou descer">${SVG.grip}</button>
+      <div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div><div class="s">${line(t, u[t.id])}</div></div>
+      <div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`; }).join('');
+  };
+  const list = kid ? order : tasks;
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Tarefas</h2><div class="btns"><button class="btn ghost sm" id="cat">${im('sparkles')}Do catálogo</button><button class="btn green sm" id="new">Nova tarefa</button></div></div>
-    ${tasks.length ? `<div class="list">${tasks.map(t => `<div class="item ${t.active ? '' : 'off'}"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
-      <div class="s">${esc(when(t))}${t.time ? ' às ' + esc(t.time) : ''}${t.coins > 0 ? ` · ${num(t.coins)} moedas` : ''}${t.reward_ids.length ? ' · ' + t.reward_ids.map(r => esc(rewards.find(x => x.id === r)?.title || '?')).join(', ') : ''}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`).join('')}</div>` : zero('clipboard', 'Crie a primeira tarefa da casa.')}</section>`;
+    <div class="kid-pick" role="group" aria-label="Ver tarefas de">${kidsOn.map(k => `<button type="button" class="kp" data-kid="${k.id}" aria-pressed="${k.id === taskKid}" style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</button>`).join('')}
+      <button type="button" class="kp" data-kid="all" aria-pressed="${taskKid === 'all'}">${im('clipboard')}Todas</button></div>
+    ${kid && order.length ? `<p class="lead">Arraste pela alça para pôr na ordem em que ${esc(kid.name)} faz as tarefas. Uma tarefa sem horário acima de outra com horário deve ser feita antes dela.</p>` : ''}
+    ${list.length ? `<div class="list" id="tl">${rows()}</div>` : zero('clipboard', kid ? `${esc(kid.name)} ainda não tem tarefas ativas.` : 'Crie a primeira tarefa da casa.')}</section>`;
+  $$('[data-kid]').forEach(b => b.onclick = () => { taskKid = b.dataset.kid === 'all' ? 'all' : +b.dataset.kid; sfx.tap(); adminTasks(pane, refresh).catch(e => toast(e.message, true)); });
+  if (kid && $('#tl')) sortable($('#tl'), guard(async (ids) => {
+    order = ids;
+    const u = untils(ids); // atualiza o "até 9:00" na hora, sem recarregar
+    $$('#tl .item').forEach(el => { el.querySelector('.s').innerHTML = line(byId[el.dataset.id], u[el.dataset.id]); });
+    await api('PUT', `/admin/kids/${kid.id}/order`, { ids });
+  }));
   const form = (t = { title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 }) => `
     <div class="field"><label for="tt">Nome da tarefa</label><input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required></div>
     <div class="field"><span class="lab">Ícone</span>${picker('icon', TASK_ICONS, slug(t.icon))}</div>
@@ -472,6 +551,36 @@ async function adminRewards(pane, refresh) {
   $$('[data-e]').forEach(b => b.onclick = () => { const r = rewards.find(x => x.id == b.dataset.e); wire(sheet('Editar recompensa', form(r), async (f) => { await api('PUT', '/admin/rewards/' + r.id, read(f)); refresh(); })); });
 }
 
+const ymd = (d) => d.toLocaleDateString('sv');
+const dayName = (s) => {
+  const now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+  if (s === ymd(now)) return 'Hoje';
+  if (s === ymd(y)) return 'Ontem';
+  return `${DAYN[new Date(s + 'T12:00:00').getDay()]}, ${dmy(s).slice(0, 5)}`;
+};
+// Extrato: um dia por linha com quanto cada filho ganhou; tocar no dia abre o que foi feito
+async function walletStatement(box) {
+  const [days, kids] = await Promise.all([api('GET', '/admin/statement'), api('GET', '/admin/kids')]);
+  const K = Object.fromEntries(kids.map(k => [k.id, k]));
+  const month = ymd(new Date()).slice(0, 7), tot = {};
+  days.filter(d => d.day.startsWith(month)).forEach(d => Object.entries(d.kids).forEach(([id, v]) => { tot[id] = (tot[id] || 0) + v.coins; }));
+  const gain = (coins, time) => [coins ? `${im('coin')}<b class="num">+${num(coins)}</b>` : '', time ? `<i class="num">+${num(time)} min</i>` : ''].join('');
+  box.innerHTML = `<div class="box-h"><h2 class="d">Extrato</h2><span class="s muted">últimos 90 dias</span></div>
+    ${Object.keys(tot).length ? `<div class="month-sum"><span>Neste mês</span>${Object.entries(tot).map(([id, c]) => `<span class="sc">${im(K[id]?.avatar, '', 'fox')}${esc(K[id]?.name || '?')} ${im('coin')}<b class="num">${num(c)}</b></span>`).join('')}</div>` : ''}
+    ${days.length ? `<div class="stmt">${days.map(d => `<details class="sday" data-day="${d.day}"><summary><span class="dl">${dayName(d.day)}</span>
+      <span class="dk">${Object.entries(d.kids).map(([id, v]) => `<span class="sc" title="${esc(K[id]?.name || '')}">${im(K[id]?.avatar, '', 'fox')}${gain(v.coins, v.time) || '<b class="num">0</b>'}</span>`).join('')}</span></summary>
+      <div class="dd">Carregando…</div></details>`).join('')}</div>` : zero('chart', 'Os ganhos de cada dia aparecem aqui quando as tarefas forem aprovadas.')}`;
+  $$('.sday', box).forEach(el => el.addEventListener('toggle', guard(async () => {
+    if (!el.open || el.dataset.loaded) return;
+    el.dataset.loaded = 1;
+    const det = await api('GET', '/admin/statement/' + el.dataset.day);
+    el.querySelector('.dd').innerHTML = Object.entries(det).map(([id, v]) => `<div class="sk"><div class="sk-h">${im(K[id]?.avatar, '', 'fox')}<b>${esc(K[id]?.name || '?')}</b></div><ul>
+      ${v.tasks.map(t => `<li>${im(t.icon)}<span class="grow">${esc(t.title)}</span>${t.status === 'rejected' ? '<span class="tag no">Rejeitada</span>' : `<span class="g">${gain(t.coins, t.time) || '<i>sem ganho</i>'}</span>`}</li>`).join('')}
+      ${v.other.map(o => `<li>${im(o.kind === 'time' ? 'stopwatch' : o.amount < 0 ? 'moneybag' : 'gift')}<span class="grow">${esc(o.note || 'Ajuste')}</span><span class="g ${o.amount < 0 ? 'neg' : ''}"><b class="num">${o.amount > 0 ? '+' : ''}${num(o.amount)}</b> ${o.kind === 'time' ? 'min' : o.kind === 'goal' ? 'na meta' : 'moedas'}</span></li>`).join('')}
+    </ul></div>`).join('') || '<p class="hint">Nada registrado neste dia.</p>';
+  })));
+}
+
 async function adminWallet(pane, refresh) {
   const w = await api('GET', '/admin/wallet');
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Carteira</h2><span class="s" style="font-weight:800;color:var(--ink-soft)">1 moeda = ${brl(w.settings.coin_value)}</span></div>
@@ -480,6 +589,7 @@ async function adminWallet(pane, refresh) {
       ${k.goals.length ? `<div class="goals">${k.goals.map(g => `<div class="g">${im(g.icon, '', 'trophy')}${esc(g.title)}: ${num(g.progress)}/${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'} ${g.ready ? `<button class="btn green sm" data-redeem="${k.id}:${g.id}">Entregar meta</button>` : ''}</div>`).join('')}</div>` : ''}
       <div class="btns"><button class="btn sm" data-pay="${k.id}" ${k.balance > 0 ? '' : 'disabled'}>${im('moneybag')}Pagar moedas</button>
         <button class="btn ghost sm" data-adj="${k.id}">Bônus ou desconto</button>${w.timeRewards.length ? `<button class="btn ghost sm" data-use="${k.id}">${im('stopwatch')}Tempo usado</button>` : ''}</div></div>`).join('') || zero('people', 'Cadastre os filhos primeiro.')}</section>
+    <section class="box" id="stmt"></section>
     <section class="box"><div class="box-h"><h2 class="d">Pagamentos</h2></div>${w.payouts.length ? `<table><thead><tr><th>Data</th><th>Filho</th><th>Moedas</th><th>Valor</th></tr></thead><tbody>${w.payouts.map(p => `<tr><td>${dmy(p.created_at)}</td><td>${esc(p.kid)}</td><td>${num(p.coins)}</td><td>${brl(p.amount)}</td></tr>`).join('')}</tbody></table>` : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
   const kid = (id) => w.kids.find(k => k.id == id);
   $$('[data-pay]').forEach(b => b.onclick = () => { const k = kid(b.dataset.pay); sheet(`Pagar ${k.name}`, `<p class="lead" style="margin-top:6px">Saldo: <b>${num(k.balance)} moedas</b> (${brl(k.value)}). As moedas pagas saem do saldo.</p><div class="field"><label for="pc">Quantas moedas pagar</label><input id="pc" name="coins" type="number" step="any" min="0.01" max="${k.balance}" value="${k.balance}" inputmode="decimal"></div>`,
@@ -490,30 +600,27 @@ async function adminWallet(pane, refresh) {
     async (f) => { await api('POST', '/admin/use-time', { kid_id: k.id, reward_id: f.rw.value, minutes: f.m.value }); toast('Tempo descontado'); refresh(); }, { saveLabel: 'Descontar' }); });
   $$('[data-redeem]').forEach(b => b.onclick = () => { const [k, g] = b.dataset.redeem.split(':'); sheet('Entregar meta', '<p class="lead" style="margin-top:6px">Confirme que a recompensa foi entregue. O progresso da meta volta a zero (metas em moedas descontam as moedas).</p>',
     async () => { await api('POST', '/admin/redeem', { kid_id: +k, reward_id: +g }); sfx.win(); toast('Meta entregue'); refresh(); }, { saveLabel: 'Confirmar entrega' }); });
+  await walletStatement($('#stmt'));
 }
 
-async function adminHistory(pane) {
-  const h = await api('GET', '/admin/history');
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Moedas ganhas neste mês</h2></div>${h.month.length ? `<div class="list">${h.month.map(m => `<div class="item"><div class="ic">${im('coin')}</div><div class="grow t">${esc(m.name)}</div><span class="d num" style="font-size:24px">${num(m.earned)}</span></div>`).join('')}</div>` : zero('chart', 'Sem moedas aprovadas neste mês.')}</section>
-    <section class="box"><div class="box-h"><h2 class="d">Últimos 30 dias</h2></div>${h.rows.length ? `<table><thead><tr><th>Dia</th><th>Filho</th><th>Tarefa</th><th>Resultado</th></tr></thead><tbody>${h.rows.map(r => `<tr><td>${dmy(r.day).slice(0, 5)}</td><td>${esc(r.kid)}</td><td>${im(r.icon)}${esc(r.title)}</td><td><span class="tag ${r.status === 'approved' ? 'ok' : 'no'}">${r.status === 'approved' ? 'Aprovada' : 'Rejeitada'}</span></td></tr>`).join('')}</tbody></table>` : zero('calendar', 'Nenhuma tarefa decidida ainda.')}</section>`;
-}
-
-async function adminSettings(pane) {
+async function adminSettings(pane, refresh) {
   const w = await api('GET', '/admin/wallet');
   pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Ajustes</h2></div>
     <div class="field"><label for="cv">Valor de 1 moeda em reais</label><input id="cv" name="coin_value" type="number" step="0.01" min="0" value="${w.settings.coin_value}" inputmode="decimal"></div>
-    <label class="check"><input type="checkbox" name="auto" ${w.settings.auto_approve ? 'checked' : ''}>Aprovar tarefas automaticamente, sem conferência</label>
     <div class="field"><label for="np">Novo PIN dos pais</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"><p class="hint">Deixe vazio para manter o atual.</p></div>
+    <p class="hint">A aprovação automática agora é escolhida em cada filho, na aba Filhos.</p>
     <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar ajustes</button></div></form>
+    <div id="alarms"></div>
     <section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>
     <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha da família de novo.</p><button class="btn red sm" id="out">Desconectar a família</button></section>`;
   $('#f').onsubmit = async (e) => {
     e.preventDefault(); const f = e.target;
-    try { await api('PUT', '/admin/settings', { coin_value: f.coin_value.value, auto_approve: f.auto.checked, new_pin: f.pin.value }); toast('Ajustes salvos'); f.pin.value = ''; f.querySelector('.err').textContent = ''; }
+    try { await api('PUT', '/admin/settings', { coin_value: f.coin_value.value, new_pin: f.pin.value }); toast('Ajustes salvos'); f.pin.value = ''; f.querySelector('.err').textContent = ''; }
     catch (er) { f.querySelector('.err').textContent = er.message; sfx.bad(); }
   };
   $('#out').onclick = () => sheet('Desconectar a família?', '<p class="lead" style="margin-top:6px">As crianças não conseguirão usar este aparelho até alguém entrar de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
+  await adminAlarms($('#alarms'), refresh);
 }
 
 // ---------- Assinatura ----------
@@ -760,7 +867,7 @@ async function adminAlarms(pane, refresh) {
        <label class="check"><input type="checkbox" id="da" ${guessLabel() === 'Celular' ? 'checked' : ''}>Pedidos de aprovação (quando uma criança conclui uma missão)</label>
        <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
 
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div>${device}</section>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>
     <section class="box"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
       <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
       ${alarms.length ? `<div class="list">${alarms.map(a => `<div class="item ${a.active ? '' : 'off'}"><div class="ic">${im('clock')}</div><div class="grow"><div class="t">${esc(a.title)}</div>

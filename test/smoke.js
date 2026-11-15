@@ -100,6 +100,30 @@ const step = (m) => console.log('✔', m);
     const t = (await ok('GET', `/api/kids/${eva}/home`)).time[0];
     assert.equal(t.used, 1); step('tempo usado descontado');
 
+    // aprovação automática por filho: Bernardo ligado, Eva continua pendente
+    await ok('PUT', `/api/admin/kids/${ber}`, { name: 'Bernardo', avatar: 'robot', color: '#4aa8ff', active: true, auto_approve: true });
+    await ok('POST', `/api/kids/${ber}/complete`, { task_id: ids[0] });
+    await ok('POST', `/api/kids/${eva}/complete`, { task_id: ids[2] });
+    assert.equal((await ok('GET', `/api/kids/${ber}/home`)).balance, 5);
+    assert.equal((await ok('GET', '/api/admin/pending')).length, 1); step('aprovação automática vale só para o filho marcado');
+
+    // ordem por filho: tarefa sem horário acima de uma de 09:00 ganha "até 09:00"
+    const nine = (await ok('POST', '/api/admin/tasks', { title: 'Escola', type: 'daily', time: '09:00', all_kids: true })).id;
+    let order = await ok('GET', `/api/admin/kids/${eva}/order`);
+    assert.equal(order.length, 22); // inclui a de dia marcado (Jiu-jitsu), que só aparece no dia
+    order = [ids[5], nine, ...order.filter(x => x !== ids[5] && x !== nine)];
+    await ok('PUT', `/api/admin/kids/${eva}/order`, { ids: [...order, onlyBer] }); // tarefa de outro filho é ignorada
+    home = await ok('GET', `/api/kids/${eva}/home`);
+    assert.deepEqual(home.tasks.slice(0, 2).map(x => x.id), [ids[5], nine]);
+    assert.equal(home.tasks[0].until, '09:00'); assert.equal(home.tasks[2].until, null);
+    assert.equal((await ok('GET', `/api/kids/${ber}/home`)).tasks[0].id, nine); step('ordem arrastada por filho e prazo "até 9:00"');
+
+    // extrato diário: resumo por dia e por filho, detalhe ao abrir o dia
+    const st = await ok('GET', '/api/admin/statement');
+    assert.equal(st[0].kids[ber].coins, 5); assert.equal(st[0].kids[eva].tasks, 2);
+    const det = await ok('GET', '/api/admin/statement/' + st[0].day);
+    assert.equal(det[eva].tasks.length, 2); assert.ok(det[eva].other.some(o => o.note === 'Pagamento')); step('extrato diário com detalhe do dia');
+
     // isolamento entre famílias
     cookie = '';
     await ok('POST', '/api/auth/register', { name: 'Outra', email: 'c@d.co', password: 'secret2', pin: '9999' });

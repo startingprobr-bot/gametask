@@ -53,4 +53,23 @@ async function approve(fid, completionId) {
   return true;
 }
 
-module.exports = { kidTasks, shares, balance, approve };
+// Ordem das tarefas de um filho: a que os pais arrastaram; as ainda sem lugar entram pelo horário.
+// Tarefa sem horário recebe `until` = horário da próxima tarefa com horário abaixo dela ("fazer até 9:00").
+async function ordered(kidId, tasks) {
+  const [rows] = await pool.query('SELECT task_id,pos FROM task_order WHERE kid_id=?', [kidId]);
+  const pos = new Map(rows.map(r => [r.task_id, r.pos]));
+  const byTime = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || a.id - b.id;
+  const list = tasks.filter(t => pos.has(t.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
+  for (const t of tasks.filter(t => !pos.has(t.id)).sort(byTime)) {
+    const i = t.time ? list.findIndex(p => p.time && p.time > t.time) : -1;
+    if (i < 0) list.push(t); else list.splice(i, 0, t);
+  }
+  let next = null;
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].time) next = list[i].time;
+    else list[i] = { ...list[i], until: next };
+  }
+  return list;
+}
+
+module.exports = { kidTasks, shares, balance, approve, ordered };

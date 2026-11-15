@@ -63,6 +63,8 @@ const SCHEMA = [
 `CREATE TABLE IF NOT EXISTS password_resets (
   token_hash CHAR(64) PRIMARY KEY, family_id INT NOT NULL, expires_at DATETIME NOT NULL, INDEX(family_id))`,
 `CREATE TABLE IF NOT EXISTS push_log (k VARCHAR(100) PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+// Ordem das tarefas escolhida pelos pais, por filho (arrastar para ordenar)
+`CREATE TABLE IF NOT EXISTS task_order (kid_id INT NOT NULL, task_id INT NOT NULL, pos INT NOT NULL, PRIMARY KEY(kid_id, task_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
@@ -73,6 +75,7 @@ const COLUMNS = [
   ['families', 'onboarded', 'TINYINT NOT NULL DEFAULT 0'],
   ['families', 'last_seen', 'DATE NULL'],
   ['families', 'remind_before', 'INT NOT NULL DEFAULT 10'], // minutos de antecedência do aviso das tarefas com horário
+  ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 
@@ -80,7 +83,10 @@ async function migrate() {
   for (const sql of SCHEMA) await pool.query(sql);
   for (const [t, c, def] of COLUMNS) {
     const [[x]] = await pool.query('SELECT COUNT(*) n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [t, c]);
-    if (!x.n) await pool.query(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`);
+    if (x.n) continue;
+    await pool.query(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`);
+    // quem tinha a aprovação automática ligada para a família continua igual, agora em cada filho
+    if (t === 'kids' && c === 'auto_approve') await pool.query('UPDATE kids k JOIN families f ON f.id=k.family_id SET k.auto_approve=f.auto_approve');
   }
   for (const [k, v] of Object.entries(DEFAULTS)) await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?)', [k, v]);
   await pool.query("ALTER TABLE payments MODIFY plan ENUM('monthly','annual','plus') NOT NULL");

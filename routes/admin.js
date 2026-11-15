@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
 const { today, r2 } = require('../util');
-const { balance, approve } = require('../lib');
+const { balance, approve, kidTasks, ordered } = require('../lib');
 
 const bool = (v) => (v ? 1 : 0);
 const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: 'Erro interno' }); });
@@ -13,16 +13,34 @@ router.get('/kids', wrap(async (req, res) => {
   res.json(rows);
 }));
 router.post('/kids', wrap(async (req, res) => {
-  const { name, avatar = 'fox', color = '#ff4fae' } = req.body;
+  const { name, avatar = 'fox', color = '#ff4fae', auto_approve } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
-  const [r] = await pool.query('INSERT INTO kids (family_id,name,avatar,color) VALUES (?,?,?,?)', [req.fid, name.trim(), avatar, color]);
+  const [r] = await pool.query('INSERT INTO kids (family_id,name,avatar,color,auto_approve) VALUES (?,?,?,?,?)', [req.fid, name.trim(), avatar, color, bool(auto_approve)]);
   res.json({ id: r.insertId });
 }));
 router.put('/kids/:id', wrap(async (req, res) => {
-  const { name, avatar, color, active } = req.body;
+  const { name, avatar, color, active, auto_approve } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
-  await pool.query('UPDATE kids SET name=?,avatar=?,color=?,active=? WHERE id=? AND family_id=?',
-    [name.trim(), avatar, color, bool(active), req.params.id, req.fid]);
+  await pool.query('UPDATE kids SET name=?,avatar=?,color=?,active=?,auto_approve=? WHERE id=? AND family_id=?',
+    [name.trim(), avatar, color, bool(active), bool(auto_approve), req.params.id, req.fid]);
+  res.json({ ok: true });
+}));
+
+// Ordem das tarefas de um filho (ids na ordem em que aparecem para ele)
+async function famKid(req) {
+  const [[k]] = await pool.query('SELECT id FROM kids WHERE id=? AND family_id=?', [req.params.id, req.fid]);
+  return k?.id;
+}
+router.get('/kids/:id/order', wrap(async (req, res) => {
+  const kid = await famKid(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
+  res.json((await ordered(kid, await kidTasks(req.fid, kid))).map(t => t.id));
+}));
+router.put('/kids/:id/order', wrap(async (req, res) => {
+  const kid = await famKid(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
+  const mine = new Set((await kidTasks(req.fid, kid)).map(t => t.id));
+  const ids = [...new Set((req.body.ids || []).map(Number))].filter(id => mine.has(id));
+  await pool.query('DELETE FROM task_order WHERE kid_id=?', [kid]);
+  if (ids.length) await pool.query('INSERT INTO task_order (kid_id,task_id,pos) VALUES ?', [ids.map((id, i) => [kid, id, i])]);
   res.json({ ok: true });
 }));
 
@@ -124,7 +142,7 @@ router.post('/reject', wrap(async (req, res) => {
 
 // ---------- Carteira ----------
 router.get('/wallet', wrap(async (req, res) => {
-  const [[f]] = await pool.query('SELECT coin_value,auto_approve FROM families WHERE id=?', [req.fid]);
+  const [[f]] = await pool.query('SELECT coin_value FROM families WHERE id=?', [req.fid]);
   const [kids] = await pool.query('SELECT id,name,avatar FROM kids WHERE family_id=? AND active=1 ORDER BY sort,id', [req.fid]);
   const day = today();
   const [goals] = await pool.query("SELECT * FROM rewards WHERE family_id=? AND kind='goal' AND active=1", [req.fid]);
@@ -198,16 +216,41 @@ router.post('/redeem', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------- Histórico ----------
-router.get('/history', wrap(async (req, res) => {
+// ---------- Extrato diário (dentro da Carteira) ----------
+// Resumo por dia e por filho dos últimos 90 dias; o detalhe de um dia só é carregado quando os pais abrem o dia.
+router.get('/statement', wrap(async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT c.day,c.status,t.title,t.icon,k.name kid,k.avatar FROM completions c
-     JOIN tasks t ON t.id=c.task_id JOIN kids k ON k.id=c.kid_id
-     WHERE c.family_id=? AND c.day>=DATE_SUB(CURDATE(), INTERVAL 31 DAY) AND c.status<>'pending' ORDER BY c.day DESC,c.id DESC LIMIT 300`, [req.fid]);
-  const [month] = await pool.query(
-    `SELECT k.name,SUM(l.amount) earned FROM ledger l JOIN kids k ON k.id=l.kid_id
-     WHERE l.family_id=? AND l.kind='coin' AND l.completion_id IS NOT NULL AND l.day>=DATE_FORMAT(CURDATE(),'%Y-%m-01') GROUP BY k.id`, [req.fid]);
-  res.json({ rows, month });
+    `SELECT day, kid_id,
+       SUM(CASE WHEN kind='coin' AND amount>0 THEN amount ELSE 0 END) coins,
+       SUM(CASE WHEN kind='time' AND amount>0 THEN amount ELSE 0 END) time,
+       COUNT(DISTINCT completion_id) tasks
+     FROM ledger WHERE family_id=? AND day>=DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+     GROUP BY day, kid_id ORDER BY day DESC`, [req.fid]);
+  const days = [];
+  for (const r of rows) {
+    let d = days[days.length - 1];
+    if (d?.day !== r.day) days.push(d = { day: r.day, kids: {} });
+    d.kids[r.kid_id] = { coins: r2(r.coins), time: r2(r.time), tasks: r.tasks };
+  }
+  res.json(days);
+}));
+router.get('/statement/:day', wrap(async (req, res) => {
+  const day = String(req.params.day);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: 'Data inválida' });
+  const [comps] = await pool.query(
+    `SELECT c.id,c.kid_id,c.status,t.title,t.icon FROM completions c JOIN tasks t ON t.id=c.task_id
+     WHERE c.family_id=? AND c.day=? AND c.status<>'pending' ORDER BY c.created_at,c.id`, [req.fid, day]);
+  const [led] = await pool.query('SELECT kid_id,completion_id,kind,amount,note FROM ledger WHERE family_id=? AND day=? ORDER BY id', [req.fid, day]);
+  const out = {};
+  const kidOf = (id) => out[id] ||= { tasks: [], other: [] };
+  for (const c of comps) {
+    const g = led.filter(l => l.completion_id === c.id);
+    kidOf(c.kid_id).tasks.push({ title: c.title, icon: c.icon, status: c.status,
+      coins: r2(g.filter(l => l.kind === 'coin').reduce((a, l) => a + +l.amount, 0)),
+      time: r2(g.filter(l => l.kind === 'time').reduce((a, l) => a + +l.amount, 0)) });
+  }
+  for (const l of led.filter(l => !l.completion_id)) kidOf(l.kid_id).other.push({ kind: l.kind, amount: r2(l.amount), note: l.note });
+  res.json(out);
 }));
 
 // ---------- Catálogo e assistente do primeiro acesso ----------
@@ -328,9 +371,9 @@ router.delete('/alarms/:id', wrap(async (req, res) => {
 
 // ---------- Configurações ----------
 router.put('/settings', wrap(async (req, res) => {
-  const { coin_value, auto_approve, new_pin } = req.body;
+  const { coin_value, new_pin } = req.body;
   if (new_pin && !/^\d{4,8}$/.test(String(new_pin))) return res.status(400).json({ error: 'PIN: 4 a 8 números' });
-  await pool.query('UPDATE families SET coin_value=?,auto_approve=? WHERE id=?', [Math.max(0, +coin_value || 0), bool(auto_approve), req.fid]);
+  await pool.query('UPDATE families SET coin_value=? WHERE id=?', [Math.max(0, +coin_value || 0), req.fid]);
   if (new_pin) await pool.query('UPDATE families SET parent_pin_hash=? WHERE id=?', [bcrypt.hashSync(String(new_pin), 10), req.fid]);
   res.json({ ok: true });
 }));

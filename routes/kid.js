@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { pool } = require('../db');
 const { today, r2, taskOnDay } = require('../util');
-const { kidTasks, shares, balance, approve } = require('../lib');
+const { kidTasks, shares, balance, approve, ordered } = require('../lib');
 const { access } = require('../billing');
 const push = require('../push');
 
@@ -39,14 +39,14 @@ async function ownKid(req, res) {
 router.get('/kids/:id/home', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today(), fid = req.fid;
-  const tasks = (await kidTasks(fid, kid.id)).filter(t => taskOnDay(t, day));
+  const tasks = await ordered(kid.id, (await kidTasks(fid, kid.id)).filter(t => taskOnDay(t, day)));
   const sh = await shares(fid, kid.id);
   const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
   const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
   const list = tasks.map(t => ({
     id: t.id, title: t.title, icon: t.icon, description: t.description, type: t.type,
-    time: t.time, coins: t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
-  })).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+    time: t.time, until: t.until || null, coins: t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
+  }));
 
   // Tempo de tela de hoje (não acumula)
   const [rewards] = await pool.query('SELECT * FROM rewards WHERE family_id=? AND active=1', [fid]);
@@ -85,8 +85,8 @@ router.post('/kids/:id/complete', async (req, res) => {
   if (!task || !taskOnDay(task, day)) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
   const [r] = await pool.query('INSERT IGNORE INTO completions (family_id,task_id,kid_id,day) VALUES (?,?,?,?)', [req.fid, task.id, kid.id, day]);
   if (r.affectedRows) {
-    const [[f]] = await pool.query('SELECT auto_approve FROM families WHERE id=?', [req.fid]);
-    if (f.auto_approve) await approve(req.fid, r.insertId);
+    const [[k]] = await pool.query('SELECT auto_approve FROM kids WHERE id=?', [kid.id]);
+    if (k.auto_approve) await approve(req.fid, r.insertId);
     else if (access(req.family).plus) push.sendToFamily(req.fid, { title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
   }
   res.json({ ok: true });
