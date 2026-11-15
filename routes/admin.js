@@ -266,6 +266,66 @@ router.post('/setup/skip', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------- Avisos no celular/tablet (plano Plus) ----------
+const push = require('../push');
+const { access } = require('../billing');
+const needPlus = (req, res, next) => access(req.family).plus ? next() : res.status(403).json({ error: 'Os avisos no celular e no tablet fazem parte do plano Plus.', code: 'plus' });
+const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+router.get('/push', wrap(async (req, res) => {
+  const [subs] = await pool.query('SELECT id,label,reminders,approvals,created_at,endpoint FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
+  const [[f]] = await pool.query('SELECT remind_before FROM families WHERE id=?', [req.fid]);
+  res.json({ key: await push.publicKey(), plus: access(req.family).plus, remind_before: f.remind_before, devices: subs });
+}));
+router.post('/push', needPlus, wrap(async (req, res) => {
+  const s = req.body.sub || {};
+  if (!/^https:\/\//.test(s.endpoint || '') || !s.keys?.p256dh || !s.keys?.auth) return res.status(400).json({ error: 'Inscrição inválida' });
+  await pool.query(`INSERT INTO push_subs (family_id,endpoint,p256dh,auth,label,reminders,approvals) VALUES (?,?,?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),p256dh=VALUES(p256dh),auth=VALUES(auth),label=VALUES(label),reminders=VALUES(reminders),approvals=VALUES(approvals)`,
+    [req.fid, s.endpoint, s.keys.p256dh, s.keys.auth, String(req.body.label || 'Aparelho').slice(0, 60), bool(req.body.reminders ?? 1), bool(req.body.approvals)]);
+  res.json({ ok: true });
+}));
+router.put('/push/:id', wrap(async (req, res) => {
+  await pool.query('UPDATE push_subs SET label=?,reminders=?,approvals=? WHERE id=? AND family_id=?',
+    [String(req.body.label || 'Aparelho').slice(0, 60), bool(req.body.reminders), bool(req.body.approvals), req.params.id, req.fid]);
+  res.json({ ok: true });
+}));
+router.delete('/push/:id', wrap(async (req, res) => {
+  await pool.query('DELETE FROM push_subs WHERE id=? AND family_id=?', [req.params.id, req.fid]);
+  res.json({ ok: true });
+}));
+router.post('/push/test', needPlus, wrap(async (req, res) => {
+  const n = await push.sendToFamily(req.fid, { title: 'GameTask: aviso de teste', body: 'Os avisos estão funcionando neste aparelho!', tag: 'test', url: '/app#/' }, 'all');
+  res.json({ sent: n });
+}));
+router.put('/push-settings', wrap(async (req, res) => {
+  const m = Math.max(0, Math.min(120, Math.round(+req.body.remind_before || 0)));
+  await pool.query('UPDATE families SET remind_before=? WHERE id=?', [m, req.fid]);
+  res.json({ ok: true });
+}));
+
+router.get('/alarms', wrap(async (req, res) => {
+  const [rows] = await pool.query('SELECT * FROM alarms WHERE family_id=? ORDER BY active DESC,time', [req.fid]);
+  res.json(rows);
+}));
+async function saveAlarm(req, id) {
+  const b = req.body;
+  if (!b.title?.trim()) throw Object.assign(new Error('Escreva o aviso'), { code: 400 });
+  if (!HM.test(b.time || '')) throw Object.assign(new Error('Informe o horário'), { code: 400 });
+  let kid = b.kid_id ? +b.kid_id : null;
+  if (kid) { const [[k]] = await pool.query('SELECT id FROM kids WHERE id=? AND family_id=?', [kid, req.fid]); kid = k?.id || null; }
+  const v = [b.title.trim().slice(0, 120), kid, b.time, (b.weekdays || '0123456').replace(/[^0-6]/g, '') || '0123456', bool(b.active ?? 1)];
+  if (id) await pool.query('UPDATE alarms SET title=?,kid_id=?,time=?,weekdays=?,active=? WHERE id=? AND family_id=?', [...v, id, req.fid]);
+  else await pool.query('INSERT INTO alarms (title,kid_id,time,weekdays,active,family_id) VALUES (?,?,?,?,?,?)', [...v, req.fid]);
+}
+const alarmRoute = (fn) => wrap(async (req, res) => { try { await fn(req, res); } catch (e) { if (e.code === 400) return res.status(400).json({ error: e.message }); throw e; } });
+router.post('/alarms', needPlus, alarmRoute(async (req, res) => { await saveAlarm(req, null); res.json({ ok: true }); }));
+router.put('/alarms/:id', needPlus, alarmRoute(async (req, res) => { await saveAlarm(req, +req.params.id); res.json({ ok: true }); }));
+router.delete('/alarms/:id', wrap(async (req, res) => {
+  await pool.query('DELETE FROM alarms WHERE id=? AND family_id=?', [req.params.id, req.fid]);
+  res.json({ ok: true });
+}));
+
 // ---------- Configurações ----------
 router.put('/settings', wrap(async (req, res) => {
   const { coin_value, auto_approve, new_pin } = req.body;

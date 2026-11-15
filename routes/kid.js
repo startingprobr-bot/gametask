@@ -2,6 +2,8 @@ const router = require('express').Router();
 const { pool } = require('../db');
 const { today, r2, taskOnDay } = require('../util');
 const { kidTasks, shares, balance, approve } = require('../lib');
+const { access } = require('../billing');
+const push = require('../push');
 
 async function pendingGains(kidId, sh, day) {
   const [pend] = await pool.query(
@@ -85,6 +87,7 @@ router.post('/kids/:id/complete', async (req, res) => {
   if (r.affectedRows) {
     const [[f]] = await pool.query('SELECT auto_approve FROM families WHERE id=?', [req.fid]);
     if (f.auto_approve) await approve(req.fid, r.insertId);
+    else if (access(req.family).plus) push.sendToFamily(req.fid, { title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
   }
   res.json({ ok: true });
 });

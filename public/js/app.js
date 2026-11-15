@@ -123,7 +123,7 @@ async function route() {
   const paid = await paymentReturn();
   const me = ME = await api('GET', '/auth/me');
   const [, a, b] = location.hash.split('/');
-  if (['annual', 'monthly'].includes(b) && ['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
+  if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
   if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
   if (a === 'criar' || a === 'login') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
@@ -340,7 +340,7 @@ function viewPin() {
 
 // ---------- Painel dos pais ----------
 let tab = 'pending';
-const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['history', 'chart', 'Histórico'], ['settings', 'gear', 'Ajustes']];
+const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['alarms', 'clock', 'Avisos'], ['wallet', 'moneybag', 'Carteira'], ['history', 'chart', 'Histórico'], ['settings', 'gear', 'Ajustes']];
 async function viewAdmin() {
   const pendingN = (await api('GET', '/admin/pending')).length;
   const ac = ME.access || {};
@@ -354,7 +354,7 @@ async function viewAdmin() {
   $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); viewAdmin().catch(e => toast(e.message, true)); });
   $('.tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
-  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wallet: adminWallet, history: adminHistory, settings: adminSettings };
+  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, alarms: adminAlarms, wallet: adminWallet, history: adminHistory, settings: adminSettings };
   await fns[tab]($('#pane'), viewAdmin);
 }
 const zero = (icon, text) => `<div class="zero">${im(icon)}<span>${text}</span></div>`;
@@ -507,7 +507,7 @@ async function adminSettings(pane) {
 }
 
 // ---------- Assinatura ----------
-const PLAN_N = { monthly: 'mensal', annual: 'anual' };
+const PLAN_N = { monthly: 'mensal', annual: 'anual', plus: 'Plus' };
 function planText(a = {}) {
   if (a.status === 'owner') return 'Conta do dono do sistema: acesso liberado.';
   if (a.status === 'free') return 'Acesso de cortesia liberado.';
@@ -538,6 +538,11 @@ async function viewPaywall() {
         <p class="bill">Pago a cada mês, sem fidelidade</p>
         <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
         <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
+      <article class="plan plus"><span class="ribbon violet">Completo</span>
+        <h2 class="d">Plus</h2><div class="price"><small>R$</small><b class="d num">${money(Math.floor(p.plus / 12 * 100) / 100)}</b><small>/mês</small></div>
+        <p class="bill">Pagamento único de <b>${brl(p.plus)}</b> por ano</p>
+        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('phone')}Avisos no celular e no tablet</li><li>${im('clock')}Lembrete antes de cada horário</li><li>${im('lock')}Aviso para os pais aprovarem</li></ul>
+        <button class="btn" data-plan="plus">Assinar Plus</button></article>
     </div>
     <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago.${a.status === 'trial' ? ' Assinando agora, o plano começa quando os dias grátis acabarem: você não perde nenhum.' : ' O acesso é liberado assim que o pagamento é confirmado.'}</p>
     <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
@@ -651,7 +656,7 @@ async function ownerOverview(pane) {
   pane.innerHTML = `<div class="stats">
       ${tile('moneybag', 'Faturamento do mês', brl(r.month), `${r.payments} pagamento(s) aprovados no total`, 'gold')}
       ${tile('chart', 'Receita recorrente por mês', brl(r.mrr), `${brl(r.arr)} por ano no ritmo atual`)}
-      ${tile('trophy', 'Assinantes pagos', c.paid_monthly + c.paid_annual, `${c.paid_annual} anuais · ${c.paid_monthly} mensais`, 'green')}
+      ${tile('trophy', 'Assinantes pagos', c.paid_monthly + c.paid_annual + c.paid_plus, `${c.paid_plus} Plus · ${c.paid_annual} anuais · ${c.paid_monthly} mensais`, 'green')}
       ${tile('hourglass', 'Em teste grátis', c.trial, `${c.expiring7} vencem nos próximos 7 dias`)}
       ${tile('lock', 'Vencidos', c.expired, s.conversion === null ? 'Nenhum teste encerrado ainda' : `Conversão do teste: ${s.conversion}%`)}
       ${tile('people', 'Famílias', c.total, `${c.new30} novas em 30 dias · ${c.active7} usaram na semana`)}
@@ -659,8 +664,8 @@ async function ownerOverview(pane) {
       ${tile('gift', 'Cortesias', c.free, `Preço: ${brl(s.settings.price_annual)}/ano · ${brl(s.settings.price_monthly)}/mês`)}
     </div>
     <section class="box"><div class="box-h"><h2 class="d">Faturamento por mês</h2></div>
-      ${s.months.length ? `<table><thead><tr><th>Mês</th><th>Anuais</th><th>Mensais</th><th>Total</th><th class="bar-col" aria-hidden="true"></th></tr></thead><tbody>${s.months.map(m => { const [y, mo] = m.m.split('-');
-        return `<tr><td>${MES[+mo - 1]}/${y.slice(2)}</td><td>${m.annual}</td><td>${m.monthly}</td><td>${brl(m.total)}</td><td class="bar-col" aria-hidden="true"><i class="hbar" style="width:${+m.total / max * 100}%"></i></td></tr>`; }).join('')}</tbody></table>`
+      ${s.months.length ? `<table><thead><tr><th>Mês</th><th>Plus</th><th>Anuais</th><th>Mensais</th><th>Total</th><th class="bar-col" aria-hidden="true"></th></tr></thead><tbody>${s.months.map(m => { const [y, mo] = m.m.split('-');
+        return `<tr><td>${MES[+mo - 1]}/${y.slice(2)}</td><td>${m.plus}</td><td>${m.annual}</td><td>${m.monthly}</td><td>${brl(m.total)}</td><td class="bar-col" aria-hidden="true"><i class="hbar" style="width:${+m.total / max * 100}%"></i></td></tr>`; }).join('')}</tbody></table>`
       : zero('chart', 'Nenhum pagamento aprovado ainda.')}</section>`;
 }
 async function ownerFamilies(pane, q = '') {
@@ -678,7 +683,7 @@ async function ownerFamilies(pane, q = '') {
     const bg = sheet(f.name, `<p class="lead" style="margin-top:6px">${esc(f.email)}<br>${planText(f.access)}</p>
       <div class="field"><span class="lab">O que fazer</span>${seg('action', [['trial', 'Estender teste'], ['paid', 'Liberar pago'], ['free', 'Cortesia'], ['block', 'Bloquear']], 'trial')}</div>
       <div class="field" data-d><label for="od">Até quando</label><input id="od" type="date" name="date" value="${plus(30, f.access.until)}"></div>
-      <div class="field" data-p><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal']], 'annual')}</div>`,
+      <div class="field" data-p><span class="lab">Plano</span>${seg('plan', [['plus', 'Plus'], ['annual', 'Anual'], ['monthly', 'Mensal']], 'annual')}</div>`,
       async (fm) => { await api('POST', '/owner/families/' + f.id, { action: fm.action.value, date: fm.date.value, plan: fm.plan.value }); toast('Família atualizada'); ownerFamilies(pane, $('#q')?.value || ''); },
       { saveLabel: 'Aplicar' });
     const fm = bg.querySelector('form'), u = () => { $('[data-d]', fm).hidden = !['trial', 'paid'].includes(fm.action.value); $('[data-p]', fm).hidden = fm.action.value !== 'paid'; };
@@ -699,14 +704,97 @@ async function ownerPrices(pane) {
   pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Preços e teste grátis</h2></div>
     <p class="lead">Valem para novas cobranças e para a página de vendas. Quem já pagou mantém o período comprado.</p>
     <div class="grid2"><div class="field"><label for="pa">Plano anual (R$ por ano)</label><input id="pa" name="price_annual" type="number" step="0.01" min="1" value="${s.price_annual}" inputmode="decimal"><p class="hint" id="pah"></p></div>
-    <div class="field"><label for="pm">Plano mensal (R$ por mês)</label><input id="pm" name="price_monthly" type="number" step="0.01" min="1" value="${s.price_monthly}" inputmode="decimal"></div></div>
+    <div class="field"><label for="pm">Plano mensal (R$ por mês)</label><input id="pm" name="price_monthly" type="number" step="0.01" min="1" value="${s.price_monthly}" inputmode="decimal"></div>
+    <div class="field"><label for="pp">Plano Plus (R$ por ano)</label><input id="pp" name="price_plus" type="number" step="0.01" min="1" value="${s.price_plus}" inputmode="decimal"><p class="hint">Anual com avisos no celular e no tablet.</p></div></div>
     <div class="field"><label for="td">Dias de teste grátis para novas famílias</label><input id="td" name="trial_days" type="number" min="0" step="1" value="${s.trial_days}" inputmode="numeric"><p class="hint">90 dias = 3 meses. Não muda o prazo de quem já se cadastrou.</p></div>
     <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar preços</button></div></form>`;
   const f = $('#f'), h = () => { const a = +f.price_annual.value, m = +f.price_monthly.value; $('#pah').textContent = a && m ? `Sai por ${brl(Math.floor(a / 12 * 100) / 100)} por mês, ${Math.max(0, Math.round((1 - a / (m * 12)) * 100))}% mais barato que o mensal.` : ''; };
   f.oninput = h; h();
   f.onsubmit = async (e) => {
     e.preventDefault();
-    try { await api('PUT', '/owner/settings', { price_annual: f.price_annual.value, price_monthly: f.price_monthly.value, trial_days: f.trial_days.value }); toast('Preços salvos'); f.querySelector('.err').textContent = ''; }
+    try { await api('PUT', '/owner/settings', { price_annual: f.price_annual.value, price_monthly: f.price_monthly.value, price_plus: f.price_plus.value, trial_days: f.trial_days.value }); toast('Preços salvos'); f.querySelector('.err').textContent = ''; }
     catch (er) { f.querySelector('.err').textContent = er.message; sfx.bad(); }
   };
+}
+
+// ---------- Avisos no celular/tablet (plano Plus) ----------
+const b64key = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const guessLabel = () => /iPad|Tablet/i.test(navigator.userAgent) || (/Android/i.test(navigator.userAgent) && !/Mobile/i.test(navigator.userAgent)) || (isIOS && navigator.maxTouchPoints > 1 && !/iPhone/.test(navigator.userAgent)) ? 'Tablet' : /Mobi|iPhone|Android/i.test(navigator.userAgent) ? 'Celular' : 'Computador';
+async function mySub() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration(); return reg ? reg.pushManager.getSubscription() : null;
+}
+async function adminAlarms(pane, refresh) {
+  const [p, alarms, kids] = await Promise.all([api('GET', '/admin/push'), api('GET', '/admin/alarms'), api('GET', '/admin/kids')]);
+  const kidsOn = kids.filter(k => k.active), kidOf = (id) => kids.find(k => k.id === id);
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const sub = supported ? await mySub() : null, mine = sub && p.devices.find(d => d.endpoint === sub.endpoint);
+  const when = (w) => w.length === 7 ? 'todo dia' : w === '12345' ? 'seg a sex' : [...w].map(d => DAYN[d]).join(', ');
+
+  const device = !p.plus ? `<div class="upsell">${im('phone')}<div><b>Avisos no celular e no tablet fazem parte do plano Plus.</b><p>Lembrete antes de cada tarefa com horário, alarmes como "hora de ir para a escola" e aviso para você aprovar as missões.</p></div><a class="btn sm" href="#/assinar">Conhecer o Plus</a></div>`
+    : !supported ? (isIOS && !standalone ? `<div class="notice">${im('phone')}<p>No iPhone e no iPad, os avisos só funcionam com o GameTask instalado: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Abra pelo ícone e volte aqui.</p></div>`
+      : `<div class="notice">${im('cross')}<p>Este navegador não recebe avisos. Use o Chrome no Android ou no computador, ou o GameTask instalado no iPhone/iPad.</p></div>`)
+    : Notification.permission === 'denied' ? `<div class="notice">${im('lock')}<p>Os avisos foram bloqueados neste aparelho. Libere em <b>Configurações do site → Notificações</b> do navegador e volte aqui.</p></div>`
+    : mine ? `<div class="dev-on">${im('check')}<div class="grow"><b>Avisos ligados neste aparelho</b><span>${esc(mine.label)} · ${[mine.reminders && 'lembretes', mine.approvals && 'aprovações'].filter(Boolean).join(' e ') || 'nenhum tipo marcado'}</span></div>
+        <div class="btns"><button class="btn green sm" id="test">Enviar teste</button><button class="btn ghost sm" data-dev="${mine.id}">Ajustar</button></div></div>`
+    : `<p class="lead">Ligue os avisos no tablet das crianças e no celular de quem aprova as missões.</p>
+       <div class="grid2"><div class="field"><label for="dl">Nome deste aparelho</label><input id="dl" value="${guessLabel()}" maxlength="60"></div></div>
+       <label class="check"><input type="checkbox" id="dr" checked>Lembretes das crianças (tarefas com horário e avisos)</label>
+       <label class="check"><input type="checkbox" id="da" ${guessLabel() === 'Celular' ? 'checked' : ''}>Pedidos de aprovação (quando uma criança conclui uma missão)</label>
+       <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
+
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div>${device}</section>
+    <section class="box"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
+      <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
+      ${alarms.length ? `<div class="list">${alarms.map(a => `<div class="item ${a.active ? '' : 'off'}"><div class="ic">${im('clock')}</div><div class="grow"><div class="t">${esc(a.title)}</div>
+        <div class="s"><b class="num">${esc(a.time)}</b> · ${when(a.weekdays)} · ${a.kid_id ? esc(kidOf(a.kid_id)?.name || '?') : 'toda a família'}</div></div>
+        <div class="btns"><button class="btn ghost sm" data-e="${a.id}">Editar</button></div></div>`).join('')}</div>` : zero('clock', 'Nenhum aviso programado ainda.')}
+      <div class="field lead-time"><label for="rb">Tarefas com horário avisam</label><select id="rb" ${p.plus ? '' : 'disabled'}>${[[0, 'na hora certa'], [5, '5 minutos antes'], [10, '10 minutos antes'], [15, '15 minutos antes'], [30, '30 minutos antes'], [60, '1 hora antes']].map(([v, l]) => `<option value="${v}" ${+p.remind_before === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <p class="hint">Vale para as tarefas que têm horário (natação 18h, por exemplo) e só avisa quem ainda não fez.</p></div></section>
+    ${p.devices.length ? `<section class="box"><div class="box-h"><h2 class="d">Aparelhos com avisos</h2></div><div class="list">${p.devices.map(d => `<div class="item"><div class="ic">${im(/celular/i.test(d.label) ? 'phone' : /computador/i.test(d.label) ? 'laptop' : 'tv')}</div>
+      <div class="grow"><div class="t">${esc(d.label)}${mine && mine.id === d.id ? ' <span class="tag ok">este</span>' : ''}</div><div class="s">${[d.reminders && 'Lembretes', d.approvals && 'Aprovações'].filter(Boolean).join(' · ') || 'Nada marcado'} · desde ${dmy(d.created_at)}</div></div>
+      <div class="btns"><button class="btn ghost sm" data-dev="${d.id}">Ajustar</button></div></div>`).join('')}</div></section>` : ''}`;
+
+  const on = $('#on'); if (on) on.onclick = guard(async () => {
+    on.disabled = true;
+    try {
+      if (await Notification.requestPermission() !== 'granted') throw new Error('Sem permissão, o aparelho não consegue receber os avisos.');
+      const reg = await navigator.serviceWorker.ready;
+      const s = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64key(p.key) });
+      await api('POST', '/admin/push', { sub: s.toJSON(), label: $('#dl').value, reminders: $('#dr').checked, approvals: $('#da').checked });
+      sfx.done(); toast('Avisos ligados!'); await api('POST', '/admin/push/test'); refresh();
+    } finally { on.disabled = false; }
+  });
+  const test = $('#test'); if (test) test.onclick = guard(async () => { const r = await api('POST', '/admin/push/test'); toast(r.sent ? `Aviso enviado para ${r.sent} aparelho(s)` : 'Nenhum aparelho recebeu', !r.sent); });
+  $$('[data-dev]').forEach(b => b.onclick = () => {
+    const d = p.devices.find(x => x.id == b.dataset.dev);
+    const bg = sheet('Ajustar aparelho', `<div class="field"><label for="el">Nome</label><input id="el" name="label" value="${esc(d.label)}" maxlength="60"></div>
+      <label class="check"><input type="checkbox" name="reminders" ${d.reminders ? 'checked' : ''}>Lembretes das crianças</label>
+      <label class="check"><input type="checkbox" name="approvals" ${d.approvals ? 'checked' : ''}>Pedidos de aprovação</label>
+      <button type="button" class="btn red sm" id="rm" style="margin-top:16px">Desligar avisos deste aparelho</button>`,
+      async (f) => { await api('PUT', '/admin/push/' + d.id, { label: f.label.value, reminders: f.reminders.checked, approvals: f.approvals.checked }); toast('Aparelho atualizado'); refresh(); });
+    bg.querySelector('#rm').onclick = guard(async () => {
+      await api('DELETE', '/admin/push/' + d.id);
+      if (mine && mine.id === d.id) await sub.unsubscribe().catch(() => {});
+      bg.remove(); toast('Avisos desligados'); refresh();
+    });
+  });
+  $('#rb').onchange = guard(async (e) => { await api('PUT', '/admin/push-settings', { remind_before: e.target.value }); toast('Antecedência salva'); });
+  const form = (a = { title: '', kid_id: null, time: '07:00', weekdays: '12345', active: 1 }) => `
+    <div class="field"><label for="at">Aviso</label><input id="at" name="title" value="${esc(a.title)}" placeholder="Hora de ir para a escola" maxlength="120" required></div>
+    <div class="field"><label for="ak">Para quem</label><select id="ak" name="kid"><option value="">Toda a família</option>${kidsOn.map(k => `<option value="${k.id}" ${a.kid_id === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}</select>
+      <p class="hint">Com um filho escolhido, o aviso sai assim: "Bernardo, hora de ir para a escola".</p></div>
+    <div class="field"><label for="ah">Horário</label><input id="ah" type="time" name="time" value="${esc(a.time)}" required></div>
+    <div class="field"><span class="lab">Dias da semana</span><div class="days">${DAYS.map((d, i) => `<label><input type="checkbox" name="wd" value="${i}" ${a.weekdays.includes(i) ? 'checked' : ''}><span title="${DAYN[i]}">${d}</span></label>`).join('')}</div></div>
+    <label class="check"><input type="checkbox" name="active" ${a.active ? 'checked' : ''}>Aviso ligado</label>`;
+  const read = (f) => ({ title: f.title.value, kid_id: f.kid.value || null, time: f.time.value, weekdays: $$('[name=wd]:checked', f).map(x => x.value).join(''), active: f.active.checked });
+  const nb = $('#new'); if (nb) nb.onclick = () => sheet('Novo aviso', form(), async (f) => { await api('POST', '/admin/alarms', read(f)); toast('Aviso criado'); refresh(); }, { saveLabel: 'Criar aviso' });
+  $$('[data-e]').forEach(b => b.onclick = () => {
+    const a = alarms.find(x => x.id == b.dataset.e);
+    const bg = sheet('Editar aviso', form(a) + '<button type="button" class="btn red sm" id="del" style="margin-top:16px">Apagar aviso</button>',
+      async (f) => { await api('PUT', '/admin/alarms/' + a.id, read(f)); refresh(); });
+    bg.querySelector('#del').onclick = guard(async () => { await api('DELETE', '/admin/alarms/' + a.id); bg.remove(); toast('Aviso apagado'); refresh(); });
+  });
 }

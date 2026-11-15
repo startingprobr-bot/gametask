@@ -16,22 +16,25 @@ const iso = (d) => d.toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((D(b) - D(a)) / 864e5);
 function addPeriod(start, plan) {
   const d = D(start);
-  if (plan === 'annual') d.setUTCFullYear(d.getUTCFullYear() + 1); else d.setUTCMonth(d.getUTCMonth() + 1);
+  if (plan === 'monthly') d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCFullYear(d.getUTCFullYear() + 1);
   return iso(d);
 }
+const PLANS = ['monthly', 'annual', 'plus'];
+const PLAN_TITLE = { monthly: 'mensal', annual: 'anual', plus: 'Plus (anual)' };
 
+// `plus`: recursos do plano Plus (avisos no celular/tablet). O teste grátis inclui tudo.
 function access(f) {
   const t = today();
-  if (isOwner(f)) return { status: 'owner', active: true, owner: true };
-  if (f.plan === 'free') return { status: 'free', active: true };
-  if (f.paid_until && f.paid_until >= t) return { status: 'paid', active: true, plan: f.plan, until: f.paid_until, days_left: daysBetween(t, f.paid_until) };
-  if (f.trial_ends && f.trial_ends >= t) return { status: 'trial', active: true, until: f.trial_ends, days_left: daysBetween(t, f.trial_ends) };
-  return { status: 'expired', active: false, plan: f.plan, until: f.paid_until || f.trial_ends };
+  if (isOwner(f)) return { status: 'owner', active: true, owner: true, plus: true };
+  if (f.plan === 'free') return { status: 'free', active: true, plus: true };
+  if (f.paid_until && f.paid_until >= t) return { status: 'paid', active: true, plan: f.plan, plus: f.plan === 'plus', until: f.paid_until, days_left: daysBetween(t, f.paid_until) };
+  if (f.trial_ends && f.trial_ends >= t) return { status: 'trial', active: true, plus: true, until: f.trial_ends, days_left: daysBetween(t, f.trial_ends) };
+  return { status: 'expired', active: false, plus: false, plan: f.plan, until: f.paid_until || f.trial_ends };
 }
 
 async function prices() {
   const s = await settings();
-  return { monthly: +s.price_monthly, annual: +s.price_annual, trial_days: +s.trial_days };
+  return { monthly: +s.price_monthly, annual: +s.price_annual, plus: +s.price_plus, trial_days: +s.trial_days };
 }
 
 // Bloqueia o app quando o teste/assinatura acabou (o próprio cadastro, a assinatura e o logout seguem livres)
@@ -100,16 +103,16 @@ router.get('/status', needSession, wrap(async (req, res) => {
 
 router.post('/checkout', needSession, wrap(async (req, res) => {
   if (!mpToken()) return res.status(503).json({ error: 'O pagamento on-line ainda não foi ativado. Fale com o suporte.' });
-  const plan = req.body.plan === 'monthly' ? 'monthly' : 'annual';
+  const plan = PLANS.includes(req.body.plan) ? req.body.plan : 'annual';
   const pr = await prices();
-  const amount = plan === 'annual' ? pr.annual : pr.monthly;
+  const amount = pr[plan];
   const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [req.fid]);
   const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [req.fid, plan, amount]);
   const base = appUrl() || `${req.protocol}://${req.get('host')}`;
   const https = base.startsWith('https://');
   const back = `${base}/app?pagamento=${r.insertId}`;
   const pref = await mp('POST', '/checkout/preferences', {
-    items: [{ id: `gametask-${plan}`, title: `GameTask: plano ${plan === 'annual' ? 'anual' : 'mensal'}`, description: f.name, quantity: 1, currency_id: 'BRL', unit_price: amount }],
+    items: [{ id: `gametask-${plan}`, title: `GameTask: plano ${PLAN_TITLE[plan]}`, description: f.name, quantity: 1, currency_id: 'BRL', unit_price: amount }],
     payer: { email: f.email },
     external_reference: String(r.insertId),
     back_urls: { success: back, pending: back, failure: back },

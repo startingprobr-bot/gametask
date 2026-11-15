@@ -475,3 +475,23 @@ a.btn{text-decoration:none}
 .ribbon.blue{background:#3d8bff}
 .plan.pick{animation:pick 1.2s var(--spring) 2}
 @keyframes pick{40%{transform:scale(1.04)}}
+
+/* ---------- v5: plano Plus e avisos ---------- */
+.paywall{max-width:1180px}
+.plans{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px}
+.ribbon.violet{background:var(--violet)}
+.plan.plus{background:linear-gradient(180deg,#f1eaff,#fff 45%)}
+.plan.plus .btn{--bg:var(--violet);--hi:#c3a8ff;--lo:#6234d6;--fg:#fff;text-shadow:0 2px 0 rgba(13,27,76,.55)}
+.upsell,.notice,.dev-on{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;flex-wrap:wrap}
+.upsell{background:linear-gradient(180deg,#f1eaff,#fff);border:2px solid var(--violet)}
+.upsell>img,.notice>img,.dev-on>img{width:52px;height:52px;flex:0 0 auto}
+.upsell>div{flex:1;min-width:220px}
+.upsell p,.notice p{color:var(--ink-soft);font-weight:700;font-size:15px;margin-top:2px}
+.notice{background:var(--mist)}
+.notice p{flex:1;min-width:200px;margin:0}
+.dev-on{background:#e6f9e8;border:2px solid #b5ecbf}
+.dev-on .grow{flex:1;min-width:180px;display:flex;flex-direction:column}
+.dev-on span{color:var(--ink-soft);font-weight:700;font-size:14px}
+.dev-on .btns{display:flex;gap:8px}
+.lead-time{max-width:420px;margin-top:18px}
+.item .s b{color:var(--navy)}

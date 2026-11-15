@@ -93,6 +93,7 @@ app.get('/', wrap(async (req, res) => {
   const html = fs.readFileSync(path.join(PUB, 'landing.html'), 'utf8')
     .replaceAll('{{ANUAL}}', brl(p.annual)).replaceAll('{{MENSAL}}', brl(p.monthly))
     .replaceAll('{{ANUAL_MES}}', brl(Math.floor(p.annual / 12 * 100) / 100))
+    .replaceAll('{{PLUS_MES}}', brl(Math.floor(p.plus / 12 * 100) / 100)).replaceAll('{{PLUS}}', brl(p.plus))
     .replaceAll('{{ECONOMIA}}', String(Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100))))
     .replaceAll('{{MESES}}', String(Math.round(p.trial_days / 30)));
   res.set('cache-control', 'no-cache').type('html').send(html);
@@ -106,6 +107,7 @@ if (require.main === module) {
   (async () => {
     await ensureDatabase();
     await migrate();
+    require('./push').start();
     app.listen(port, '0.0.0.0', () => console.log(`GameTask rodando em http://localhost:${port}`));
   })().catch(e => { console.error('Falha ao iniciar:', e.message); process.exit(1); });
 }

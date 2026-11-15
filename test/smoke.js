@@ -133,14 +133,28 @@ const step = (m) => console.log('✔', m);
     await db.query("UPDATE families SET paid_until=DATE_ADD(CURDATE(), INTERVAL 1 MONTH), plan='monthly' WHERE email='c@d.co'");
     assert.equal((await api('GET', '/api/kids')).status, 200); step('assinatura paga libera de novo');
 
+    // avisos: plano mensal não tem; Plus tem
+    assert.equal((await ok('GET', '/api/admin/push')).plus, false);
+    assert.equal((await api('POST', '/api/admin/alarms', { title: 'Hora da escola', time: '06:40' })).status, 403);
+    await db.query("UPDATE families SET plan='plus' WHERE email='c@d.co'");
+    const pk = await ok('GET', '/api/admin/push'); assert.equal(pk.plus, true); assert.ok(pk.key.length > 40);
+    assert.equal((await api('POST', '/api/admin/alarms', { title: 'Hora da escola', time: '25:00' })).status, 400);
+    await ok('POST', '/api/admin/alarms', { title: 'Hora da escola', time: '06:40', weekdays: '12345', kid_id: ana.id });
+    const al = await ok('GET', '/api/admin/alarms'); assert.equal(al.length, 1); assert.equal(al[0].kid_id, ana.id);
+    await ok('PUT', '/api/admin/push-settings', { remind_before: 15 });
+    assert.equal((await ok('GET', '/api/admin/push')).remind_before, 15);
+    step('plano Plus libera avisos programados; mensal não');
+
     // painel do dono: só para OWNER_EMAILS (a@b.co no teste)
     assert.equal((await api('GET', '/api/owner/summary')).status, 403);
     cookie = '';
     await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
     await ok('POST', '/api/auth/parent', { pin: '1234' });
     const sum = await ok('GET', '/api/owner/summary');
-    assert.equal(sum.counts.total, 1); assert.equal(sum.counts.paid_monthly, 1); assert.equal(sum.revenue.mrr, 8);
-    await ok('PUT', '/api/owner/settings', { price_annual: 59.9, price_monthly: 9.9, trial_days: 60 });
+    assert.equal(sum.counts.total, 1); assert.equal(sum.counts.paid_plus, 1); assert.equal(sum.revenue.mrr, 5.58);
+    assert.ok(!('vapid_private' in sum.settings));
+    await ok('PUT', '/api/owner/settings', { price_annual: 59.9, price_monthly: 9.9, price_plus: 79.9, trial_days: 60 });
+    assert.equal((await ok('GET', '/api/public/pricing')).plus, 79.9);
     assert.equal((await ok('GET', '/api/public/pricing')).annual, 59.9);
     const fam = (await ok('GET', '/api/owner/families')).find(f => f.email === 'c@d.co');
     await ok('POST', '/api/owner/families/' + fam.id, { action: 'free' });

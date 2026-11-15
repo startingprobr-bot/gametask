@@ -53,6 +53,14 @@ const SCHEMA = [
   amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', method VARCHAR(40) NULL,
   mp_payment_id VARCHAR(40) NULL, period_end DATE NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, paid_at TIMESTAMP NULL, INDEX(family_id), INDEX(status))`,
+`CREATE TABLE IF NOT EXISTS push_subs (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, endpoint VARCHAR(600) NOT NULL, p256dh VARCHAR(200) NOT NULL, auth VARCHAR(100) NOT NULL,
+  label VARCHAR(60) NULL, reminders TINYINT NOT NULL DEFAULT 1, approvals TINYINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY u (endpoint(255)), INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS alarms (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, title VARCHAR(120) NOT NULL, kid_id INT NULL,
+  time CHAR(5) NOT NULL, weekdays VARCHAR(14) NOT NULL DEFAULT '0123456', active TINYINT NOT NULL DEFAULT 1, INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS push_log (k VARCHAR(100) PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
@@ -62,8 +70,9 @@ const COLUMNS = [
   ['families', 'plan', "VARCHAR(10) NULL"],          // monthly | annual | free (cortesia)
   ['families', 'onboarded', 'TINYINT NOT NULL DEFAULT 0'],
   ['families', 'last_seen', 'DATE NULL'],
+  ['families', 'remind_before', 'INT NOT NULL DEFAULT 10'], // minutos de antecedência do aviso das tarefas com horário
 ];
-const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', trial_days: '90' };
+const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 
 async function migrate() {
   for (const sql of SCHEMA) await pool.query(sql);
@@ -72,6 +81,12 @@ async function migrate() {
     if (!x.n) await pool.query(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`);
   }
   for (const [k, v] of Object.entries(DEFAULTS)) await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?)', [k, v]);
+  await pool.query("ALTER TABLE payments MODIFY plan ENUM('monthly','annual','plus') NOT NULL");
+  // Chaves VAPID das notificações: geradas uma vez e guardadas no banco (dispensa configurar variável)
+  if (!(await getSetting('vapid_public'))) {
+    const keys = require('web-push').generateVAPIDKeys();
+    await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?),(?,?)', ['vapid_public', keys.publicKey, 'vapid_private', keys.privateKey]);
+  }
   // famílias antigas: ganham o período de teste a partir do cadastro e não passam pelo assistente
   const days = +(await getSetting('trial_days'));
   await pool.query('UPDATE families SET trial_ends=DATE_ADD(DATE(created_at), INTERVAL ? DAY) WHERE trial_ends IS NULL', [days]);

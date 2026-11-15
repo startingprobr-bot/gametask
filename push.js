@@ -1,0 +1,86 @@
+// Notificações no celular/tablet (Web Push, plano Plus).
+// Agendador: a cada 30 s confere avisos (alarmes) e tarefas com horário de hoje e avisa os aparelhos da família.
+const webpush = require('web-push');
+const { pool, getSetting } = require('./db');
+const { today, dow, taskOnDay } = require('./util');
+const { access } = require('./billing');
+
+let ready = false;
+async function init() {
+  const pub = await getSetting('vapid_public'), priv = await getSetting('vapid_private');
+  const contact = process.env.APP_URL || 'https://gametask.startingpro.com.br';
+  webpush.setVapidDetails(contact.startsWith('http') ? contact : 'https://gametask.startingpro.com.br', pub, priv);
+  ready = true;
+}
+const publicKey = () => getSetting('vapid_public');
+
+// kind: 'reminders' (lembretes) | 'approvals' (pedido de aprovação para os pais) | 'all'
+async function sendToFamily(fid, payload, kind = 'reminders') {
+  if (!ready) return 0;
+  const where = kind === 'all' ? '' : ` AND ${kind === 'approvals' ? 'approvals' : 'reminders'}=1`;
+  const [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
+  const body = JSON.stringify(payload);
+  let ok = 0;
+  await Promise.all(subs.map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 900, urgency: 'high' })
+    .then(() => ok++)
+    .catch(e => { if (e.statusCode === 404 || e.statusCode === 410) return pool.query('DELETE FROM push_subs WHERE id=?', [s.id]); console.error('push', e.statusCode || e.message); })));
+  return ok;
+}
+
+// Só a primeira chamada com a mesma chave envia (evita aviso repetido mesmo se o servidor reiniciar)
+async function once(k) {
+  const [r] = await pool.query('INSERT IGNORE INTO push_log (k) VALUES (?)', [k]);
+  return r.affectedRows === 1;
+}
+
+const nowHM = () => new Intl.DateTimeFormat('en-GB', { timeZone: process.env.TZ || 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+const toMin = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(3, 5);
+
+async function tick() {
+  const day = today(), now = toMin(nowHM()), wd = String(dow(day));
+  // famílias com aparelhos inscritos
+  const [fams] = await pool.query('SELECT DISTINCT f.id,f.email,f.plan,f.paid_until,f.trial_ends,f.remind_before FROM families f JOIN push_subs s ON s.family_id=f.id');
+  for (const f of fams) {
+    if (!access(f).plus) continue;
+    const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [f.id]);
+    const kidName = Object.fromEntries(kids.map(k => [k.id, k.name]));
+
+    // 1) Avisos (alarmes) na hora exata, nos dias marcados. Janela de 3 min para não perder por atraso.
+    const [alarms] = await pool.query('SELECT * FROM alarms WHERE family_id=? AND active=1', [f.id]);
+    for (const a of alarms) {
+      const d = now - toMin(a.time);
+      if (!a.weekdays.includes(wd) || d < 0 || d > 3) continue;
+      if (!await once(`a${a.id}:${day}`)) continue;
+      const who = a.kid_id ? kidName[a.kid_id] : null;
+      await sendToFamily(f.id, { title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time}`, tag: `a${a.id}`, alarm: true, url: '/app#/' });
+    }
+
+    // 2) Tarefas com horário: avisa `remind_before` minutos antes, só para quem ainda não fez.
+    const [tasks] = await pool.query('SELECT * FROM tasks WHERE family_id=? AND active=1 AND time IS NOT NULL', [f.id]);
+    for (const t of tasks) {
+      if (!taskOnDay(t, day)) continue;
+      const d = now - (toMin(t.time) - (f.remind_before || 0));
+      if (d < 0 || d > 3) continue;
+      if (!await once(`t${t.id}:${day}`)) continue;
+      let ids = kids.map(k => k.id);
+      if (!t.all_kids) { const [tk] = await pool.query('SELECT kid_id FROM task_kids WHERE task_id=?', [t.id]); ids = tk.map(x => x.kid_id).filter(id => kidName[id]); }
+      const [done] = await pool.query("SELECT kid_id FROM completions WHERE task_id=? AND day=? AND status<>'rejected'", [t.id, day]);
+      const left = ids.filter(id => !done.some(x => x.kid_id === id)).map(id => kidName[id]);
+      if (!left.length) continue;
+      const names = left.length === 1 ? left[0] : left.slice(0, -1).join(', ') + ' e ' + left.at(-1);
+      const when = f.remind_before ? `daqui a ${f.remind_before} min (${t.time})` : `agora (${t.time})`;
+      await sendToFamily(f.id, { title: `${names}: ${t.title}`, body: `Missão ${when}. Valendo moedas!`, tag: `t${t.id}`, alarm: true, url: '/app#/' });
+    }
+  }
+  // limpeza do registro de envios antigos
+  if (Math.random() < 0.01) pool.query('DELETE FROM push_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)').catch(() => {});
+}
+
+function start() {
+  init().then(() => {
+    const run = () => tick().catch(e => console.error('avisos', e.message));
+    run(); setInterval(run, 30000);
+  }).catch(e => console.error('push init', e.message));
+}
+
+module.exports = { start, init, sendToFamily, publicKey };

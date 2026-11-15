@@ -177,7 +177,15 @@ a{color:inherit}
 .pricing .in{position:relative;z-index:1}
 .pricing h2{margin-bottom:14px}
 .lede{text-align:center;color:#fff;font-weight:800;font-size:19px;text-shadow:0 1px 0 rgba(13,27,76,.5)}
-.plans{display:grid;grid-template-columns:repeat(3,minmax(0,350px));justify-content:center;gap:26px;margin-top:48px;align-items:center}
+.plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));justify-content:center;gap:20px;margin-top:48px;align-items:center}
+.plan.plus{background:linear-gradient(180deg,#f1eaff,#fff 45%)}
+.plans{align-items:stretch}
+.plans .plan .btn{margin-top:auto}
+.plans .price b{font-size:clamp(46px,4.4vw,60px)}
+.plans .plan{padding:30px 22px 24px}
+.ribbon.violet{background:#8b5bff}
+.btn.violet{--bg:#8b5bff;--hi:#c3a8ff;--lo:#6234d6;--fg:#fff;text-shadow:0 2px 0 rgba(13,27,76,.55)}
+@media (max-width:1180px){.plans{grid-template-columns:repeat(2,minmax(0,380px))}.plan.best{transform:none}}
 .plan.free{background:linear-gradient(180deg,#eef6ff,#fff 45%)}
 .plan.free .price b{font-size:58px}
 .plan{position:relative;background:#fff;border:2px solid var(--navy);border-radius:28px;padding:30px 26px 26px;box-shadow:0 5px 0 var(--navy),var(--drop);display:flex;flex-direction:column;gap:12px}
