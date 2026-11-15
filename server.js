@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { pool, migrate, ensureDatabase, getSetting } = require('./db');
 const billing = require('./billing');
+const mail = require('./mail');
 
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
@@ -46,6 +47,28 @@ app.post('/api/auth/login', wrap(async (req, res) => {
   const [[f]] = await pool.query('SELECT * FROM families WHERE email=?', [(req.body.email || '').toLowerCase()]);
   if (!f || !bcrypt.compareSync(req.body.password || '', f.password_hash)) { fail(k); return res.status(401).json({ error: 'E-mail ou senha incorretos' }); }
   req.session = { fid: f.id };
+  res.json({ ok: true });
+}));
+// Esqueci a senha: resposta sempre igual (não revela se o e-mail existe)
+app.post('/api/auth/forgot', wrap(async (req, res) => {
+  const k = 'f' + req.ip;
+  if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  fail(k);
+  const email = String(req.body.email || '').toLowerCase().trim();
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido' });
+  const [[f]] = await pool.query('SELECT id,name FROM families WHERE email=?', [email]);
+  if (f) mail.sendResetMail(email, f.name, await mail.createResetLink(req, f.id)).catch(e => console.error('e-mail', e.message));
+  res.json({ ok: true });
+}));
+app.get('/api/auth/reset/:token', wrap(async (req, res) => res.json({ valid: await mail.peekReset(req.params.token) })));
+app.post('/api/auth/reset', wrap(async (req, res) => {
+  const k = 'r' + req.ip;
+  if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  if ((req.body.password || '').length < 6) return res.status(400).json({ error: 'Senha com ao menos 6 caracteres' });
+  const fid = await mail.consumeReset(req.body.token);
+  if (!fid) { fail(k); return res.status(400).json({ error: 'Este link venceu ou já foi usado. Peça um novo.' }); }
+  await pool.query('UPDATE families SET password_hash=? WHERE id=?', [bcrypt.hashSync(req.body.password, 10), fid]);
+  req.session = { fid };
   res.json({ ok: true });
 }));
 app.post('/api/auth/logout', (req, res) => { req.session = null; res.json({ ok: true }); });

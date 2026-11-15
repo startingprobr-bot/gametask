@@ -22,6 +22,8 @@ const SVG = {
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 010 6M18 6.5a8 8 0 010 11"/></svg>',
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0112 5c6.4 0 10 7 10 7a17 17 0 01-3.2 4M6.5 6.6C3.7 8.3 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
   del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h11v14H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg>',
 };
 
@@ -124,6 +126,7 @@ async function route() {
   const me = ME = await api('GET', '/auth/me');
   const [, a, b] = location.hash.split('/');
   if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
+  if (a === 'redefinir' && b) return viewReset(b);
   if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
   if (a === 'criar' || a === 'login') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
@@ -161,10 +164,11 @@ function viewLogin(mode = 'login') {
       <h2 class="d">${reg ? 'Criar a família' : 'Entrar na família'}</h2>
       ${reg ? '<div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div>' : ''}
       <div class="field"><label for="e">E-mail</label><input id="e" name="email" type="email" autocomplete="username" required></div>
-      <div class="field"><label for="p">Senha</label><input id="p" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required>${reg ? '<p class="hint">Mínimo de 6 caracteres.</p>' : ''}</div>
-      ${reg ? '<div class="field"><label for="pin">PIN dos pais</label><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><p class="hint">4 a 8 números. Ele protege o painel dos pais neste e em outros aparelhos.</p></div>' : ''}
+      <div class="field"><label for="p">Senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div>${reg ? '<p class="hint">Mínimo de 6 caracteres.</p>' : ''}</div>
+      ${reg ? `<div class="field"><label for="pin">PIN dos pais</label><div class="pw"><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><button type="button" class="eye" aria-label="Mostrar PIN" aria-pressed="false">${SVG.eye}</button></div><p class="hint">4 a 8 números. Ele protege o painel dos pais neste e em outros aparelhos.</p></div>` : ''}
       <div class="err" id="err" role="alert"></div>
       <div class="actions"><button class="btn green">${reg ? 'Criar e entrar' : 'Entrar'}</button></div>
+      ${reg ? '' : '<button type="button" class="link forgot" id="forgot">Esqueci a senha</button>'}
       ${reg ? '' : '<p class="hint" style="margin-top:14px;text-align:center">Entre uma vez em cada aparelho. Ele fica conectado e já abre nos seus filhos.</p>'}
     </form>
     <button class="switch" id="sw">${reg ? 'Já tenho uma conta' : 'Primeira vez? Criar família'}</button>
@@ -172,6 +176,12 @@ function viewLogin(mode = 'login') {
     <a class="switch home-link" href="/">Conhecer o GameTask</a>
   </div></div>`;
   $('#sw').onclick = () => viewLogin(reg ? 'login' : 'register');
+  const fg = $('#forgot'); if (fg) fg.onclick = () => viewForgot($('#e').value);
+  $$('.eye').forEach(b => b.onclick = () => {
+    const i = b.previousElementSibling, show = i.type === 'password';
+    i.type = show ? 'text' : 'password'; b.innerHTML = show ? SVG.eyeOff : SVG.eye; b.setAttribute('aria-pressed', show);
+    b.setAttribute('aria-label', (show ? 'Esconder ' : 'Mostrar ') + (i.name === 'pin' ? 'PIN' : 'senha')); i.focus();
+  });
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('.btn'); btn.disabled = true;
@@ -683,11 +693,16 @@ async function ownerFamilies(pane, q = '') {
     const bg = sheet(f.name, `<p class="lead" style="margin-top:6px">${esc(f.email)}<br>${planText(f.access)}</p>
       <div class="field"><span class="lab">O que fazer</span>${seg('action', [['trial', 'Estender teste'], ['paid', 'Liberar pago'], ['free', 'Cortesia'], ['block', 'Bloquear']], 'trial')}</div>
       <div class="field" data-d><label for="od">Até quando</label><input id="od" type="date" name="date" value="${plus(30, f.access.until)}"></div>
+      <div class="field"><button type="button" class="btn ghost sm" id="rl">Gerar link de nova senha</button><p class="hint" id="rlo"></p></div>
       <div class="field" data-p><span class="lab">Plano</span>${seg('plan', [['plus', 'Plus'], ['annual', 'Anual'], ['monthly', 'Mensal']], 'annual')}</div>`,
       async (fm) => { await api('POST', '/owner/families/' + f.id, { action: fm.action.value, date: fm.date.value, plan: fm.plan.value }); toast('Família atualizada'); ownerFamilies(pane, $('#q')?.value || ''); },
       { saveLabel: 'Aplicar' });
     const fm = bg.querySelector('form'), u = () => { $('[data-d]', fm).hidden = !['trial', 'paid'].includes(fm.action.value); $('[data-p]', fm).hidden = fm.action.value !== 'paid'; };
     fm.addEventListener('change', u); u();
+    fm.querySelector('#rl').onclick = guard(async () => {
+      const r = await api('POST', `/owner/families/${f.id}/reset-link`);
+      fm.querySelector('#rlo').innerHTML = `Vale por 24 horas. Envie para a família:<input readonly value="${esc(r.link)}" onfocus="this.select()">`;
+    });
   });
 }
 async function ownerPayments(pane) {
@@ -797,4 +812,42 @@ async function adminAlarms(pane, refresh) {
       async (f) => { await api('PUT', '/admin/alarms/' + a.id, read(f)); refresh(); });
     bg.querySelector('#del').onclick = guard(async () => { await api('DELETE', '/admin/alarms/' + a.id); bg.remove(); toast('Aviso apagado'); refresh(); });
   });
+}
+
+// ---------- Esqueci a senha ----------
+function viewForgot(email = '') {
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth">
+    <div class="logo">${im('key')}<h1 class="d stroke" style="font-size:44px">Nova senha</h1></div>
+    <form class="card" id="f" novalidate><h2 class="d">Esqueceu a senha?</h2>
+      <p class="lead" style="margin-top:6px;color:var(--ink-soft)">Digite o e-mail da família. Enviamos um link para criar uma senha nova.</p>
+      <div class="field"><label for="e">E-mail</label><input id="e" name="email" type="email" autocomplete="username" value="${esc(email)}" required></div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="actions"><button class="btn green">Enviar o link</button></div></form>
+    <button class="switch" id="sw">Voltar para entrar</button></div></div>`;
+  $('#sw').onclick = () => viewLogin();
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault(); const btn = e.target.querySelector('.btn'); btn.disabled = true;
+    try {
+      await api('POST', '/auth/forgot', { email: e.target.email.value });
+      $('#f').innerHTML = `<div class="sent">${im('check')}<h2 class="d">Confira seu e-mail</h2><p>Se este e-mail tem uma conta, o link chega em instantes. Olhe também o spam. Ele vale por 1 hora.</p></div>`;
+    } catch (er) { $('#err').textContent = er.message; btn.disabled = false; sfx.bad(); }
+  };
+}
+async function viewReset(token) {
+  const ok = (await api('GET', '/auth/reset/' + encodeURIComponent(token)).catch(() => ({}))).valid;
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth">
+    <div class="logo">${im(ok ? 'key' : 'lock')}<h1 class="d stroke" style="font-size:44px">Nova senha</h1></div>
+    ${ok ? `<form class="card" id="f" novalidate><h2 class="d">Crie a nova senha</h2>
+      <div class="field"><label for="p">Nova senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="new-password" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div><p class="hint">Mínimo de 6 caracteres.</p></div>
+      <div class="err" id="err" role="alert"></div><div class="actions"><button class="btn green">Salvar e entrar</button></div></form>`
+    : `<div class="card"><div class="sent">${im('cross')}<h2 class="d">Link vencido</h2><p>Este link já foi usado ou passou de 1 hora. Peça um novo.</p></div><div class="actions"><button class="btn green" id="again">Pedir novo link</button></div></div>`}
+    </div></div>`;
+  const again = $('#again'); if (again) again.onclick = () => { location.hash = '#/login'; viewForgot(); };
+  if (!ok) return;
+  $('.eye').onclick = (e) => { const b = e.currentTarget, i = b.previousElementSibling, show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.innerHTML = show ? SVG.eyeOff : SVG.eye; b.setAttribute('aria-pressed', show); b.setAttribute('aria-label', show ? 'Esconder senha' : 'Mostrar senha'); i.focus(); };
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault(); const btn = e.target.querySelector('.btn'); btn.disabled = true;
+    try { await api('POST', '/auth/reset', { token, password: e.target.password.value }); sfx.done(); location.hash = '#/'; await route(); toast('Senha alterada. Você já está dentro!'); }
+    catch (er) { $('#err').textContent = er.message; btn.disabled = false; sfx.bad(); }
+  };
 }

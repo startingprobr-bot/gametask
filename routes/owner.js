@@ -81,6 +81,13 @@ router.post('/families/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Link de nova senha para o dono repassar (útil enquanto o e-mail não está configurado ou se o e-mail não chega)
+router.post('/families/:id/reset-link', wrap(async (req, res) => {
+  const [[f]] = await pool.query('SELECT id FROM families WHERE id=?', [+req.params.id]);
+  if (!f) return res.status(404).json({ error: 'Família não encontrada' });
+  res.json({ link: await require('../mail').createResetLink(req, f.id, 24) });
+}));
+
 router.put('/settings', wrap(async (req, res) => {
   const m = r2(req.body.price_monthly), a = r2(req.body.price_annual), p = r2(req.body.price_plus ?? 67), d = Math.round(+req.body.trial_days);
   if (!(m > 0) || !(a > 0) || !(p > 0) || !(d >= 0 && d <= 3650)) return res.status(400).json({ error: 'Preços maiores que zero e dias de teste entre 0 e 3650' });

@@ -495,3 +495,16 @@ a.btn{text-decoration:none}
 .dev-on .btns{display:flex;gap:8px}
 .lead-time{max-width:420px;margin-top:18px}
 .item .s b{color:var(--navy)}
+/* Campo de senha com olho */
+.pw{position:relative}
+.pw input{padding-right:54px!important}
+.eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--ink-soft)}
+.eye svg{width:24px;height:24px}
+.eye:hover{background:#fff;color:var(--navy)}
+.eye[aria-pressed=true]{color:var(--sky-2)}
+.forgot{display:block;margin:12px auto 0;font-size:15px}
+.sent{text-align:center;padding:8px 4px}
+.sent img{width:72px;height:72px;margin:0 auto 6px}
+.sent p{color:var(--ink-soft);font-weight:700;margin-top:6px}
+#rlo input{width:100%;height:44px;margin-top:6px;font-size:13px}
+.home-link{text-align:center}

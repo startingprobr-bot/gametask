@@ -161,6 +161,23 @@ const step = (m) => console.log('✔', m);
     assert.equal((await ok('GET', '/api/owner/families')).find(f => f.email === 'c@d.co').access.status, 'free');
     step('painel do dono: resumo, preços editáveis e cortesia');
 
+    // esqueci a senha: o dono gera o link (sem SMTP no teste); a senha nova vale e o link é de uso único
+    const lk = (await ok('POST', '/api/owner/families/' + fam.id + '/reset-link')).link;
+    const tok = lk.split('/redefinir/')[1]; assert.ok(tok && tok.length === 64);
+    assert.equal((await ok('GET', '/api/auth/reset/' + tok)).valid, true);
+    assert.equal((await ok('POST', '/api/auth/forgot', { email: 'ninguem@x.co' })).ok, true); // não revela se existe
+    cookie = '';
+    assert.equal((await api('POST', '/api/auth/reset', { token: tok, password: '123' })).status, 400);
+    await ok('POST', '/api/auth/reset', { token: tok, password: 'novaSenha9' });
+    assert.equal((await ok('GET', '/api/auth/me')).family, 'Outra'); // já entra logado
+    assert.equal((await api('POST', '/api/auth/reset', { token: tok, password: 'outra123' })).status, 400);
+    cookie = '';
+    assert.equal((await api('POST', '/api/auth/login', { email: 'c@d.co', password: 'secret2' })).status, 401);
+    await ok('POST', '/api/auth/login', { email: 'c@d.co', password: 'novaSenha9' });
+    step('esqueci a senha: link de uso único troca a senha e entra');
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
+
     // página de vendas em "/" com os preços do painel; app em "/app"
     const land = await (await fetch(BASE + '/')).text();
     assert.ok(land.includes('59,90') && land.includes('9,90') && !land.includes('{{'));
