@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GameTask: as tarefas da casa viram um jogo</title>
+<meta name="description" content="Seus filhos cumprem as missões do dia e ganham moedas, tempo de tela e prêmios. Você só aprova. {{MESES}} meses grátis, sem cartão.">
+<meta property="og:title" content="GameTask: as tarefas da casa viram um jogo">
+<meta property="og:description" content="Escovar os dentes, arrumar a cama, lavar a louça: cada tarefa vira missão, com moedas e prêmios de verdade. {{MESES}} meses grátis.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#2a6cf0">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/landing.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="in">
+    <a class="brand" href="/" aria-label="GameTask, início"><img src="/img/3d/game.png" alt=""><span class="d stroke-sm">GameTask</span></a>
+    <nav class="links" aria-label="Seções">
+      <a href="#como">Como funciona</a><a href="#precos">Preços</a><a href="#duvidas">Dúvidas</a>
+    </nav>
+    <a class="btn ghost sm" href="/app#/login">Entrar</a>
+    <a class="btn sm hide-sm" href="/app#/criar">Testar grátis</a>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="rays" aria-hidden="true"></div>
+    <div class="in hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow"><img src="/img/3d/gift.png" alt="">{{MESES}} meses grátis · sem cartão</p>
+        <h1 class="d stroke">As tarefas da casa viraram um jogo.</h1>
+        <p class="sub">Seus filhos escolhem um personagem, cumprem as missões do dia e ganham moedas, tempo de videogame e prêmios de verdade. Você só confere e aprova.</p>
+        <div class="cta-row">
+          <a class="btn green big" href="/app#/criar">Começar grátis</a>
+          <a class="btn ghost big" href="#como">Ver como funciona</a>
+        </div>
+        <p class="fine">Depois do teste, R$ {{ANUAL_MES}} por mês no plano anual. Funciona no tablet, no celular e no computador.</p>
+      </div>
+
+      <div class="stage-mock" aria-hidden="true">
+        <img class="float f1" src="/img/3d/coin.png" alt="">
+        <img class="float f2" src="/img/3d/trophy.png" alt="">
+        <img class="float f3" src="/img/3d/sparkles.png" alt="">
+        <img class="float f4" src="/img/3d/ferris.png" alt="">
+        <div class="phone">
+          <div class="screen">
+            <div class="m-top"><span class="d stroke-sm">Eva</span><span class="m-pill"><img src="/img/3d/coin.png" alt=""><b class="d" id="mcoins">42</b></span></div>
+            <div class="m-stage">
+              <img src="/img/3d/unicorn.png" alt="" class="m-av">
+              <div><b class="d stroke-sm">Faltam 2!</b><small><img src="/img/3d/coin.png" alt="">Ainda dá para ganhar <em>+3</em></small></div>
+            </div>
+            <div class="m-segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+            <div class="m-time"><img src="/img/3d/game.png" alt=""><span><b>Videogame</b><i><s style="width:66%"></s></i></span><em>20 min</em></div>
+            <div class="m-card done"><span class="m-tile"><img src="/img/3d/bed.png" alt=""></span><span class="m-t">Arrumar a cama<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span></div>
+            <div class="m-card done"><span class="m-tile"><img src="/img/3d/toothbrush.png" alt=""></span><span class="m-t">Escovar os dentes<small><img src="/img/3d/coin.png" alt="">+0,5</small></span><span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span></div>
+            <div class="m-card" id="mlive"><span class="m-tile"><img src="/img/3d/soap.png" alt=""></span><span class="m-t">Lavar a louça<small><img src="/img/3d/coin.png" alt="">+2</small></span><span class="m-go">Concluí!</span></div>
+            <div class="m-card"><span class="m-tile"><img src="/img/3d/openbook.png" alt=""></span><span class="m-t">Ler as escrituras<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-go">Concluí!</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOR -> GANHO -->
+  <section class="band">
+    <div class="in">
+      <h2 class="d">Chega de perguntar “já escovou os dentes?” dez vezes por dia.</h2>
+      <div class="trio">
+        <article><img src="/img/3d/clipboard.png" alt=""><h3>Rotina que se cobra sozinha</h3><p>A lista do dia aparece no tablet da sala. A criança sabe o que falta sem ninguém precisar lembrar.</p></article>
+        <article><img src="/img/3d/moneybag.png" alt=""><h3>Mesada com propósito</h3><p>Cada missão rende moedas, e você decide quanto vale cada uma em reais. Elas acumulam até o dia de pagar.</p></article>
+        <article><img src="/img/3d/stopwatch.png" alt=""><h3>Tela sem briga</h3><p>O tempo de videogame e de YouTube é conquistado, não negociado. O app faz a conta.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMO FUNCIONA -->
+  <section class="how" id="como">
+    <div class="in">
+      <p class="kicker">Como funciona</p>
+      <h2 class="d stroke">Três passos, e a casa entra no modo jogo</h2>
+      <ol class="steps">
+        <li>
+          <span class="n d">1</span>
+          <h3>Monte tudo em 2 minutos</h3>
+          <p>Cadastre os filhos e marque as missões de um catálogo pronto. Não precisa digitar nada.</p>
+          <div class="chips">
+            <span><img src="/img/3d/toothbrush.png" alt="">Escovar os dentes</span><span><img src="/img/3d/bed.png" alt="">Arrumar a cama</span>
+            <span><img src="/img/3d/openbook.png" alt="">Ler as escrituras</span><span><img src="/img/3d/pencil.png" alt="">Dever de casa</span>
+            <span><img src="/img/3d/teddy.png" alt="">Catar os brinquedos</span><span><img src="/img/3d/soap.png" alt="">Lavar a louça</span>
+          </div>
+        </li>
+        <li>
+          <span class="n d">2</span>
+          <h3>A criança joga</h3>
+          <p>Escolhe o personagem, toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Na hora.</p>
+          <div class="hero-row"><img src="/img/3d/fox.png" alt=""><img src="/img/3d/robot.png" alt=""><img src="/img/3d/unicorn.png" alt=""><img src="/img/3d/dragon.png" alt=""></div>
+        </li>
+        <li>
+          <span class="n d">3</span>
+          <h3>Você aprova e paga</h3>
+          <p>No painel dos pais, protegido por PIN, você confere o que foi feito e registra o pagamento das moedas.</p>
+          <div class="approve"><span><img src="/img/3d/soap.png" alt="">Lavar a louça · Eva</span><b>Aprovar</b></div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- TEMPO DE TELA -->
+  <section class="split">
+    <div class="in split-grid">
+      <div>
+        <p class="kicker dark">Tempo de tela</p>
+        <h2 class="d">O tempo de videogame se divide sozinho entre as missões</h2>
+        <p>Você define quanto tempo de tela a criança pode ganhar por dia. O GameTask reparte esse total entre as missões. Com 30 minutos e 15 missões, cada uma vale 2 minutos. Se você criar mais missões, a conta se refaz.</p>
+        <p>E o tempo não acumula: amanhã começa do zero.</p>
+      </div>
+      <div class="calc" aria-label="Exemplo: 30 minutos divididos por 15 missões dão 2 minutos cada">
+        <div class="calc-row"><img src="/img/3d/game.png" alt=""><b class="d">30 min</b><span>÷</span><b class="d">15 missões</b><span>=</span><b class="d hl">2 min cada</b></div>
+        <div class="calc-bar">
+          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <p class="calc-note"><img src="/img/3d/stopwatch.png" alt=""><span>9 missões feitas = <b>18 minutos</b> de videogame hoje</span></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- RECURSOS -->
+  <section class="features">
+    <div class="in">
+      <p class="kicker">Tudo o que vem junto</p>
+      <h2 class="d stroke">Feito para a rotina de uma família de verdade</h2>
+      <div class="grid">
+        <article class="wide goal">
+          <div><h3><img src="/img/3d/ferris.png" alt="">Metas que valem a pena</h3><p>Parque de diversão depois de 150 missões. Sorvete por 20 moedas. A criança acompanha o caminho até o prêmio, passo a passo.</p></div>
+          <div class="road" aria-hidden="true"><i class="rail"></i><i class="fill"></i><i class="node on" style="left:25%"></i><i class="node on" style="left:50%"></i><i class="node" style="left:75%"></i><img class="me" src="/img/3d/fox.png" alt=""><img class="prize" src="/img/3d/ferris.png" alt=""></div>
+        </article>
+        <article><h3><img src="/img/3d/people.png" alt="">Um jogo para cada filho</h3><p>Idades diferentes, missões diferentes. Cada um tem o seu personagem, as suas moedas e as suas metas.</p></article>
+        <article><h3><img src="/img/3d/calendar.png" alt="">Horários marcados</h3><p>Natação toda terça às 18h, igreja no domingo. A missão aparece só no dia certo.</p></article>
+        <article><h3><img src="/img/3d/laptop.png" alt="">Em todos os aparelhos</h3><p>Tablet, celular e computador. Entre uma vez e o aparelho já abre direto nos seus filhos.</p></article>
+        <article><h3><img src="/img/3d/lock.png" alt="">Painel dos pais com PIN</h3><p>As crianças jogam, mas só você aprova, paga e muda as regras.</p></article>
+        <article><h3><img src="/img/3d/coin.png" alt="">Educação financeira</h3><p>Moedas que viram dinheiro de verdade ensinam a juntar, esperar e escolher.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <!-- PREÇOS -->
+  <section class="pricing" id="precos">
+    <div class="rays" aria-hidden="true"></div>
+    <div class="in">
+      <p class="kicker">Preços</p>
+      <h2 class="d stroke">Comece com {{MESES}} meses grátis</h2>
+      <p class="lede">Teste com a família inteira, sem cartão. Só depois você escolhe um plano.</p>
+      <div class="plans">
+        <article class="plan best">
+          <span class="ribbon">Mais escolhido · economize {{ECONOMIA}}%</span>
+          <h3 class="d">Anual</h3>
+          <div class="price"><small>R$</small><b class="d">{{ANUAL_MES}}</b><small>/mês</small></div>
+          <p class="bill">Pagamento único de <b>R$ {{ANUAL}}</b> por ano</p>
+          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
+          <a class="btn green" href="/app#/criar">Começar {{MESES}} meses grátis</a>
+        </article>
+        <article class="plan">
+          <h3 class="d">Mensal</h3>
+          <div class="price"><small>R$</small><b class="d">{{MENSAL}}</b><small>/mês</small></div>
+          <p class="bill">Pago mês a mês, sem fidelidade</p>
+          <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
+          <a class="btn ghost" href="/app#/criar">Começar grátis</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- DÚVIDAS -->
+  <section class="faq" id="duvidas">
+    <div class="in narrow">
+      <p class="kicker dark">Dúvidas</p>
+      <h2 class="d">Perguntas frequentes</h2>
+      <details><summary>Preciso cadastrar cartão para testar?</summary><p>Não. Você cria a conta da família com e-mail e senha e usa tudo por {{MESES}} meses sem pagar nada.</p></details>
+      <details><summary>O que acontece quando o teste acaba?</summary><p>O app pede uma assinatura para continuar. Missões, moedas e histórico ficam guardados e voltam assim que você assina.</p></details>
+      <details><summary>Como eu pago?</summary><p>Pelo Mercado Pago, com Pix, cartão de crédito ou boleto. O acesso é liberado assim que o pagamento é confirmado.</p></details>
+      <details><summary>A cobrança é automática?</summary><p>Não. Você paga o período que escolheu (um ano ou um mês) e o app avisa quando estiver perto de vencer. Nada é cobrado sem você confirmar.</p></details>
+      <details><summary>Quantos filhos e aparelhos posso usar?</summary><p>Quantos quiser. A assinatura é da família: todos os filhos e todos os aparelhos da casa estão incluídos.</p></details>
+      <details><summary>As moedas são dinheiro de verdade?</summary><p>Você decide quanto vale cada moeda (por exemplo, R$ 0,50) e paga quando quiser. O app guarda o saldo e o histórico de pagamentos.</p></details>
+      <details><summary>Serve para crianças pequenas?</summary><p>Sim. As missões têm ícones grandes e um botão só. Quem ainda não lê se guia pelas figuras.</p></details>
+    </div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="final">
+    <div class="rays" aria-hidden="true"></div>
+    <div class="in">
+      <img src="/img/3d/rocket.png" alt="" class="rocket">
+      <h2 class="d stroke">Hoje à noite, a louça pode virar uma missão.</h2>
+      <a class="btn green big" href="/app#/criar">Criar a conta da família</a>
+      <p class="fine">{{MESES}} meses grátis. Sem cartão. Pronto em 2 minutos.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="in">
+    <span class="brand"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></span>
+    <nav aria-label="Rodapé"><a href="#precos">Preços</a><a href="#duvidas">Dúvidas</a><a href="/app#/login">Entrar</a></nav>
+  </div>
+</footer>
+
+<script>
+// Demonstração no celular do topo: a louça vira "Feito!" e as moedas sobem.
+(() => {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const card = document.getElementById('mlive'), coins = document.getElementById('mcoins');
+  if (!card) return;
+  let on = false;
+  setInterval(() => {
+    on = !on;
+    card.classList.toggle('done', on);
+    card.querySelector('.m-go, .m-ok').outerHTML = on ? '<span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span>' : '<span class="m-go">Concluí!</span>';
+    coins.textContent = on ? '44' : '42';
+    coins.parentElement.classList.remove('bump'); void coins.offsetWidth; coins.parentElement.classList.add('bump');
+  }, 2600);
+})();
+</script>
+</body>
+</html>

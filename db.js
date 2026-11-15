@@ -47,10 +47,44 @@ const SCHEMA = [
   kind ENUM('coin','time','goal') NOT NULL, reward_id INT NULL, amount DECIMAL(10,2) NOT NULL,
   day DATE NOT NULL, completion_id INT NULL, payout_id INT NULL, note VARCHAR(160) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(kid_id, kind, day), INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS app_settings (k VARCHAR(40) PRIMARY KEY, v VARCHAR(255) NOT NULL)`,
+`CREATE TABLE IF NOT EXISTS payments (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, plan ENUM('monthly','annual') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', method VARCHAR(40) NULL,
+  mp_payment_id VARCHAR(40) NULL, period_end DATE NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, paid_at TIMESTAMP NULL, INDEX(family_id), INDEX(status))`,
 ];
+
+// Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
+const COLUMNS = [
+  ['families', 'trial_ends', 'DATE NULL'],
+  ['families', 'paid_until', 'DATE NULL'],
+  ['families', 'plan', "VARCHAR(10) NULL"],          // monthly | annual | free (cortesia)
+  ['families', 'onboarded', 'TINYINT NOT NULL DEFAULT 0'],
+  ['families', 'last_seen', 'DATE NULL'],
+];
+const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', trial_days: '90' };
 
 async function migrate() {
   for (const sql of SCHEMA) await pool.query(sql);
+  for (const [t, c, def] of COLUMNS) {
+    const [[x]] = await pool.query('SELECT COUNT(*) n FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?', [t, c]);
+    if (!x.n) await pool.query(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`);
+  }
+  for (const [k, v] of Object.entries(DEFAULTS)) await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?)', [k, v]);
+  // famílias antigas: ganham o período de teste a partir do cadastro e não passam pelo assistente
+  const days = +(await getSetting('trial_days'));
+  await pool.query('UPDATE families SET trial_ends=DATE_ADD(DATE(created_at), INTERVAL ? DAY) WHERE trial_ends IS NULL', [days]);
+  await pool.query('UPDATE families f SET onboarded=1 WHERE onboarded=0 AND EXISTS (SELECT 1 FROM tasks t WHERE t.family_id=f.id)');
+}
+
+async function getSetting(k) {
+  const [[r]] = await pool.query('SELECT v FROM app_settings WHERE k=?', [k]);
+  return r ? r.v : DEFAULTS[k];
+}
+async function settings() {
+  const [rows] = await pool.query('SELECT k,v FROM app_settings');
+  return { ...DEFAULTS, ...Object.fromEntries(rows.map(r => [r.k, r.v])) };
 }
 
 // Cria o banco local se não existir (apenas quando usando DB_* e não DATABASE_URL)
@@ -65,4 +99,4 @@ async function ensureDatabase() {
   await c.end();
 }
 
-module.exports = { pool, migrate, ensureDatabase };
+module.exports = { pool, migrate, ensureDatabase, getSetting, settings };

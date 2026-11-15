@@ -23,9 +23,9 @@ const step = (m) => console.log('✔', m);
   const c = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '' });
   await c.query('DROP DATABASE IF EXISTS gametask_test'); await c.end();
 
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '' }, stdio: 'inherit' });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: '' }, stdio: 'inherit' });
   try {
-    for (let i = 0; i < 40; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
+    for (let i = 0; i < 120; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
 
     // sem login não acessa nada
     assert.equal((await api('GET', '/api/kids')).status, 401); step('API exige login da família');
@@ -105,6 +105,54 @@ const step = (m) => console.log('✔', m);
     await ok('POST', '/api/auth/register', { name: 'Outra', email: 'c@d.co', password: 'secret2', pin: '9999' });
     assert.equal((await ok('GET', '/api/kids')).length, 0);
     assert.equal((await api('GET', `/api/kids/${eva}/home`)).status, 404); step('famílias isoladas');
+
+    // assinatura: família nova começa em teste de 90 dias e passa pelo assistente
+    let me = await ok('GET', '/api/auth/me');
+    assert.equal(me.access.status, 'trial'); assert.ok(me.access.days_left >= 89); assert.equal(me.onboarded, false);
+    step('cadastro começa no teste grátis');
+    const cat = await ok('GET', '/api/admin/catalog');
+    const keys = cat.tasks.filter(x => x.on).map(x => x.key);
+    const su = await ok('POST', '/api/admin/setup', { kids: [{ name: 'Ana', avatar: 'cat' }, { name: '' }], tasks: keys, rewards: [{ key: 'videogame', value: 26 }, { key: 'passeio' }] });
+    assert.equal(su.kids, 1); assert.equal(su.tasks, keys.length);
+    const ana = (await ok('GET', '/api/kids'))[0];
+    const ah = await ok('GET', `/api/kids/${ana.id}/home`);
+    assert.equal(ah.time[0].cap, 26);
+    assert.equal(ah.tasks.find(x => x.title === 'Arrumar a cama').rewards.find(r => r.kind === 'time').value, Math.round(26 / keys.length * 100) / 100);
+    assert.ok((await ok('GET', '/api/auth/me')).onboarded);
+    assert.equal((await ok('POST', '/api/admin/catalog', { keys: [keys[0], 'banho'] })).created, 1);
+    step('assistente cria filhos, missões e recompensas (catálogo sem duplicar)');
+
+    // teste vencido bloqueia o app, mas não o login nem a tela de planos
+    const db = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+    await db.query("UPDATE families SET trial_ends=DATE_SUB(CURDATE(), INTERVAL 1 DAY) WHERE email='c@d.co'");
+    assert.equal((await api('GET', '/api/kids')).status, 402);
+    assert.equal((await api('GET', '/api/admin/kids')).status, 402);
+    me = await ok('GET', '/api/auth/me'); assert.equal(me.access.active, false);
+    const bs = await ok('GET', '/api/billing/status'); assert.equal(bs.prices.annual, 47); assert.equal(bs.prices.monthly, 8);
+    step('teste vencido bloqueia o app (402) e mostra os planos');
+    await db.query("UPDATE families SET paid_until=DATE_ADD(CURDATE(), INTERVAL 1 MONTH), plan='monthly' WHERE email='c@d.co'");
+    assert.equal((await api('GET', '/api/kids')).status, 200); step('assinatura paga libera de novo');
+
+    // painel do dono: só para OWNER_EMAILS (a@b.co no teste)
+    assert.equal((await api('GET', '/api/owner/summary')).status, 403);
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
+    await ok('POST', '/api/auth/parent', { pin: '1234' });
+    const sum = await ok('GET', '/api/owner/summary');
+    assert.equal(sum.counts.total, 1); assert.equal(sum.counts.paid_monthly, 1); assert.equal(sum.revenue.mrr, 8);
+    await ok('PUT', '/api/owner/settings', { price_annual: 59.9, price_monthly: 9.9, trial_days: 60 });
+    assert.equal((await ok('GET', '/api/public/pricing')).annual, 59.9);
+    const fam = (await ok('GET', '/api/owner/families')).find(f => f.email === 'c@d.co');
+    await ok('POST', '/api/owner/families/' + fam.id, { action: 'free' });
+    assert.equal((await ok('GET', '/api/owner/families')).find(f => f.email === 'c@d.co').access.status, 'free');
+    step('painel do dono: resumo, preços editáveis e cortesia');
+
+    // página de vendas em "/" com os preços do painel; app em "/app"
+    const land = await (await fetch(BASE + '/')).text();
+    assert.ok(land.includes('59,90') && land.includes('9,90') && !land.includes('{{'));
+    assert.ok((await (await fetch(BASE + '/app')).text()).includes('/js/app.js'));
+    step('landing com preços dinâmicos e app em /app');
+    await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');
   } finally { srv.kill(); }

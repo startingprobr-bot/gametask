@@ -11,10 +11,10 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- Ícones 3D (Fluent Emoji, MIT) ----------
 const AVATARS = ['unicorn', 'fox', 'robot', 'dragon', 'lion', 'panda', 'frog', 'tiger', 'dog', 'cat', 'owl', 'penguin', 'octopus', 'alien', 'koala', 'butterfly', 'dolphin'];
-const TASK_ICONS = ['star', 'bed', 'tooth', 'toothbrush', 'shower', 'plate', 'broom', 'basket', 'trash', 'socks', 'books', 'pencil', 'backpack', 'plant', 'paw', 'teddy', 'karate', 'swim', 'goggles', 'basketball', 'music', 'church', 'soap'];
+const TASK_ICONS = ['star', 'bed', 'tooth', 'toothbrush', 'shower', 'shirt', 'bowl', 'plate', 'sandwich', 'apple', 'spaghetti', 'broom', 'basket', 'bucket', 'trash', 'socks', 'house', 'books', 'openbook', 'pray', 'pencil', 'backpack', 'plant', 'paw', 'teddy', 'karate', 'swim', 'goggles', 'basketball', 'music', 'church', 'soap', 'sun', 'moon'];
 const REWARD_ICONS = ['game', 'tv', 'phone', 'movie', 'ferris', 'coaster', 'icecream', 'pizza', 'soccer', 'gift', 'trophy', 'crown'];
 const COLORS = ['#ff4fae', '#ff8a1f', '#3bd15f', '#8b5bff', '#19c3c9', '#ff4d5e', '#f5b800'];
-const KNOWN = new Set([...AVATARS, ...TASK_ICONS, ...REWARD_ICONS, 'coin', 'clock', 'stopwatch', 'lock', 'check', 'glow', 'party', 'fire', 'hourglass', 'gem', 'moneybag', 'chart', 'gear', 'people', 'clipboard', 'calendar', 'sparkles', 'key', 'cross', 'chest']);
+const KNOWN = new Set([...AVATARS, ...TASK_ICONS, ...REWARD_ICONS, 'coin', 'clock', 'stopwatch', 'lock', 'check', 'glow', 'party', 'fire', 'hourglass', 'gem', 'moneybag', 'chart', 'gear', 'people', 'clipboard', 'calendar', 'sparkles', 'key', 'cross', 'chest', 'rocket', 'shield', 'card', 'laptop']);
 const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn', '🐉': 'dragon', '🤖': 'robot', '👾': 'alien', '🐼': 'panda', '🦁': 'lion', '🐸': 'frog', '🧚': 'butterfly', '⭐': 'star', '🛏️': 'bed', '🦷': 'tooth', '🍽️': 'plate', '🧹': 'broom', '📚': 'books', '🐕': 'paw', '🧺': 'basket', '🗑️': 'trash', '🥋': 'karate', '🏊': 'swim', '⛪': 'church', '🎒': 'backpack', '🚿': 'shower', '🪥': 'toothbrush', '🌱': 'plant', '🎮': 'game', '📺': 'tv', '📱': 'phone', '🎡': 'ferris', '🍦': 'icecream', '🎬': 'movie', '🏆': 'trophy', '🍕': 'pizza', '⚽': 'soccer', '🧸': 'teddy' };
 const slug = (v, fb = 'star') => KNOWN.has(v) ? v : (LEGACY[v] || fb);
 const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" class="${cls}" decoding="async">`;
@@ -30,6 +30,7 @@ async function api(method, url, body) {
   const r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
+  if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
   if (!r.ok) throw new Error(d.error || 'Algo deu errado. Tente de novo.');
   return d;
 }
@@ -37,7 +38,7 @@ function toast(msg, bad) {
   const d = document.createElement('div'); d.textContent = msg; if (bad) d.className = 'bad';
   $('#toast').append(d); setTimeout(() => d.remove(), 2800);
 }
-const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); sfx.bad(); } };
+const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (!e.silent) { toast(e.message, true); sfx.bad(); } } };
 
 // ---------- Som ----------
 let actx; let muted = store.get('gt-mute') === '1';
@@ -115,16 +116,35 @@ function burst(icon, title, text, btn = 'Continuar') {
 }
 
 // ---------- Roteador ----------
-let timer;
+let timer, ME = {};
 async function route() {
   clearInterval(timer);
   $$('.sheet-bg,.burst').forEach(e => e.remove());
-  const me = await api('GET', '/auth/me');
+  const paid = await paymentReturn();
+  const me = ME = await api('GET', '/auth/me');
   const [, a, b] = location.hash.split('/');
-  if (!me.family) return viewLogin();
+  if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
+  if (a === 'assinar' || !me.access.active) return viewPaywall(me);
+  if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
   if (a === 'kid' && b) return viewKid(+b);
-  if (a === 'admin') return me.parent ? viewAdmin() : viewPin();
-  return viewPlayers();
+  if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
+  await viewPlayers(me);
+  paid?.();
+}
+
+// Volta do Mercado Pago: /app?pagamento=<id>&payment_id=<mp>&status=...
+async function paymentReturn() {
+  const q = new URLSearchParams(location.search), ref = q.get('pagamento');
+  if (!ref) return null;
+  history.replaceState(null, '', '/app' + location.hash);
+  try {
+    const r = await api('GET', `/billing/return?ref=${encodeURIComponent(ref)}&payment_id=${encodeURIComponent(q.get('payment_id') || '')}`);
+    const st = r.payment?.status;
+    if (st === 'approved') return () => burst('trophy', 'Assinatura ativa!', `Obrigado! Seu acesso está garantido até ${dmy(r.payment.period_end)}.`, 'Bora jogar');
+    if (st === 'pending' || st === 'in_process') toast('Pagamento em análise. Assim que o Mercado Pago confirmar, o acesso é liberado.');
+    else toast('O pagamento não foi concluído. Você pode tentar de novo.', true);
+  } catch {}
+  return null;
 }
 window.addEventListener('hashchange', guard(route));
 guard(route)();
@@ -146,20 +166,23 @@ function viewLogin(mode = 'login') {
       ${reg ? '' : '<p class="hint" style="margin-top:14px;text-align:center">Entre uma vez em cada aparelho. Ele fica conectado e já abre nos seus filhos.</p>'}
     </form>
     <button class="switch" id="sw">${reg ? 'Já tenho uma conta' : 'Primeira vez? Criar família'}</button>
+    ${reg ? '<p class="trial-note">Comece pelo período grátis. Não pedimos cartão de crédito.</p>' : ''}
+    <a class="switch home-link" href="/">Conhecer o GameTask</a>
   </div></div>`;
   $('#sw').onclick = () => viewLogin(reg ? 'login' : 'register');
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('.btn'); btn.disabled = true;
-    try { await api('POST', reg ? '/auth/register' : '/auth/login', Object.fromEntries(new FormData(e.target))); location.hash = '#/'; await route(); }
+    try { await api('POST', reg ? '/auth/register' : '/auth/login', Object.fromEntries(new FormData(e.target))); location.hash = reg ? '#/setup' : '#/'; await route(); }
     catch (er) { $('#err').textContent = er.message; e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad(); }
     finally { btn.disabled = false; }
   };
 }
 
 // ---------- Seleção de herói ----------
-async function viewPlayers() {
+async function viewPlayers(me = ME) {
   const kids = await api('GET', '/kids');
+  if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
     <div style="position:absolute;right:16px;top:14px;z-index:5">${soundBtn()}</div>
     <div class="wrap">
@@ -303,7 +326,7 @@ function viewPin() {
   const dots = () => { const n = Math.max(4, pin.length); $('#dots').innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); };
   const submit = async () => {
     if (pin.length < 4) return;
-    try { await api('POST', '/auth/parent', { pin }); sfx.done(); document.removeEventListener('keydown', kb); viewAdmin(); }
+    try { await api('POST', '/auth/parent', { pin }); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
     catch (er) { pin = ''; dots(); $('#err').textContent = er.message; const c = $('#card'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); sfx.bad(); }
   };
   const press = (k) => { if (k === 'del') pin = pin.slice(0, -1); else if (k === 'ok') return submit(); else if (pin.length < 8) pin += k; $('#err').textContent = ''; sfx.tap(); dots(); };
@@ -318,7 +341,11 @@ let tab = 'pending';
 const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['history', 'chart', 'Histórico'], ['settings', 'gear', 'Ajustes']];
 async function viewAdmin() {
   const pendingN = (await api('GET', '/admin/pending')).length;
+  const ac = ME.access || {};
+  const plan = ac.status === 'trial' ? `<a class="plan-chip ${ac.days_left <= 10 ? 'warn' : ''}" href="#/assinar">${im('hourglass')}Grátis: ${ac.days_left} ${ac.days_left === 1 ? 'dia' : 'dias'}</a>`
+    : ac.status === 'paid' && ac.days_left <= 10 ? `<a class="plan-chip warn" href="#/assinar">${im('hourglass')}Renovar em ${ac.days_left} d</a>` : '';
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
+      ${plan}${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
       <button class="btn ghost sm" id="exit">Voltar ao jogo</button></div>
     <nav class="tabs" aria-label="Seções">${TABS.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
@@ -365,7 +392,7 @@ async function adminTasks(pane, refresh) {
   const kidsOn = kids.filter(k => k.active);
   const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
     : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Tarefas</h2><button class="btn green sm" id="new">Nova tarefa</button></div>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Tarefas</h2><div class="btns"><button class="btn ghost sm" id="cat">${im('sparkles')}Do catálogo</button><button class="btn green sm" id="new">Nova tarefa</button></div></div>
     ${tasks.length ? `<div class="list">${tasks.map(t => `<div class="item ${t.active ? '' : 'off'}"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
       <div class="s">${esc(when(t))}${t.time ? ' às ' + esc(t.time) : ''}${t.coins > 0 ? ` · ${num(t.coins)} moedas` : ''}${t.reward_ids.length ? ' · ' + t.reward_ids.map(r => esc(rewards.find(x => x.id === r)?.title || '?')).join(', ') : ''}</div></div>
       <div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`).join('')}</div>` : zero('clipboard', 'Crie a primeira tarefa da casa.')}</section>`;
@@ -403,6 +430,13 @@ async function adminTasks(pane, refresh) {
     f.addEventListener('change', upd); upd();
   };
   $('#new').onclick = () => wire(sheet('Nova tarefa', form(), async (f) => { await api('POST', '/admin/tasks', read(f)); toast('Tarefa criada'); refresh(); }, { saveLabel: 'Criar tarefa' }));
+  $('#cat').onclick = guard(async () => {
+    const c = await api('GET', '/admin/catalog'), free = c.tasks.filter(t => !t.have);
+    if (!free.length) return toast('Todas as tarefas do catálogo já estão na sua lista.');
+    sheet('Tarefas prontas', `<p class="lead" style="margin-top:6px">Marque as que quer adicionar. Elas valem para todos os filhos e entram nas recompensas ativas (o tempo de tela se redivide).</p>
+      ${catalogGrid(c.groups, free, new Set())}`,
+      async (f) => { const keys = $$('[name=ck]:checked', f).map(x => x.value); const r = await api('POST', '/admin/catalog', { keys }); toast(`${r.created} tarefa(s) adicionada(s)`); refresh(); }, { saveLabel: 'Adicionar' });
+  });
   $$('[data-e]').forEach(b => b.onclick = () => { const t = tasks.find(x => x.id == b.dataset.e); wire(sheet('Editar tarefa', form(t), async (f) => { await api('PUT', '/admin/tasks/' + t.id, read(f)); refresh(); })); });
 }
 
@@ -459,6 +493,7 @@ async function adminSettings(pane) {
     <label class="check"><input type="checkbox" name="auto" ${w.settings.auto_approve ? 'checked' : ''}>Aprovar tarefas automaticamente, sem conferência</label>
     <div class="field"><label for="np">Novo PIN dos pais</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"><p class="hint">Deixe vazio para manter o atual.</p></div>
     <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar ajustes</button></div></form>
+    <section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>
     <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha da família de novo.</p><button class="btn red sm" id="out">Desconectar a família</button></section>`;
   $('#f').onsubmit = async (e) => {
     e.preventDefault(); const f = e.target;
@@ -467,4 +502,201 @@ async function adminSettings(pane) {
   };
   $('#out').onclick = () => sheet('Desconectar a família?', '<p class="lead" style="margin-top:6px">As crianças não conseguirão usar este aparelho até alguém entrar de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
+}
+
+// ---------- Assinatura ----------
+const PLAN_N = { monthly: 'mensal', annual: 'anual' };
+function planText(a = {}) {
+  if (a.status === 'owner') return 'Conta do dono do sistema: acesso liberado.';
+  if (a.status === 'free') return 'Acesso de cortesia liberado.';
+  if (a.status === 'trial') return `Período grátis até <b>${dmy(a.until)}</b> (${a.days_left} ${a.days_left === 1 ? 'dia' : 'dias'}). Depois disso, o app pede uma assinatura.`;
+  if (a.status === 'paid') return `Plano ${PLAN_N[a.plan] || ''} ativo até <b>${dmy(a.until)}</b>.`;
+  return 'O período de uso terminou.';
+}
+const money = (n) => (+n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+async function viewPaywall() {
+  const s = await api('GET', '/billing/status'), a = s.access, p = s.prices;
+  const perMonth = Math.floor(p.annual / 12 * 100) / 100, save = Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100));
+  const head = a.active ? 'Planos do GameTask' : a.plan ? 'Sua assinatura venceu' : 'O período grátis terminou';
+  const sub = a.active ? planText(a) : 'As missões e as moedas das crianças estão guardadas. Assine para continuar de onde pararam.';
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="wrap paywall">
+    <div class="pw-head">${im(a.active ? 'rocket' : 'lock')}<h1 class="d stroke">${head}</h1><p>${sub}</p></div>
+    <div class="plans">
+      <article class="plan best"><span class="ribbon">Mais escolhido${save ? ` · economize ${save}%` : ''}</span>
+        <h2 class="d">Anual</h2><div class="price"><small>R$</small><b class="d num">${money(perMonth)}</b><small>/mês</small></div>
+        <p class="bill">Pagamento único de <b>${brl(p.annual)}</b> por ano</p>
+        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('check')}Pix, cartão ou boleto</li></ul>
+        <button class="btn green" data-plan="annual">Assinar anual</button></article>
+      <article class="plan"><h2 class="d">Mensal</h2><div class="price"><small>R$</small><b class="d num">${money(p.monthly)}</b><small>/mês</small></div>
+        <p class="bill">Pago a cada mês, sem fidelidade</p>
+        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
+        <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
+    </div>
+    <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago. O acesso é liberado assim que o pagamento é confirmado.</p>
+    <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
+  </div></div>`;
+  $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
+    if (!s.enabled) throw new Error('O pagamento on-line ainda está sendo ativado. Tente mais tarde.');
+    const label = b.textContent; b.disabled = true; b.textContent = 'Abrindo o Mercado Pago…';
+    try { const r = await api('POST', '/billing/checkout', { plan: b.dataset.plan }); location.href = r.url; }
+    catch (e) { b.disabled = false; b.textContent = label; throw e; }
+  }));
+  const back = $('#back'); if (back) back.onclick = () => { location.hash = ME.parent ? '#/admin' : '#/'; };
+  $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Será preciso entrar com o e-mail e a senha da família de novo.</p>',
+    async () => { await api('POST', '/auth/logout'); location.href = '/'; }, { saveLabel: 'Desconectar', danger: true });
+}
+
+// ---------- Catálogo de tarefas ----------
+const catalogGrid = (groups, tasks, on) => groups.map(g => {
+  const list = tasks.filter(t => t.group === g.key); if (!list.length) return '';
+  return `<div class="cat-group"><h3>${im(g.icon)}${esc(g.title)}</h3><div class="opts">${list.map(t => `<label class="opt"><input type="checkbox" name="ck" value="${t.key}" ${on.has(t.key) ? 'checked' : ''}>
+    <span class="opt-in">${im(t.icon)}<span class="opt-t">${esc(t.title)}</span><span class="opt-c">${im('coin')}${num(t.coins)}</span></span></label>`).join('')}</div></div>`;
+}).join('');
+
+// ---------- Assistente do primeiro acesso ----------
+async function viewSetup() {
+  const c = await api('GET', '/admin/catalog');
+  const st = { step: 0, kids: [{ name: '', avatar: AVATARS[0], color: COLORS[0] }], tasks: new Set(c.tasks.filter(t => t.on).map(t => t.key)),
+    rewards: Object.fromEntries(c.rewards.map(r => [r.key, { on: !!r.on, value: r.value }])) };
+  const STEPS = ['Jogadores', 'Missões', 'Prêmios'];
+  const save = () => {
+    $$('[data-kid]').forEach(row => { st.kids[+row.dataset.kid].name = $('input', row).value; });
+    if (st.step === 1) st.tasks = new Set($$('[name=ck]:checked').map(x => x.value));
+    if (st.step === 2) c.rewards.forEach(r => { st.rewards[r.key] = { on: $(`[name=rw-${r.key}]`).checked, value: +$(`[name=rv-${r.key}]`).value || r.value }; });
+  };
+  const render = () => {
+    const body = st.step === 0 ? `<h2 class="d">Quem vai jogar?</h2><p class="lead">Toque no personagem ou na bolinha de cor para trocar. Dá para adicionar mais filhos a qualquer hora.</p>
+        <div class="kid-rows">${st.kids.map((k, i) => `<div class="kid-row" data-kid="${i}" style="--c:${k.color}">
+          <button type="button" class="kid-av" data-av="${i}" aria-label="Trocar personagem">${im(k.avatar)}</button>
+          <input value="${esc(k.name)}" placeholder="Nome do ${i ? 'próximo ' : ''}filho" aria-label="Nome" maxlength="60">
+          <button type="button" class="kid-col" data-col="${i}" aria-label="Trocar cor"></button>
+          ${st.kids.length > 1 ? `<button type="button" class="kid-del" data-del="${i}" aria-label="Remover">${SVG.del}</button>` : ''}</div>`).join('')}</div>
+        <button type="button" class="btn ghost sm" id="addKid">+ Adicionar filho</button>`
+      : st.step === 1 ? `<h2 class="d">Escolha as missões do dia</h2><p class="lead">Já deixamos marcadas as mais comuns. Depois você muda tudo: moedas, dias da semana e quem faz cada uma.</p>
+        ${catalogGrid(c.groups, c.tasks, st.tasks)}`
+      : `<h2 class="d">O que dá para ganhar?</h2><p class="lead">Além das moedas, que você paga em dinheiro, cada missão rende um pedaço do tempo de tela e avança nas metas.</p>
+        <div class="rw-list">${c.rewards.map(r => { const v = st.rewards[r.key]; return `<label class="rw"><input type="checkbox" name="rw-${r.key}" ${v.on ? 'checked' : ''}>${im(r.icon)}
+          <span class="rw-t"><b>${esc(r.title)}</b><small data-rhint="${r.key}"></small></span>
+          <span class="rw-v"><input type="number" name="rv-${r.key}" value="${v.value}" min="1" inputmode="numeric" aria-label="Valor de ${esc(r.title)}"><em>${r.kind === 'time' ? 'min/dia' : r.goal_mode === 'coins' ? 'moedas' : 'missões'}</em></span></label>`; }).join('')}</div>`;
+    app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="wrap setup">
+      <div class="setup-top"><h1 class="d stroke">Vamos montar o jogo</h1>
+        <ol class="steps">${STEPS.map((s, i) => `<li class="${i < st.step ? 'done' : i === st.step ? 'on' : ''}"><i>${i + 1}</i>${s}</li>`).join('')}</ol></div>
+      <form class="card wiz" id="wz" novalidate>${body}<div class="err" role="alert"></div>
+        <div class="wiz-foot">${st.step ? '<button type="button" class="btn ghost" id="prev">Voltar</button>' : '<button type="button" class="link" id="skip">Prefiro montar do zero</button>'}
+          <span class="wiz-count" id="cnt"></span>
+          <button class="btn green" id="next">${st.step === 2 ? 'Começar a jogar!' : 'Continuar'}</button></div></form></div></div>`;
+    const f = $('#wz');
+    const hints = () => {
+      if (st.step === 1) $('#cnt').textContent = `${$$('[name=ck]:checked').length} missões`;
+      if (st.step === 2) c.rewards.forEach(r => {
+        const v = +$(`[name=rv-${r.key}]`).value || 0, h = $(`[data-rhint="${r.key}"]`), n = Math.max(1, st.tasks.size);
+        h.textContent = r.kind === 'time' ? `${num(Math.round(v / n * 10) / 10)} min por missão (${st.tasks.size} missões)` : r.goal_mode === 'coins' ? 'Troca as moedas por este prêmio' : '+1 a cada missão feita';
+      });
+    };
+    f.addEventListener('input', hints); f.addEventListener('change', hints); hints();
+    $$('[data-av]').forEach(b => b.onclick = () => { save(); const k = st.kids[+b.dataset.av]; k.avatar = AVATARS[(AVATARS.indexOf(k.avatar) + 1) % AVATARS.length]; sfx.tap(); render(); $(`[data-av="${b.dataset.av}"]`).focus(); });
+    $$('[data-col]').forEach(b => b.onclick = () => { save(); const k = st.kids[+b.dataset.col]; k.color = COLORS[(COLORS.indexOf(k.color) + 1) % COLORS.length]; sfx.tap(); render(); $(`[data-col="${b.dataset.col}"]`).focus(); });
+    $$('[data-del]').forEach(b => b.onclick = () => { save(); st.kids.splice(+b.dataset.del, 1); render(); });
+    const add = $('#addKid'); if (add) add.onclick = () => { save(); const i = st.kids.length; st.kids.push({ name: '', avatar: AVATARS[(i * 3) % AVATARS.length], color: COLORS[i % COLORS.length] }); render(); $$('.kid-row input').at(-1).focus(); };
+    const prev = $('#prev'); if (prev) prev.onclick = () => { save(); st.step--; sfx.tap(); render(); scrollTo(0, 0); };
+    const skip = $('#skip'); if (skip) skip.onclick = guard(async () => { await api('POST', '/admin/setup/skip'); location.hash = '#/admin'; await route(); });
+    f.onsubmit = async (e) => {
+      e.preventDefault(); save();
+      const err = (m) => { f.querySelector('.err').textContent = m; f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); sfx.bad(); };
+      if (st.step === 0 && !st.kids.some(k => k.name.trim())) return err('Digite o nome de pelo menos um filho.');
+      if (st.step === 1 && !st.tasks.size) return err('Escolha pelo menos uma missão.');
+      if (st.step < 2) { st.step++; sfx.tap(); render(); scrollTo(0, 0); return; }
+      $('#next').disabled = true;
+      try {
+        await api('POST', '/admin/setup', { kids: st.kids.filter(k => k.name.trim()), tasks: [...st.tasks],
+          rewards: Object.entries(st.rewards).filter(([, v]) => v.on).map(([key, v]) => ({ key, value: v.value })) });
+      } catch (er) { $('#next').disabled = false; return err(er.message); }
+      await api('POST', '/auth/parent/exit').catch(() => {});
+      location.hash = '#/'; await route();
+      burst('party', 'Tudo pronto!', 'As missões já estão no jogo. Agora é com as crianças!', 'Ver jogadores');
+    };
+  };
+  render();
+}
+
+// ---------- Painel do dono do sistema ----------
+let otab = 'overview';
+const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['prices', 'gear', 'Preços']];
+const STATUS = { trial: ['Teste', 'wait'], paid: ['Pago', 'ok'], free: ['Cortesia', 'ok'], expired: ['Vencido', 'no'], owner: ['Dono', 'ok'] };
+const PAY = { approved: ['Aprovado', 'ok'], pending: ['Aguardando', 'wait'], in_process: ['Em análise', 'wait'], rejected: ['Recusado', 'no'], cancelled: ['Cancelado', 'no'], refunded: ['Estornado', 'no'], charged_back: ['Contestado', 'no'], invalid: ['Valor divergente', 'no'] };
+const tag = (m, k) => { const [l, c] = m[k] || [k, 'wait']; return `<span class="tag ${c}">${esc(l)}</span>`; };
+const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+async function viewOwner() {
+  app.innerHTML = `<div class="admin owner"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel do dono</h1>
+      <a class="btn ghost sm" href="#/admin">Painel dos pais</a></div>
+    <nav class="tabs" aria-label="Seções">${OTABS.map(([k, ic, l]) => `<button class="tab ${k === otab ? 'on' : ''}" data-tab="${k}" ${k === otab ? 'aria-current="page"' : ''}>${im(ic)}${l}</button>`).join('')}</nav></header>
+    <main class="admin-body" id="pane"></main></div>`;
+  $$('[data-tab]').forEach(b => b.onclick = () => { otab = b.dataset.tab; sfx.tap(); viewOwner().catch(e => toast(e.message, true)); });
+  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, prices: ownerPrices })[otab]($('#pane'));
+}
+async function ownerOverview(pane) {
+  const s = await api('GET', '/owner/summary'), c = s.counts, r = s.revenue;
+  const tile = (icon, label, value, note = '', hi = '') => `<div class="stat ${hi}"><div class="stat-h">${im(icon)}<span>${label}</span></div><b class="d num">${value}</b>${note ? `<small>${note}</small>` : ''}</div>`;
+  const max = Math.max(1, ...s.months.map(m => +m.total));
+  pane.innerHTML = `<div class="stats">
+      ${tile('moneybag', 'Faturamento do mês', brl(r.month), `${r.payments} pagamento(s) aprovados no total`, 'gold')}
+      ${tile('chart', 'Receita recorrente por mês', brl(r.mrr), `${brl(r.arr)} por ano no ritmo atual`)}
+      ${tile('trophy', 'Assinantes pagos', c.paid_monthly + c.paid_annual, `${c.paid_annual} anuais · ${c.paid_monthly} mensais`, 'green')}
+      ${tile('hourglass', 'Em teste grátis', c.trial, `${c.expiring7} vencem nos próximos 7 dias`)}
+      ${tile('lock', 'Vencidos', c.expired, s.conversion === null ? 'Nenhum teste encerrado ainda' : `Conversão do teste: ${s.conversion}%`)}
+      ${tile('people', 'Famílias', c.total, `${c.new30} novas em 30 dias · ${c.active7} usaram na semana`)}
+      ${tile('coin', 'Últimos 12 meses', brl(r.year), `Desde o início: ${brl(r.total)}`)}
+      ${tile('gift', 'Cortesias', c.free, `Preço: ${brl(s.settings.price_annual)}/ano · ${brl(s.settings.price_monthly)}/mês`)}
+    </div>
+    <section class="box"><div class="box-h"><h2 class="d">Faturamento por mês</h2></div>
+      ${s.months.length ? `<table><thead><tr><th>Mês</th><th>Anuais</th><th>Mensais</th><th>Total</th><th class="bar-col" aria-hidden="true"></th></tr></thead><tbody>${s.months.map(m => { const [y, mo] = m.m.split('-');
+        return `<tr><td>${MES[+mo - 1]}/${y.slice(2)}</td><td>${m.annual}</td><td>${m.monthly}</td><td>${brl(m.total)}</td><td class="bar-col" aria-hidden="true"><i class="hbar" style="width:${+m.total / max * 100}%"></i></td></tr>`; }).join('')}</tbody></table>`
+      : zero('chart', 'Nenhum pagamento aprovado ainda.')}</section>`;
+}
+async function ownerFamilies(pane, q = '') {
+  const rows = await api('GET', '/owner/families?q=' + encodeURIComponent(q));
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Famílias (${rows.length})</h2><input id="q" type="search" placeholder="Buscar nome ou e-mail" value="${esc(q)}" class="search" aria-label="Buscar família"></div>
+    ${rows.length ? `<div class="list">${rows.map(f => `<div class="item fam"><div class="grow"><div class="t">${esc(f.name)} ${tag(STATUS, f.owner ? 'owner' : f.access.status)}${f.plan && f.access.status === 'paid' ? ` <span class="s">${PLAN_N[f.plan]}</span>` : ''}</div>
+      <div class="s">${esc(f.email)} · desde ${dmy(f.created_at)}${f.access.until ? ` · ${f.access.status === 'trial' ? 'teste' : 'acesso'} até ${dmy(f.access.until)}` : ''}</div>
+      <div class="s">${f.kids} filho(s) · ${f.tasks} tarefas · ${f.done7} missões na semana · pagou ${brl(f.paid_total)}${f.last_seen ? ` · visto em ${dmy(f.last_seen)}` : ''}${f.onboarded ? '' : ' · ainda não configurou'}</div></div>
+      <div class="btns"><button class="btn ghost sm" data-m="${f.id}">Gerenciar</button></div></div>`).join('')}</div>` : zero('people', 'Nenhuma família encontrada.')}</section>`;
+  let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => ownerFamilies(pane, e.target.value).then(() => { const i = $('#q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }), 350); };
+  // sugere +30 dias a partir do vencimento atual (ou de hoje, se já venceu)
+  const plus = (days, from) => { const t = new Date().toISOString().slice(0, 10), d = new Date(((from && from > t) ? from : t) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
+  $$('[data-m]').forEach(b => b.onclick = () => {
+    const f = rows.find(x => x.id == b.dataset.m);
+    const bg = sheet(f.name, `<p class="lead" style="margin-top:6px">${esc(f.email)}<br>${planText(f.access)}</p>
+      <div class="field"><span class="lab">O que fazer</span>${seg('action', [['trial', 'Estender teste'], ['paid', 'Liberar pago'], ['free', 'Cortesia'], ['block', 'Bloquear']], 'trial')}</div>
+      <div class="field" data-d><label for="od">Até quando</label><input id="od" type="date" name="date" value="${plus(30, f.access.until)}"></div>
+      <div class="field" data-p><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal']], 'annual')}</div>`,
+      async (fm) => { await api('POST', '/owner/families/' + f.id, { action: fm.action.value, date: fm.date.value, plan: fm.plan.value }); toast('Família atualizada'); ownerFamilies(pane, $('#q')?.value || ''); },
+      { saveLabel: 'Aplicar' });
+    const fm = bg.querySelector('form'), u = () => { $('[data-d]', fm).hidden = !['trial', 'paid'].includes(fm.action.value); $('[data-p]', fm).hidden = fm.action.value !== 'paid'; };
+    fm.addEventListener('change', u); u();
+  });
+}
+async function ownerPayments(pane) {
+  const rows = await api('GET', '/owner/payments');
+  const METHOD = { pix: 'Pix', bolbradesco: 'Boleto', pec: 'Lotérica', account_money: 'Saldo MP' };
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Pagamentos</h2></div>
+    ${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Data</th><th>Família</th><th>Plano</th><th>Valor</th><th>Forma</th><th>Situação</th><th>Acesso até</th></tr></thead><tbody>${rows.map(p => `<tr>
+      <td>${dmy(p.paid_at || p.created_at)}</td><td>${esc(p.family)}<div class="s">${esc(p.email)}</div></td><td>${PLAN_N[p.plan]}</td><td>${brl(p.amount)}</td>
+      <td>${esc(METHOD[p.method] || (p.method ? 'Cartão ' + p.method : '—'))}</td><td>${tag(PAY, p.status)}</td><td>${p.period_end ? dmy(p.period_end) : '—'}</td></tr>`).join('')}</tbody></table></div>`
+    : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
+}
+async function ownerPrices(pane) {
+  const s = (await api('GET', '/owner/summary')).settings;
+  pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Preços e teste grátis</h2></div>
+    <p class="lead">Valem para novas cobranças e para a página de vendas. Quem já pagou mantém o período comprado.</p>
+    <div class="grid2"><div class="field"><label for="pa">Plano anual (R$ por ano)</label><input id="pa" name="price_annual" type="number" step="0.01" min="1" value="${s.price_annual}" inputmode="decimal"><p class="hint" id="pah"></p></div>
+    <div class="field"><label for="pm">Plano mensal (R$ por mês)</label><input id="pm" name="price_monthly" type="number" step="0.01" min="1" value="${s.price_monthly}" inputmode="decimal"></div></div>
+    <div class="field"><label for="td">Dias de teste grátis para novas famílias</label><input id="td" name="trial_days" type="number" min="0" step="1" value="${s.trial_days}" inputmode="numeric"><p class="hint">90 dias = 3 meses. Não muda o prazo de quem já se cadastrou.</p></div>
+    <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar preços</button></div></form>`;
+  const f = $('#f'), h = () => { const a = +f.price_annual.value, m = +f.price_monthly.value; $('#pah').textContent = a && m ? `Sai por ${brl(Math.floor(a / 12 * 100) / 100)} por mês, ${Math.max(0, Math.round((1 - a / (m * 12)) * 100))}% mais barato que o mensal.` : ''; };
+  f.oninput = h; h();
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    try { await api('PUT', '/owner/settings', { price_annual: f.price_annual.value, price_monthly: f.price_monthly.value, trial_days: f.trial_days.value }); toast('Preços salvos'); f.querySelector('.err').textContent = ''; }
+    catch (er) { f.querySelector('.err').textContent = er.message; sfx.bad(); }
+  };
 }

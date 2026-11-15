@@ -210,6 +210,62 @@ router.get('/history', wrap(async (req, res) => {
   res.json({ rows, month });
 }));
 
+// ---------- Catálogo e assistente do primeiro acesso ----------
+const catalog = require('../catalog');
+router.get('/catalog', wrap(async (req, res) => {
+  const [have] = await pool.query('SELECT title FROM tasks WHERE family_id=? AND active=1', [req.fid]);
+  const titles = new Set(have.map(t => t.title.toLowerCase()));
+  res.json({ groups: catalog.GROUPS, rewards: catalog.REWARDS, tasks: catalog.TASKS.map(t => ({ ...t, have: titles.has(t.title.toLowerCase()) })) });
+}));
+
+// Cria tarefas do catálogo ligadas às recompensas dadas (tempo divide o pote; meta por missões soma +1)
+async function addCatalogTasks(fid, keys, rewardIds) {
+  const [have] = await pool.query('SELECT title FROM tasks WHERE family_id=? AND active=1', [fid]);
+  const titles = new Set(have.map(t => t.title.toLowerCase()));
+  let n = 0;
+  for (const k of keys) {
+    const t = catalog.byKey[k];
+    if (!t || titles.has(t.title.toLowerCase())) continue;
+    const [r] = await pool.query("INSERT INTO tasks (family_id,title,icon,type,weekdays,coins,all_kids) VALUES (?,?,?,'daily',?,?,1)",
+      [fid, t.title, t.icon, t.weekdays || catalog.ALL, t.coins]);
+    if (rewardIds.length) await pool.query('INSERT INTO task_rewards (task_id,reward_id) VALUES ?', [rewardIds.map(rw => [r.insertId, rw])]);
+    titles.add(t.title.toLowerCase()); n++;
+  }
+  return n;
+}
+async function linkableRewards(fid) {
+  const [rows] = await pool.query("SELECT id FROM rewards WHERE family_id=? AND active=1 AND (kind='time' OR goal_mode='tasks')", [fid]);
+  return rows.map(r => r.id);
+}
+
+router.post('/catalog', wrap(async (req, res) => {
+  const keys = (req.body.keys || []).map(String);
+  if (!keys.length) return res.status(400).json({ error: 'Escolha ao menos uma tarefa' });
+  res.json({ created: await addCatalogTasks(req.fid, keys, await linkableRewards(req.fid)) });
+}));
+
+router.post('/setup', wrap(async (req, res) => {
+  const b = req.body, fid = req.fid;
+  const kids = (b.kids || []).filter(k => k.name?.trim()).slice(0, 12);
+  const [[cnt]] = await pool.query('SELECT COUNT(*) n FROM kids WHERE family_id=? AND active=1', [fid]);
+  if (!kids.length && !cnt.n) return res.status(400).json({ error: 'Cadastre ao menos um filho' });
+  for (const [i, k] of kids.entries())
+    await pool.query('INSERT INTO kids (family_id,name,avatar,color,sort) VALUES (?,?,?,?,?)', [fid, k.name.trim().slice(0, 60), k.avatar || 'fox', k.color || '#ff4fae', cnt.n + i]);
+  for (const sel of b.rewards || []) {
+    const rw = catalog.REWARDS.find(x => x.key === sel.key); if (!rw) continue;
+    const v = +sel.value > 0 ? +sel.value : rw.value;
+    await pool.query('INSERT INTO rewards (family_id,title,icon,kind,unit,total_value,goal_mode) VALUES (?,?,?,?,?,?,?)',
+      [fid, rw.title, rw.icon, rw.kind, rw.kind === 'time' ? 'min' : (rw.goal_mode === 'coins' ? 'moedas' : 'tarefas'), v, rw.goal_mode || null]);
+  }
+  const created = await addCatalogTasks(fid, (b.tasks || []).map(String), await linkableRewards(fid));
+  await pool.query('UPDATE families SET onboarded=1 WHERE id=?', [fid]);
+  res.json({ kids: kids.length, tasks: created });
+}));
+router.post('/setup/skip', wrap(async (req, res) => {
+  await pool.query('UPDATE families SET onboarded=1 WHERE id=?', [req.fid]);
+  res.json({ ok: true });
+}));
+
 // ---------- Configurações ----------
 router.put('/settings', wrap(async (req, res) => {
   const { coin_value, auto_approve, new_pin } = req.body;

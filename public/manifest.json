@@ -2,7 +2,7 @@
   "name": "GameTask",
   "short_name": "GameTask",
   "description": "Tarefas da casa em modo videogame",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#2a6cf0",
