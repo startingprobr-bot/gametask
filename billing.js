@@ -71,9 +71,10 @@ async function syncPayment(mpId) {
     const amountOk = Math.abs(+p.transaction_amount - +row.amount) < 0.01 && p.currency_id === 'BRL';
     if (row.status === 'approved') { await c.commit(); return row; }
     if (p.status === 'approved' && amountOk) {
-      const [[f]] = await c.query('SELECT paid_until FROM families WHERE id=? FOR UPDATE', [row.family_id]);
-      const t = today();
-      const end = addPeriod(f.paid_until && f.paid_until > t ? f.paid_until : t, row.plan);
+      const [[f]] = await c.query('SELECT paid_until,trial_ends FROM families WHERE id=? FOR UPDATE', [row.family_id]);
+      // o período pago começa depois do que já está garantido (dias grátis ou pagos não se perdem)
+      const start = [today(), f.paid_until, f.trial_ends].filter(Boolean).sort().at(-1);
+      const end = addPeriod(start, row.plan);
       await c.query('UPDATE families SET paid_until=?, plan=? WHERE id=?', [end, row.plan, row.family_id]);
       await c.query("UPDATE payments SET status='approved', paid_at=NOW(), period_end=?, method=?, mp_payment_id=? WHERE id=?",
         [end, p.payment_method_id || null, String(p.id), row.id]);

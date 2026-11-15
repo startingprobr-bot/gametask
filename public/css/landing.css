@@ -177,7 +177,9 @@ a{color:inherit}
 .pricing .in{position:relative;z-index:1}
 .pricing h2{margin-bottom:14px}
 .lede{text-align:center;color:#fff;font-weight:800;font-size:19px;text-shadow:0 1px 0 rgba(13,27,76,.5)}
-.plans{display:grid;grid-template-columns:repeat(2,minmax(0,380px));justify-content:center;gap:28px;margin-top:48px;align-items:center}
+.plans{display:grid;grid-template-columns:repeat(3,minmax(0,350px));justify-content:center;gap:26px;margin-top:48px;align-items:center}
+.plan.free{background:linear-gradient(180deg,#eef6ff,#fff 45%)}
+.plan.free .price b{font-size:58px}
 .plan{position:relative;background:#fff;border:2px solid var(--navy);border-radius:28px;padding:30px 26px 26px;box-shadow:0 5px 0 var(--navy),var(--drop);display:flex;flex-direction:column;gap:12px}
 .plan h3{font-size:30px}
 .plan.best{background:linear-gradient(180deg,#fffbe6,#fff 45%);box-shadow:0 0 0 5px var(--yellow),0 8px 0 5px var(--navy),var(--drop);transform:scale(1.03)}

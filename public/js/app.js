@@ -123,7 +123,9 @@ async function route() {
   const paid = await paymentReturn();
   const me = ME = await api('GET', '/auth/me');
   const [, a, b] = location.hash.split('/');
+  if (['annual', 'monthly'].includes(b) && ['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
   if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
+  if (a === 'criar' || a === 'login') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
   if (a === 'kid' && b) return viewKid(+b);
@@ -173,7 +175,7 @@ function viewLogin(mode = 'login') {
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('.btn'); btn.disabled = true;
-    try { await api('POST', reg ? '/auth/register' : '/auth/login', Object.fromEntries(new FormData(e.target))); location.hash = reg ? '#/setup' : '#/'; await route(); }
+    try { await api('POST', reg ? '/auth/register' : '/auth/login', Object.fromEntries(new FormData(e.target))); location.hash = reg ? '#/setup' : store.get('gt-plan') ? '#/assinar' : '#/'; await route(); }
     catch (er) { $('#err').textContent = er.message; e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad(); }
     finally { btn.disabled = false; }
   };
@@ -522,6 +524,11 @@ async function viewPaywall() {
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="wrap paywall">
     <div class="pw-head">${im(a.active ? 'rocket' : 'lock')}<h1 class="d stroke">${head}</h1><p>${sub}</p></div>
     <div class="plans">
+      <article class="plan free ${a.status === 'trial' ? 'current' : ''}">${a.status === 'trial' ? '<span class="ribbon blue">Você está aqui</span>' : ''}
+        <h2 class="d">Grátis</h2><div class="price"><small>R$</small><b class="d num">0</b><small>por ${Math.round(p.trial_days / 30)} meses</small></div>
+        <p class="bill">${a.status === 'trial' ? `Faltam <b>${a.days_left} ${a.days_left === 1 ? 'dia' : 'dias'}</b>, até ${dmy(a.until)}` : 'Para conhecer, sem cartão'}</p>
+        <ul><li>${im('check')}Tudo liberado</li><li>${im('check')}Depois, escolha um plano</li></ul>
+        ${a.status === 'trial' ? '<button class="btn ghost" id="keepFree">Continuar no grátis</button>' : `<button class="btn ghost" disabled>${a.active ? 'Você já é assinante' : 'Período grátis usado'}</button>`}</article>
       <article class="plan best"><span class="ribbon">Mais escolhido${save ? ` · economize ${save}%` : ''}</span>
         <h2 class="d">Anual</h2><div class="price"><small>R$</small><b class="d num">${money(perMonth)}</b><small>/mês</small></div>
         <p class="bill">Pagamento único de <b>${brl(p.annual)}</b> por ano</p>
@@ -532,7 +539,7 @@ async function viewPaywall() {
         <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
         <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
     </div>
-    <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago. O acesso é liberado assim que o pagamento é confirmado.</p>
+    <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago.${a.status === 'trial' ? ' Assinando agora, o plano começa quando os dias grátis acabarem: você não perde nenhum.' : ' O acesso é liberado assim que o pagamento é confirmado.'}</p>
     <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
   </div></div>`;
   $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
@@ -542,6 +549,8 @@ async function viewPaywall() {
     catch (e) { b.disabled = false; b.textContent = label; throw e; }
   }));
   const back = $('#back'); if (back) back.onclick = () => { location.hash = ME.parent ? '#/admin' : '#/'; };
+  const keep = $('#keepFree'); if (keep) keep.onclick = () => { sfx.tap(); location.hash = '#/'; };
+  const want = store.get('gt-plan'); if (want) { $(`[data-plan="${want}"]`)?.closest('.plan').classList.add('pick'); setTimeout(() => store.set('gt-plan', ''), 1500); }
   $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Será preciso entrar com o e-mail e a senha da família de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.href = '/'; }, { saveLabel: 'Desconectar', danger: true });
 }
@@ -612,6 +621,7 @@ async function viewSetup() {
           rewards: Object.entries(st.rewards).filter(([, v]) => v.on).map(([key, v]) => ({ key, value: v.value })) });
       } catch (er) { $('#next').disabled = false; return err(er.message); }
       await api('POST', '/auth/parent/exit').catch(() => {});
+      if (store.get('gt-plan')) { location.hash = '#/assinar'; await route(); toast('Tudo pronto! Agora é só concluir a assinatura.'); return; }
       location.hash = '#/'; await route();
       burst('party', 'Tudo pronto!', 'As missões já estão no jogo. Agora é com as crianças!', 'Ver jogadores');
     };

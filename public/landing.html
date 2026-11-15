@@ -155,22 +155,29 @@
     <div class="in">
       <p class="kicker">Preços</p>
       <h2 class="d stroke">Comece com {{MESES}} meses grátis</h2>
-      <p class="lede">Teste com a família inteira, sem cartão. Só depois você escolhe um plano.</p>
+      <p class="lede">Teste com a família inteira, sem cartão, ou já comece assinando. Quem assina durante o teste não perde os dias grátis.</p>
       <div class="plans">
+        <article class="plan free">
+          <h3 class="d">Grátis</h3>
+          <div class="price"><small>R$</small><b class="d">0</b><small>por {{MESES}} meses</small></div>
+          <p class="bill">Para conhecer, sem cartão de crédito</p>
+          <ul><li><img src="/img/3d/check.png" alt="">Tudo liberado</li><li><img src="/img/3d/check.png" alt="">Depois, escolha um plano</li></ul>
+          <a class="btn ghost" href="/app#/criar">Começar grátis</a>
+        </article>
         <article class="plan best">
           <span class="ribbon">Mais escolhido · economize {{ECONOMIA}}%</span>
           <h3 class="d">Anual</h3>
           <div class="price"><small>R$</small><b class="d">{{ANUAL_MES}}</b><small>/mês</small></div>
           <p class="bill">Pagamento único de <b>R$ {{ANUAL}}</b> por ano</p>
           <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
-          <a class="btn green" href="/app#/criar">Começar {{MESES}} meses grátis</a>
+          <a class="btn green" href="/app#/criar/annual">Assinar anual</a>
         </article>
         <article class="plan">
           <h3 class="d">Mensal</h3>
           <div class="price"><small>R$</small><b class="d">{{MENSAL}}</b><small>/mês</small></div>
           <p class="bill">Pago mês a mês, sem fidelidade</p>
           <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
-          <a class="btn ghost" href="/app#/criar">Começar grátis</a>
+          <a class="btn ghost" href="/app#/criar/monthly">Assinar mensal</a>
         </article>
       </div>
     </div>

@@ -466,3 +466,12 @@ input[type=search]{width:100%;padding:0 14px;border-radius:14px;border:2px solid
   .bar-col{display:none}
 }
 a.btn{text-decoration:none}
+/* Tela de planos com 3 cartões */
+.paywall{max-width:1060px}
+.plans{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.plan.free{background:linear-gradient(180deg,#eef6ff,#fff 45%)}
+.plan.free .price small:last-child{font-size:15px}
+.plan.current{box-shadow:0 0 0 4px #4aa8ff,0 6px 0 4px var(--navy),var(--drop)}
+.ribbon.blue{background:#3d8bff}
+.plan.pick{animation:pick 1.2s var(--spring) 2}
+@keyframes pick{40%{transform:scale(1.04)}}
