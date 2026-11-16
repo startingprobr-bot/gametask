@@ -109,14 +109,22 @@ const step = (m) => console.log('✔', m);
 
     // ordem por filho: tarefa sem horário acima de uma de 09:00 ganha "até 09:00"
     const nine = (await ok('POST', '/api/admin/tasks', { title: 'Escola', type: 'daily', time: '09:00', all_kids: true })).id;
-    let order = await ok('GET', `/api/admin/kids/${eva}/order`);
-    assert.equal(order.length, 22); // inclui a de dia marcado (Jiu-jitsu), que só aparece no dia
+    let o = await ok('GET', `/api/admin/kids/${eva}/order`), order = o.ids;
+    assert.equal(order.length, 22); assert.equal(o.custom, false); // inclui a de dia marcado (Jiu-jitsu), que só aparece no dia
     order = [ids[5], nine, ...order.filter(x => x !== ids[5] && x !== nine)];
     await ok('PUT', `/api/admin/kids/${eva}/order`, { ids: [...order, onlyBer] }); // tarefa de outro filho é ignorada
     home = await ok('GET', `/api/kids/${eva}/home`);
     assert.deepEqual(home.tasks.slice(0, 2).map(x => x.id), [ids[5], nine]);
     assert.equal(home.tasks[0].until, '09:00'); assert.equal(home.tasks[2].until, null);
     assert.equal((await ok('GET', `/api/kids/${ber}/home`)).tasks[0].id, nine); step('ordem arrastada por filho e prazo "até 9:00"');
+
+    // ordem da família (Todas): vale para todos e desfaz a ordem própria
+    const all = (await ok('GET', '/api/admin/tasks')).filter(x => x.active).map(x => x.id);
+    await ok('PUT', '/api/admin/tasks/order', { ids: [ids[7], ...all.filter(x => x !== ids[7])] });
+    assert.equal((await ok('GET', '/api/admin/tasks'))[0].id, ids[7]);
+    assert.equal((await ok('GET', `/api/kids/${ber}/home`)).tasks[0].id, ids[7]);
+    assert.equal((await ok('GET', `/api/kids/${eva}/home`)).tasks[0].id, ids[7]);
+    assert.equal((await ok('GET', `/api/admin/kids/${eva}/order`)).custom, false); step('ordem da família vale para todos os filhos');
 
     // extrato diário: resumo por dia e por filho, detalhe ao abrir o dia
     const st = await ok('GET', '/api/admin/statement');

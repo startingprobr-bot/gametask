@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
 const { today, r2 } = require('../util');
-const { balance, approve, kidTasks, ordered } = require('../lib');
+const { balance, approve, kidTasks, ordered, arrange, familyPos } = require('../lib');
 
 const bool = (v) => (v ? 1 : 0);
 const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: 'Erro interno' }); });
@@ -33,7 +33,14 @@ async function famKid(req) {
 }
 router.get('/kids/:id/order', wrap(async (req, res) => {
   const kid = await famKid(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
-  res.json((await ordered(kid, await kidTasks(req.fid, kid))).map(t => t.id));
+  const list = await ordered(kid, await kidTasks(req.fid, kid));
+  res.json({ ids: list.map(t => t.id), custom: list.custom });
+}));
+// Volta o filho para a ordem da família
+router.delete('/kids/:id/order', wrap(async (req, res) => {
+  const kid = await famKid(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
+  await pool.query('DELETE FROM task_order WHERE kid_id=?', [kid]);
+  res.json({ ok: true });
 }));
 router.put('/kids/:id/order', wrap(async (req, res) => {
   const kid = await famKid(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
@@ -78,7 +85,19 @@ router.get('/tasks', wrap(async (req, res) => {
     t.kid_ids = tk.filter(x => x.task_id === t.id).map(x => x.kid_id);
     t.reward_ids = tr.filter(x => x.task_id === t.id).map(x => x.reward_id);
   });
-  res.json(tasks);
+  // ativas na ordem da família, inativas no fim
+  const on = tasks.filter(t => t.active);
+  res.json([...arrange(on, familyPos(on)), ...tasks.filter(t => !t.active)]);
+}));
+// Ordem da família (aba Todas). Vale para todos os filhos: quem tinha ordem própria volta a seguir esta.
+router.put('/tasks/order', wrap(async (req, res) => {
+  const [mine] = await pool.query('SELECT id FROM tasks WHERE family_id=?', [req.fid]);
+  const own = new Set(mine.map(t => t.id));
+  const ids = [...new Set((req.body.ids || []).map(Number))].filter(id => own.has(id));
+  await pool.query('UPDATE tasks SET sort=NULL WHERE family_id=?', [req.fid]);
+  for (const [i, id] of ids.entries()) await pool.query('UPDATE tasks SET sort=? WHERE id=?', [i, id]);
+  await pool.query('DELETE FROM task_order WHERE kid_id IN (SELECT id FROM kids WHERE family_id=?)', [req.fid]);
+  res.json({ ok: true });
 }));
 router.post('/tasks', wrap(async (req, res) => {
   const e = taskErr(req.body); if (e) return res.status(400).json({ error: e });

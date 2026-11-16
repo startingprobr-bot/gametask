@@ -53,11 +53,16 @@ async function approve(fid, completionId) {
   return true;
 }
 
-// Ordem das tarefas de um filho: a que os pais arrastaram; as ainda sem lugar entram pelo horário.
+// Ordem das tarefas de um filho: a dele (se os pais arrumaram só para ele) ou a da família (aba Todas).
+// As tarefas ainda sem lugar entram pelo horário.
 // Tarefa sem horário recebe `until` = horário da próxima tarefa com horário abaixo dela ("fazer até 9:00").
 async function ordered(kidId, tasks) {
   const [rows] = await pool.query('SELECT task_id,pos FROM task_order WHERE kid_id=?', [kidId]);
-  const pos = new Map(rows.map(r => [r.task_id, r.pos]));
+  const pos = rows.length ? new Map(rows.map(r => [r.task_id, r.pos])) : familyPos(tasks);
+  return Object.assign(arrange(tasks, pos), { custom: rows.length > 0 });
+}
+const familyPos = (tasks) => new Map(tasks.filter(t => t.sort != null).map(t => [t.id, t.sort]));
+function arrange(tasks, pos) {
   const byTime = (a, b) => (a.time || '99:99').localeCompare(b.time || '99:99') || a.id - b.id;
   const list = tasks.filter(t => pos.has(t.id)).sort((a, b) => pos.get(a.id) - pos.get(b.id));
   for (const t of tasks.filter(t => !pos.has(t.id)).sort(byTime)) {
@@ -72,4 +77,4 @@ async function ordered(kidId, tasks) {
   return list;
 }
 
-module.exports = { kidTasks, shares, balance, approve, ordered };
+module.exports = { kidTasks, shares, balance, approve, ordered, arrange, familyPos };

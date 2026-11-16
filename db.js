@@ -75,7 +75,8 @@ const COLUMNS = [
   ['families', 'onboarded', 'TINYINT NOT NULL DEFAULT 0'],
   ['families', 'last_seen', 'DATE NULL'],
   ['families', 'remind_before', 'INT NOT NULL DEFAULT 10'], // minutos de antecedência do aviso das tarefas com horário
-  ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],   // aprovação automática passou da família para cada filho
+  ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],
+  ['tasks', 'sort', 'INT NULL'],                           // ordem da família (aba Tarefas → Todas)   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 

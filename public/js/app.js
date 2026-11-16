@@ -454,7 +454,9 @@ async function adminTasks(pane, refresh) {
   const kidsOn = kids.filter(k => k.active);
   if (taskKid !== 'all' && !kidsOn.some(k => k.id === taskKid)) taskKid = kidsOn[0]?.id ?? 'all';
   const kid = kidsOn.find(k => k.id === taskKid);
-  let order = kid ? await api('GET', `/admin/kids/${kid.id}/order`) : [];
+  const ko = kid ? await api('GET', `/admin/kids/${kid.id}/order`) : null;
+  let order = ko ? ko.ids : tasks.filter(t => t.active).map(t => t.id);
+  const off = kid ? [] : tasks.filter(t => !t.active);
   const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
   const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
     : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
@@ -465,27 +467,32 @@ async function adminTasks(pane, refresh) {
     !kid ? t.reward_ids.map(r => esc(rewards.find(x => x.id === r)?.title || '?')).join(', ') : '', !kid ? esc(who(t)) : '',
   ].filter(Boolean).join(' · ');
   const untils = (ids) => { const m = {}; let next = null; for (let i = ids.length - 1; i >= 0; i--) { const t = byId[ids[i]]; if (t.time) next = t.time; else m[t.id] = next; } return m; };
+  const plain = (t) => `<div class="item off"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
+      <div class="s">${line(t)}</div></div><div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`;
   const rows = () => {
-    if (!kid) return tasks.map(t => `<div class="item ${t.active ? '' : 'off'}"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
-      <div class="s">${line(t)}</div></div><div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`).join('');
     const u = untils(order);
     return order.map(id => { const t = byId[id]; return `<div class="item" data-id="${t.id}">
       <button type="button" class="grip" aria-label="Mover ${esc(t.title)}. Use as setas para subir ou descer">${SVG.grip}</button>
       <div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div><div class="s">${line(t, u[t.id])}</div></div>
       <div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`; }).join('');
   };
-  const list = kid ? order : tasks;
+  const lead = !order.length ? '' : kid
+    ? `Arraste pela alça para pôr na ordem em que ${esc(kid.name)} faz as tarefas. Uma tarefa sem horário acima de outra com horário deve ser feita antes dela.${ko.custom ? ' <b>Ordem só de ' + esc(kid.name) + '.</b> <button type="button" class="link" id="fam">Usar a ordem da família</button>' : ''}`
+    : 'Arraste para montar a ordem da família. Ela vale para todos os filhos; quem tiver uma ordem própria volta a seguir esta.';
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Tarefas</h2><div class="btns"><button class="btn ghost sm" id="cat">${im('sparkles')}Do catálogo</button><button class="btn green sm" id="new">Nova tarefa</button></div></div>
     <div class="kid-pick" role="group" aria-label="Ver tarefas de">${kidsOn.map(k => `<button type="button" class="kp" data-kid="${k.id}" aria-pressed="${k.id === taskKid}" style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</button>`).join('')}
       <button type="button" class="kp" data-kid="all" aria-pressed="${taskKid === 'all'}">${im('clipboard')}Todas</button></div>
-    ${kid && order.length ? `<p class="lead">Arraste pela alça para pôr na ordem em que ${esc(kid.name)} faz as tarefas. Uma tarefa sem horário acima de outra com horário deve ser feita antes dela.</p>` : ''}
-    ${list.length ? `<div class="list" id="tl">${rows()}</div>` : zero('clipboard', kid ? `${esc(kid.name)} ainda não tem tarefas ativas.` : 'Crie a primeira tarefa da casa.')}</section>`;
+    ${lead ? `<p class="lead">${lead}</p>` : ''}
+    ${order.length ? `<div class="list" id="tl">${rows()}</div>` : zero('clipboard', kid ? `${esc(kid.name)} ainda não tem tarefas ativas.` : 'Crie a primeira tarefa da casa.')}
+    ${off.length ? `<h3 class="sub-h">Inativas</h3><div class="list">${off.map(plain).join('')}</div>` : ''}</section>`;
   $$('[data-kid]').forEach(b => b.onclick = () => { taskKid = b.dataset.kid === 'all' ? 'all' : +b.dataset.kid; sfx.tap(); adminTasks(pane, refresh).catch(e => toast(e.message, true)); });
-  if (kid && $('#tl')) sortable($('#tl'), guard(async (ids) => {
+  const fam = $('#fam'); if (fam) fam.onclick = guard(async () => { await api('DELETE', `/admin/kids/${kid.id}/order`); toast(`${kid.name} segue a ordem da família`); adminTasks(pane, refresh); });
+  if ($('#tl')) sortable($('#tl'), guard(async (ids) => {
     order = ids;
     const u = untils(ids); // atualiza o "até 9:00" na hora, sem recarregar
     $$('#tl .item').forEach(el => { el.querySelector('.s').innerHTML = line(byId[el.dataset.id], u[el.dataset.id]); });
-    await api('PUT', `/admin/kids/${kid.id}/order`, { ids });
+    if (kid) { await api('PUT', `/admin/kids/${kid.id}/order`, { ids }); if (!ko.custom) adminTasks(pane, refresh); }
+    else await api('PUT', '/admin/tasks/order', { ids });
   }));
   const form = (t = { title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 }) => `
     <div class="field"><label for="tt">Nome da tarefa</label><input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required></div>

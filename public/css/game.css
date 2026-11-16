@@ -576,3 +576,5 @@ a.btn{text-decoration:none}
   #tl .item .ic{width:44px;height:44px}
   #tl .item .ic img{width:34px;height:34px}
 }
+.sub-h{font-family:var(--display);font-weight:400;font-size:19px;margin:18px 4px 4px;color:var(--ink-soft)}
+.box p.lead .link{padding:0 2px;font-size:inherit;color:var(--navy)}
