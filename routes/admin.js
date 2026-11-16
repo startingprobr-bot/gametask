@@ -136,11 +136,12 @@ router.put('/tasks/:id', wrap(async (req, res) => {
 
 // ---------- Roleta do dia ----------
 router.get('/wheel', wrap(async (req, res) => {
-  const [prizes] = await pool.query('SELECT id,label,emoji FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [req.fid]);
+  const [mine] = await pool.query('SELECT id FROM wheel_prizes WHERE family_id=?', [req.fid]);
+  const prizes = await require('./kid').wheelPrizes(req.fid);
   const [spins] = await pool.query(
     `SELECT s.label,s.emoji,DATE_FORMAT(s.day,'%Y-%m-%d') day,k.name kid FROM wheel_spins s JOIN kids k ON k.id=s.kid_id
      WHERE s.family_id=? ORDER BY s.id DESC LIMIT 10`, [req.fid]);
-  res.json({ prizes, spins });
+  res.json({ prizes, spins, sample: mine.length < 2 });
 }));
 router.put('/wheel', wrap(async (req, res) => {
   const list = (Array.isArray(req.body.prizes) ? req.body.prizes : []).map(p => ({ label: String(p.label || '').trim().slice(0, 40), emoji: String(p.emoji || '').trim().slice(0, 8) || null })).filter(p => p.label).slice(0, 12);

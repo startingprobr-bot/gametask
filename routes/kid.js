@@ -36,10 +36,16 @@ async function ownKid(req, res) {
   return k;
 }
 
-// Roleta do dia: libera quando todas as missões de hoje estão feitas; um giro por dia. Só existe com 2 ou mais prêmios.
-async function wheelState(fid, kidId, day, list) {
+// Roleta do dia: libera quando todas as missões de hoje estão feitas; um giro por dia.
+// Enquanto os pais não montam a roleta, valem os prêmios de exemplo.
+const WHEEL_SAMPLE = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme'], ['🌙', 'Dormir mais tarde']]
+  .map(([emoji, label]) => ({ emoji, label }));
+async function wheelPrizes(fid) {
   const [prizes] = await pool.query('SELECT label,emoji FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [fid]);
-  if (prizes.length < 2) return null;
+  return prizes.length >= 2 ? prizes : WHEEL_SAMPLE;
+}
+async function wheelState(fid, kidId, day, list) {
+  const prizes = await wheelPrizes(fid);
   const [[s]] = await pool.query('SELECT label,emoji FROM wheel_spins WHERE kid_id=? AND day=?', [kidId, day]);
   const finished = list.length > 0 && list.every(t => t.status === 'approved' || t.status === 'pending');
   return { prizes, spun: s || null, ready: finished && !s };
@@ -132,3 +138,4 @@ router.delete('/kids/:id/complete/:taskId', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.wheelPrizes = wheelPrizes;

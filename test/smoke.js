@@ -202,7 +202,8 @@ const step = (m) => console.log('✔', m);
     assert.ok(!(await ok('GET', '/api/admin/wallet')).kids.some(k => k.id === anaKid.id)); step('adulto na rotina: missões próprias e da família, sem moedas');
 
     // roleta do dia: só com 2+ prêmios, só depois de todas as missões, um giro por dia
-    assert.equal((await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel, null);
+    assert.equal((await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel.prizes.length, 6); // prêmios de exemplo até os pais montarem
+    assert.equal((await ok('GET', '/api/admin/wheel')).sample, true);
     await ok('PUT', '/api/admin/wheel', { prizes: [{ emoji: '🤗', label: 'Abraço do pai' }, { label: 'Abraço da mãe' }, { label: '' }] });
     assert.equal((await ok('GET', '/api/admin/wheel')).prizes.length, 2);
     let wh = (await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel;

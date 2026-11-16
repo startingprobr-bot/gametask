@@ -663,3 +663,26 @@ a.btn{text-decoration:none}
 .item.swiping::after{content:'Solte para apagar';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:20px;color:var(--red);opacity:0;white-space:nowrap;pointer-events:none}
 .item.will-del::after{opacity:1}
 @media (prefers-reduced-motion:reduce){.wheel-cta,.wheel-cta .wi{animation:none}}
+
+/* ---------- v9: roleta com festa, foto do jogador no topo ---------- */
+.who-av{flex:0 0 auto;width:48px;height:48px;margin-right:-4px;border-radius:50%;display:grid;place-items:center;background:var(--c,var(--pink));border:2px solid var(--navy);box-shadow:0 3px 0 var(--navy),inset 0 3px 0 rgba(255,255,255,.35)}
+.who-av img{width:42px;height:42px;object-fit:contain;filter:drop-shadow(0 2px 0 rgba(0,0,0,.2))}
+.wheel-rays{position:fixed;left:50%;top:50%;width:200vmax;height:200vmax;pointer-events:none;
+  background:repeating-conic-gradient(rgba(255,255,255,.13) 0 10deg,transparent 10deg 20deg);transform:translate(-50%,-50%);animation:spin2 30s linear infinite}
+.wheel-bg .wheel-card{position:relative}
+.wheel{--r:calc(min(300px,76vw) / 2 + 6px);animation:wdrop .9s var(--spring) both .1s}
+@keyframes wdrop{from{transform:translateY(-55vh) rotate(-40deg) scale(.5);opacity:0}}
+.wheel:not(.go):not(.won) .disc{animation:sway 2.6s ease-in-out infinite 1s}
+@keyframes sway{25%{transform:rotate(10deg)}75%{transform:rotate(-10deg)}}
+.bulb{position:absolute;left:50%;top:50%;z-index:2;width:10px;height:10px;margin:-5px;border-radius:50%;background:#fff6c2;border:2px solid var(--navy);
+  transform:rotate(var(--a)) translateY(calc(-1 * var(--r)));animation:blink 1s steps(1) infinite}
+.bulb:nth-child(even){animation-delay:.5s}
+.wheel.go .bulb{animation-duration:.25s}
+.wheel.go .bulb:nth-child(even){animation-delay:.125s}
+.wheel.won .bulb{animation-duration:.4s}
+@keyframes blink{50%{background:var(--yellow-lo);box-shadow:none}0%{box-shadow:0 0 10px 3px rgba(255,233,112,.9)}}
+.wheel.go .pin{animation:flick .17s ease-in-out infinite}
+@keyframes flick{50%{transform:translateX(-50%) rotate(-14deg)}}
+.wheel.won .disc{box-shadow:0 5px 0 var(--navy),0 0 0 8px var(--yellow-hi),0 0 0 11px var(--navy),0 0 40px 10px rgba(255,233,112,.7)}
+@media (prefers-reduced-motion:reduce){.wheel,.wheel .disc,.bulb,.wheel-rays,.wheel .pin{animation:none!important}}
+.wheel-won img,.wheel-hint img{flex:0 0 auto;width:34px;height:34px}
