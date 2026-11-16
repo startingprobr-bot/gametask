@@ -201,6 +201,32 @@ const step = (m) => console.log('✔', m);
     assert.equal(adh.tasks.find(t => t.id === gym).status, 'approved'); assert.equal(adh.balance, 0);
     assert.ok(!(await ok('GET', '/api/admin/wallet')).kids.some(k => k.id === anaKid.id)); step('adulto na rotina: missões próprias e da família, sem moedas');
 
+    // roleta do dia: só com 2+ prêmios, só depois de todas as missões, um giro por dia
+    assert.equal((await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel, null);
+    await ok('PUT', '/api/admin/wheel', { prizes: [{ emoji: '🤗', label: 'Abraço do pai' }, { label: 'Abraço da mãe' }, { label: '' }] });
+    assert.equal((await ok('GET', '/api/admin/wheel')).prizes.length, 2);
+    let wh = (await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel;
+    assert.equal(wh.prizes.length, 2); assert.equal(wh.ready, false);
+    assert.equal((await api('POST', `/api/kids/${anaKid.id}/spin`, {})).status, 400); // ainda falta uma missão
+    await ok('POST', `/api/kids/${anaKid.id}/complete`, { task_id: famT });
+    assert.equal((await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel.ready, true);
+    const sp = await ok('POST', `/api/kids/${anaKid.id}/spin`, {});
+    assert.ok(sp.index >= 0 && sp.index < 2 && sp.prize.label.startsWith('Abraço'));
+    wh = (await ok('GET', `/api/kids/${anaKid.id}/home`)).wheel;
+    assert.equal(wh.ready, false); assert.equal(wh.spun.label, sp.prize.label);
+    assert.equal((await api('POST', `/api/kids/${anaKid.id}/spin`, {})).status, 400);
+    assert.equal((await ok('GET', '/api/admin/wheel')).spins[0].kid, 'Ana'); step('roleta: prêmios, libera ao terminar o dia, um giro por dia');
+
+    // apagar por arrastar: num filho tira só dele; em "Todas" apaga para todos
+    const sw = (await ok('POST', '/api/admin/tasks', { title: 'Arrastar', type: 'daily', all_kids: 1 })).id;
+    await ok('DELETE', `/api/admin/kids/${eva}/tasks/${sw}`);
+    assert.ok(!(await ok('GET', `/api/kids/${eva}/home`)).tasks.some(t => t.id === sw));
+    assert.ok((await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === sw));
+    assert.ok(!(await ok('GET', `/api/kids/${anaKid.id}/home`)).tasks.some(t => t.id === sw));
+    await ok('DELETE', '/api/admin/tasks/' + sw);
+    assert.ok(!(await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === sw));
+    assert.ok(!(await ok('GET', '/api/admin/tasks')).some(t => t.id === sw)); step('apagar tarefa: só de um filho ou de todos');
+
     assert.equal((await api('DELETE', '/api/admin/members/' + ms[0].id)).status, 400);
     await ok('DELETE', '/api/admin/members/' + ms.find(m => m.name === 'Rosa').id);
     cookie = '';

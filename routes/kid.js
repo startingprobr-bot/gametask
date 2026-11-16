@@ -36,6 +36,30 @@ async function ownKid(req, res) {
   return k;
 }
 
+// Roleta do dia: libera quando todas as missões de hoje estão feitas; um giro por dia. Só existe com 2 ou mais prêmios.
+async function wheelState(fid, kidId, day, list) {
+  const [prizes] = await pool.query('SELECT label,emoji FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [fid]);
+  if (prizes.length < 2) return null;
+  const [[s]] = await pool.query('SELECT label,emoji FROM wheel_spins WHERE kid_id=? AND day=?', [kidId, day]);
+  const finished = list.length > 0 && list.every(t => t.status === 'approved' || t.status === 'pending');
+  return { prizes, spun: s || null, ready: finished && !s };
+}
+router.post('/kids/:id/spin', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const day = today();
+  const tasks = (await kidTasks(req.fid, kid.id)).filter(t => taskOnDay(t, day));
+  const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
+  const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
+  const w = await wheelState(req.fid, kid.id, day, tasks.map(t => ({ status: st[t.id] || 'todo' })));
+  if (!w) return res.status(400).json({ error: 'A roleta ainda não tem prêmios' });
+  if (w.spun) return res.status(400).json({ error: 'Você já girou hoje. Volte amanhã!' });
+  if (!w.ready) return res.status(400).json({ error: 'Termine todas as missões de hoje para girar' });
+  const index = require('crypto').randomInt(w.prizes.length), p = w.prizes[index];
+  const [r] = await pool.query('INSERT IGNORE INTO wheel_spins (family_id,kid_id,day,label,emoji) VALUES (?,?,?,?,?)', [req.fid, kid.id, day, p.label, p.emoji]);
+  if (!r.affectedRows) return res.status(400).json({ error: 'Você já girou hoje. Volte amanhã!' });
+  res.json({ index, prize: p, prizes: w.prizes });
+});
+
 router.get('/kids/:id/home', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today(), fid = req.fid;
@@ -72,8 +96,9 @@ router.get('/kids/:id/home', async (req, res) => {
     progress: r2(r.goal_mode === 'coins' ? bal : (gp[r.id] || 0)),
     pending: r2(r.goal_mode === 'coins' ? pendingCoins : (pGoal[r.id] || 0)),
   }));
+  const wheel = await wheelState(req.fid, kid.id, day, list);
   res.json({
-    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals,
+    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel,
     done: list.filter(t => t.status === 'approved').length,
     pending: list.filter(t => t.status === 'pending').length, total: list.length,
   });

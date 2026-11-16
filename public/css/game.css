@@ -625,3 +625,41 @@ a.btn{text-decoration:none}
 .spin{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:3px solid var(--mist-2);border-top-color:var(--navy);animation:spin .9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation-duration:2.4s}}
+
+/* ---------- v8: roleta do dia, arrastar para o lado para apagar ---------- */
+.wheel-cta{display:flex;align-items:center;gap:14px;width:100%;margin:0 0 16px;padding:14px 16px;border-radius:var(--r-lg);border:2px solid var(--navy);cursor:pointer;text-align:left;color:var(--navy);
+  background:linear-gradient(180deg,var(--yellow-hi),var(--yellow) 60%,var(--yellow-lo));box-shadow:0 5px 0 var(--navy),var(--drop);animation:wpulse 1.6s ease-in-out infinite}
+.wheel-cta:active{transform:translateY(3px);box-shadow:0 2px 0 var(--navy)}
+.wheel-cta .wi{flex:0 0 auto;width:54px;height:54px;border-radius:50%;border:3px solid var(--navy);background:conic-gradient(var(--pink) 0 25%,var(--yellow-hi) 0 50%,var(--green) 0 75%,#4aa8ff 0);animation:spin2 5s linear infinite}
+.wheel-cta b{display:block;font-family:var(--display);font-weight:400;font-size:24px;line-height:1.05}
+.wheel-cta span{font-weight:800;font-size:14px}
+@keyframes wpulse{50%{transform:scale(1.025)}}
+.wheel-won,.wheel-hint{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:11px 14px;border-radius:var(--r-lg);color:#fff;font-weight:800;border:2px dashed rgba(255,255,255,.45);background:rgba(255,255,255,.1)}
+.wheel-won b{font-family:var(--display);font-weight:400;font-size:20px;color:var(--yellow-hi)}
+.wheel-bg{align-items:center}
+.wheel-card{width:min(420px,94vw);max-height:96dvh;overflow:auto;text-align:center;padding:20px 18px calc(18px + env(safe-area-inset-bottom));border-radius:28px;border:2px solid var(--navy);
+  background:linear-gradient(180deg,#3a63e8,#1a3ab0);box-shadow:0 6px 0 var(--navy),var(--drop);animation:zoom .5s var(--spring) both}
+.wheel-card h2{font-size:34px;margin:0}
+.wheel-sub{color:#fff;font-weight:800;margin:4px 0 14px}
+.wheel{position:relative;width:min(300px,76vw);aspect-ratio:1;margin:0 auto 14px}
+.wheel .disc{width:100%;height:100%;border-radius:50%;border:4px solid var(--navy);box-shadow:0 5px 0 var(--navy),0 0 0 8px #fff,0 0 0 11px var(--navy);will-change:transform}
+.wheel .disc svg{display:block;width:100%;height:100%;border-radius:50%}
+.wheel .disc text{font-family:var(--display)}
+.wheel .pin{position:absolute;left:50%;top:-14px;z-index:3;width:0;height:0;transform:translateX(-50%);border:15px solid transparent;border-top:28px solid var(--red);border-bottom:0;filter:drop-shadow(0 2px 0 var(--navy))}
+.wheel .hub{position:absolute;left:50%;top:50%;z-index:2;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;border:3px solid var(--navy);background:radial-gradient(circle at 35% 30%,#fff,var(--yellow) 60%,var(--yellow-lo));box-shadow:0 3px 0 var(--navy)}
+.wheel-res{min-height:60px;display:grid;place-items:center;margin-bottom:8px;color:#fff;font-weight:800}
+.wheel-res b{display:block;font-family:var(--display);font-weight:400;font-size:30px;line-height:1.1;color:var(--yellow-hi);-webkit-text-stroke:2px var(--navy);paint-order:stroke fill;animation:zoom .6s var(--spring) both}
+.wheel-card .btn{width:100%;margin-top:8px}
+.prizes{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 6px}
+.prize{padding:7px 12px;border-radius:999px;background:var(--mist);font-weight:800;font-size:15px}
+.prow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.prow .pe{flex:0 0 58px;text-align:center;font-size:22px;padding-inline:4px}
+.prow .pl{flex:1;min-width:0}
+.prow .px{min-width:40px;padding:0}
+.list .item[data-id]{touch-action:pan-y;-webkit-user-select:none;user-select:none;position:relative}
+.item.swiping{transition:none;z-index:2;background:#fff;box-shadow:0 6px 18px rgba(13,27,76,.25);border-radius:14px}
+.item.will-del{background:#ffe3e6;outline:2px solid var(--red)}
+.item.will-del>*{opacity:.25}
+.item.swiping::after{content:'Solte para apagar';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:20px;color:var(--red);opacity:0;white-space:nowrap;pointer-events:none}
+.item.will-del::after{opacity:1}
+@media (prefers-reduced-motion:reduce){.wheel-cta,.wheel-cta .wi{animation:none}}

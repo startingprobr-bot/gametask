@@ -99,6 +99,31 @@ router.put('/tasks/order', wrap(async (req, res) => {
   await pool.query('DELETE FROM task_order WHERE kid_id IN (SELECT id FROM kids WHERE family_id=?)', [req.fid]);
   res.json({ ok: true });
 }));
+// Apagar uma tarefa para a família toda. Com histórico, só fica inativa (o extrato continua certo).
+router.delete('/tasks/:id', wrap(async (req, res) => {
+  const id = +req.params.id;
+  if (!await ownsTask(req, id)) return res.status(404).json({ error: 'Não encontrada' });
+  const [[c]] = await pool.query('SELECT COUNT(*) n FROM completions WHERE task_id=?', [id]);
+  if (c.n) { await pool.query('UPDATE tasks SET active=0 WHERE id=?', [id]); return res.json({ ok: true, archived: true }); }
+  for (const t of ['task_kids', 'task_rewards', 'task_order']) await pool.query(`DELETE FROM ${t} WHERE task_id=?`, [id]);
+  await pool.query('DELETE FROM tasks WHERE id=? AND family_id=?', [id, req.fid]);
+  res.json({ ok: true });
+}));
+// Tirar a tarefa só de um filho: as outras pessoas continuam com ela
+router.delete('/kids/:kid/tasks/:id', wrap(async (req, res) => {
+  const kid = await famKid({ ...req, params: { id: req.params.kid } }), id = +req.params.id;
+  if (!kid || !await ownsTask(req, id)) return res.status(404).json({ error: 'Não encontrada' });
+  const [[t]] = await pool.query('SELECT all_kids FROM tasks WHERE id=?', [id]);
+  if (t.all_kids) { // "todos" vira uma lista escolhida, sem este filho
+    const [who] = await pool.query('SELECT id FROM kids WHERE family_id=? AND active=1' + (t.all_kids === 1 ? ' AND adult=0' : ''), [req.fid]);
+    await pool.query('UPDATE tasks SET all_kids=0 WHERE id=?', [id]);
+    await pool.query('DELETE FROM task_kids WHERE task_id=?', [id]);
+    const rest = who.map(k => k.id).filter(k => k !== kid);
+    if (rest.length) await pool.query('INSERT INTO task_kids (task_id,kid_id) VALUES ?', [rest.map(k => [id, k])]);
+  } else await pool.query('DELETE FROM task_kids WHERE task_id=? AND kid_id=?', [id, kid]);
+  await pool.query('DELETE FROM task_order WHERE kid_id=? AND task_id=?', [kid, id]);
+  res.json({ ok: true });
+}));
 router.post('/tasks', wrap(async (req, res) => {
   const e = taskErr(req.body); if (e) return res.status(400).json({ error: e });
   res.json({ id: await saveTask(req, null) });
@@ -107,6 +132,21 @@ router.put('/tasks/:id', wrap(async (req, res) => {
   const e = taskErr(req.body); if (e) return res.status(400).json({ error: e });
   if (!await ownsTask(req, +req.params.id)) return res.status(404).json({ error: 'Não encontrada' });
   res.json({ id: await saveTask(req, +req.params.id) });
+}));
+
+// ---------- Roleta do dia ----------
+router.get('/wheel', wrap(async (req, res) => {
+  const [prizes] = await pool.query('SELECT id,label,emoji FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [req.fid]);
+  const [spins] = await pool.query(
+    `SELECT s.label,s.emoji,DATE_FORMAT(s.day,'%Y-%m-%d') day,k.name kid FROM wheel_spins s JOIN kids k ON k.id=s.kid_id
+     WHERE s.family_id=? ORDER BY s.id DESC LIMIT 10`, [req.fid]);
+  res.json({ prizes, spins });
+}));
+router.put('/wheel', wrap(async (req, res) => {
+  const list = (Array.isArray(req.body.prizes) ? req.body.prizes : []).map(p => ({ label: String(p.label || '').trim().slice(0, 40), emoji: String(p.emoji || '').trim().slice(0, 8) || null })).filter(p => p.label).slice(0, 12);
+  await pool.query('DELETE FROM wheel_prizes WHERE family_id=?', [req.fid]);
+  if (list.length) await pool.query('INSERT INTO wheel_prizes (family_id,label,emoji,sort) VALUES ?', [list.map((p, i) => [req.fid, p.label, p.emoji, i])]);
+  res.json({ ok: true });
 }));
 
 // ---------- Recompensas ----------

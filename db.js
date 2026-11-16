@@ -80,6 +80,12 @@ const SCHEMA = [
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(member_id), INDEX(family_id))`,
 // Ordem das tarefas escolhida pelos pais, por filho (arrastar para ordenar)
 `CREATE TABLE IF NOT EXISTS task_order (kid_id INT NOT NULL, task_id INT NOT NULL, pos INT NOT NULL, PRIMARY KEY(kid_id, task_id))`,
+// Roleta do dia: prêmios que os pais escolhem e o que cada jogador tirou (um giro por dia)
+`CREATE TABLE IF NOT EXISTS wheel_prizes (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, label VARCHAR(60) NOT NULL, emoji VARCHAR(16) NULL, sort INT NOT NULL DEFAULT 0, INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS wheel_spins (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, kid_id INT NOT NULL, day DATE NOT NULL, label VARCHAR(60) NOT NULL, emoji VARCHAR(16) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY one_a_day (kid_id, day), INDEX(family_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
