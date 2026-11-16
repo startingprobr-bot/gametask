@@ -535,12 +535,17 @@ function viewPin() {
   document.addEventListener('keydown', kb);
   $$('[data-k]').forEach(b => b.onclick = () => press(b.dataset.k));
   $('#back').onclick = () => { document.removeEventListener('keydown', kb); location.hash = '#/'; };
-  const fp = $('#fp'); if (fp) fp.onclick = async () => {
+  // Com digital ativada neste aparelho, o pedido do dedo já abre sozinho; o PIN fica como segunda opção.
+  // (Se o navegador exigir um toque antes, a tentativa automática falha em silêncio e o botão continua ali.)
+  const fp = $('#fp');
+  const useFp = async (auto) => {
+    if (!fp || fp.disabled) return;
     fp.disabled = true;
     try { await pkUse(); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
-    catch (er) { $('#err').textContent = pkErr(er); sfx.bad(); }
+    catch (er) { if (!auto) { $('#err').textContent = pkErr(er); sfx.bad(); } }
     finally { fp.disabled = false; }
   };
+  if (fp) { fp.onclick = () => useFp(false); setTimeout(() => useFp(true), 0); }
 }
 
 // ---------- Painel dos pais ----------
@@ -593,21 +598,35 @@ async function adminPending(pane, refresh) {
 }
 
 async function adminKids(pane, refresh) {
-  const kids = (await api('GET', '/admin/kids')).filter(k => !k.adult); // adultos ficam em Ajustes → Responsáveis
+  const all = await api('GET', '/admin/kids'), kids = all.filter(k => !k.adult), adults = all.filter(k => k.adult);
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><button class="btn green sm" id="new">Adicionar filho</button></div>
     ${kids.length ? `<div class="list">${kids.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
       <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${!k.active ? 'Inativo' : k.auto_approve ? 'Tarefas aprovadas automaticamente' : 'Você confere as tarefas'}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>`;
+      <div class="btns"><button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
+    ${adults.length ? `<section class="box"><div class="box-h"><h2 class="d">Adultos no jogo</h2></div>
+      <p class="lead">Pai, mãe ou outro responsável que faz a rotina junto, sem moedas. Quem sai do jogo continua com o acesso ao painel.</p>
+      <div class="list">${adults.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
+      <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${k.active ? 'Jogando' : 'Fora do jogo'}</div></div>
+      <div class="btns">${k.active ? `<button class="btn ghost sm" data-out="${k.id}">Tirar do jogo</button>` : `<button class="btn ghost sm" data-in="${k.id}">Voltar ao jogo</button>`}</div></div>`).join('')}</div></section>` : ''}`;
   const form = (k = { name: '', avatar: AVATARS[0], color: COLORS[0], active: 1, auto_approve: 0 }) => `
     <div class="field"><label for="kn">Nome</label><input id="kn" name="name" value="${esc(k.name)}" required></div>
     <div class="field"><span class="lab">Personagem</span>${picker('avatar', AVATARS, slug(k.avatar, 'fox'))}</div>
     <div class="field"><span class="lab">Cor do card</span>${swatches('color', k.color)}</div>
     <label class="check"><input type="checkbox" name="auto" ${k.auto_approve ? 'checked' : ''}>Aprovar as tarefas automaticamente</label>
     <p class="hint">Os ganhos entram assim que ${k.name ? esc(k.name) : 'a criança'} marca a tarefa, sem passar pela aba Aprovar.</p>
-    <label class="check"><input type="checkbox" name="active" ${k.active ? 'checked' : ''}>Ativo na tela de jogadores</label>`;
+    <label class="check"><input type="checkbox" name="active" ${k.active ? 'checked' : ''}>Ativo na tela de jogadores</label>
+    ${k.id ? `<button type="button" class="btn red sm" data-del style="margin-top:14px">Apagar ${esc(k.name)}</button>` : ''}`;
   const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked });
   $('#new').onclick = () => sheet('Novo filho', form(), async (f) => { await api('POST', '/admin/kids', read(f)); toast('Jogador adicionado'); refresh(); }, { saveLabel: 'Adicionar' });
-  $$('[data-e]').forEach(b => b.onclick = () => { const k = kids.find(x => x.id == b.dataset.e); sheet('Editar ' + k.name, form(k), async (f) => { await api('PUT', '/admin/kids/' + k.id, read(f)); refresh(); }); });
+  $$('[data-e]').forEach(b => b.onclick = () => {
+    const k = kids.find(x => x.id == b.dataset.e);
+    const ed = sheet('Editar ' + k.name, form(k), async (f) => { await api('PUT', '/admin/kids/' + k.id, read(f)); refresh(); });
+    $('[data-del]', ed).onclick = () => { ed.remove(); sheet(`Apagar ${k.name}?`, `<p class="lead" style="margin-top:6px">Some tudo de ${esc(k.name)}: moedas, histórico e prêmios. Não dá para desfazer.</p>
+      <p class="hint">Se quiser só esconder por um tempo, desmarque "Ativo na tela de jogadores".</p>`,
+      async () => { await api('DELETE', '/admin/kids/' + k.id); toast(`${k.name} foi apagado`); refresh(); }, { saveLabel: 'Apagar para sempre', danger: true }); };
+  });
+  $$('[data-out]').forEach(b => b.onclick = guard(async () => { await api('DELETE', '/admin/kids/' + b.dataset.out); toast('Saiu do jogo'); refresh(); }));
+  $$('[data-in]').forEach(b => b.onclick = guard(async () => { const k = adults.find(x => x.id == b.dataset.in); await api('PUT', '/admin/kids/' + k.id, { ...k, active: true }); toast('De volta ao jogo'); refresh(); }));
 }
 
 const DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'], DAYN = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
@@ -681,8 +700,8 @@ async function adminTasks(pane, refresh) {
   let order = ko ? ko.ids : tasks.filter(t => t.active).map(t => t.id);
   const off = kid ? [] : tasks.filter(t => !t.active);
   const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
-  const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
-    : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : t.carry ? ', passa para o dia seguinte até ser feita' : ''}`;
+  const when = (t) => t.carry ? `Até fazer (desde ${dmy(t.date)})` : t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
+    : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
   const who = (t) => t.all_kids === 2 ? 'Toda a família' : t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
   const line = (t, until) => [
     esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
@@ -724,15 +743,15 @@ async function adminTasks(pane, refresh) {
     else sheet('Apagar a tarefa?', `<p class="lead" style="margin-top:6px"><b>${esc(t.title)}</b> sai da lista de todos os filhos.</p>`,
       async () => { const r = await api('DELETE', `/admin/tasks/${id}`); toast(r.archived ? 'Tarefa desativada (já tinha histórico)' : 'Tarefa apagada'); refresh(); }, { saveLabel: 'Apagar', danger: true });
   });
-  const form = (t = { title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 }) => `
+  const blank = () => ({ title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, carry: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 });
+  const form = (t = blank()) => `
     ${iconName('tt', 'Nome da tarefa', `<input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required>`, TASK_ICONS, slug(t.icon))}
     <div class="field"><label for="td">Detalhe (opcional)</label><input id="td" name="description" value="${esc(t.description)}" placeholder="Antes do café"></div>
-    <div class="field"><span class="lab">Quando</span>${seg('type', [['daily', 'Repete'], ['one_off', 'Dia marcado']], t.type)}</div>
+    <div class="field"><span class="lab">Quando</span>${seg('type', [['daily', 'Repete'], ['one_off', 'Dia marcado'], ['carry', 'Até fazer']], t.carry ? 'carry' : t.type)}
+      <p class="hint" data-show="carry">Fica na lista todo dia até ser feita, como limpar o ventilador. Depois de feita, some.</p></div>
     <div class="field" data-show="daily"><span class="lab">Dias da semana</span><div class="days">${DAYS.map((d, i) => `<label><input type="checkbox" name="wd" value="${i}" ${t.weekdays.includes(i) ? 'checked' : ''}><span title="${DAYN[i]}">${d}</span></label>`).join('')}</div></div>
-    <div data-show="one_off"><div class="field"><label for="tdt">Data</label><input id="tdt" type="date" name="date" value="${esc(t.date || '')}"></div>
-      <label class="check"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label>
-      <label class="check" data-carry><input type="checkbox" name="carry" ${t.carry ? 'checked' : ''}>Se não fizer, passa para o dia seguinte</label>
-      <p class="hint" data-carry>Boa para tarefas raras, como limpar o ventilador: fica aparecendo todo dia até ser feita.</p></div>
+    <div data-show="one_off carry"><div class="field"><label for="tdt" data-dl>Data</label><input id="tdt" type="date" name="date" value="${esc(t.date || ymd(new Date()))}"></div>
+      <label class="check" data-show="one_off"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label></div>
     <div class="field"><label for="th">Horário (opcional)</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
     <div class="field"><label for="tc">Moedas por conclusão</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"><p class="hint">0 = não vale moeda.</p></div>
     <div class="field"><span class="lab">Quem faz</span>${seg('all_kids', [['1', 'Os filhos'], ...(kidsOn.some(k => k.adult) ? [['2', 'Toda a família']] : []), ['0', 'Escolher']], String(t.all_kids === 2 && !kidsOn.some(k => k.adult) ? 1 : t.all_kids))}
@@ -742,17 +761,17 @@ async function adminTasks(pane, refresh) {
       ${rewards.filter(r => r.active).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div>
     <label class="check"><input type="checkbox" name="active" ${t.active ? 'checked' : ''}>Tarefa ativa</label>`;
   const read = (f) => ({
-    title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value,
+    title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value === 'carry' ? 'one_off' : f.type.value,
     weekdays: $$('[name=wd]:checked', f).map(x => x.value).join('') || '0123456', date: f.date.value, time: f.time.value,
-    repeat_weekly: f.repeat_weekly.checked, carry: f.carry.checked && !f.repeat_weekly.checked, coins: f.coins.value, all_kids: +f.all_kids.value,
+    repeat_weekly: f.type.value === 'one_off' && f.repeat_weekly.checked, carry: f.type.value === 'carry', coins: f.coins.value, all_kids: +f.all_kids.value,
     kid_ids: $$('[name=kid]:checked', f).map(x => +x.value), reward_ids: $$('[name=rw]:checked', f).map(x => +x.value), active: f.active.checked,
   });
   const wire = (bg) => {
     const f = bg.querySelector('form');
     const upd = () => {
-      $$('[data-show]', f).forEach(d => d.hidden = d.dataset.show !== f.type.value);
+      $$('[data-show]', f).forEach(d => d.hidden = !d.dataset.show.split(' ').includes(f.type.value));
+      $('[data-dl]', f).textContent = f.type.value === 'carry' ? 'Aparece a partir de' : 'Data';
       $('[data-kids]', f).hidden = f.all_kids.value !== '0';
-      $$('[data-carry]', f).forEach(x => x.hidden = f.repeat_weekly.checked);
       $('[data-hint]', f).textContent = f.all_kids.value === '1' ? 'Todos os filhos, inclusive os que entrarem depois.' : f.all_kids.value === '2' ? 'Filhos e adultos que participam da rotina. Adultos não ganham moedas.' : '';
       $$('[name=rw]', f).forEach(c => {
         const n = +c.dataset.n + (c.checked && c.dataset.linked === '0' ? 1 : 0) - (!c.checked && c.dataset.linked === '1' ? 1 : 0);
@@ -761,7 +780,7 @@ async function adminTasks(pane, refresh) {
     };
     f.addEventListener('change', upd); upd();
   };
-  $('#new').onclick = () => wire(sheet('Nova tarefa', form(), async (f) => { await api('POST', '/admin/tasks', read(f)); toast('Tarefa criada'); refresh(); }, { saveLabel: 'Criar tarefa' }));
+  $('#new').onclick = () => wire(sheet('Nova tarefa', form(kid ? { ...blank(), all_kids: 0, kid_ids: [kid.id] } : undefined), async (f) => { await api('POST', '/admin/tasks', read(f)); toast('Tarefa criada'); refresh(); }, { saveLabel: 'Criar tarefa' }));
   $('#cat').onclick = guard(async () => {
     const c = await api('GET', '/admin/catalog'), free = c.tasks.filter(t => !t.have);
     if (!free.length) return toast('Todas as tarefas do catálogo já estão na sua lista.');

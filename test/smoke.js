@@ -243,6 +243,14 @@ const step = (m) => console.log('✔', m);
     assert.ok(!(await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === sw));
     assert.ok(!(await ok('GET', '/api/admin/tasks')).some(t => t.id === sw)); step('apagar tarefa: só de um filho ou de todos');
 
+    // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
+    const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;
+    await ok('DELETE', '/api/admin/kids/' + tmp);
+    assert.ok(!(await ok('GET', '/api/admin/kids')).some(k => k.id === tmp));
+    assert.equal((await ok('DELETE', '/api/admin/kids/' + anaKid.id)).left, true);
+    assert.ok(!(await ok('GET', '/api/kids')).some(k => k.id === anaKid.id));
+    assert.ok((await ok('GET', '/api/admin/members')).members.some(m => m.name === 'Ana')); step('apagar filho e tirar adulto do jogo');
+
     assert.equal((await api('DELETE', '/api/admin/members/' + ms[0].id)).status, 400);
     await ok('DELETE', '/api/admin/members/' + ms.find(m => m.name === 'Rosa').id);
     cookie = '';

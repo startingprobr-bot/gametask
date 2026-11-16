@@ -26,6 +26,17 @@ router.put('/kids/:id', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// Apagar um jogador. Filho: some com tudo dele (histórico, moedas, giros). Adulto: só sai do jogo
+// (o responsável continua com o acesso dele e pode voltar a jogar em Ajustes → Responsáveis).
+router.delete('/kids/:id', wrap(async (req, res) => {
+  const [[k]] = await pool.query('SELECT id,adult FROM kids WHERE id=? AND family_id=?', [req.params.id, req.fid]);
+  if (!k) return res.status(404).json({ error: 'Jogador não encontrado' });
+  if (k.adult) { await pool.query('UPDATE kids SET active=0 WHERE id=?', [k.id]); return res.json({ ok: true, left: true }); }
+  for (const t of ['completions', 'ledger', 'payouts', 'task_kids', 'task_order', 'wheel_spins', 'alarms']) await pool.query(`DELETE FROM ${t} WHERE kid_id=?`, [k.id]);
+  await pool.query('DELETE FROM kids WHERE id=? AND family_id=?', [k.id, req.fid]);
+  res.json({ ok: true });
+}));
+
 // Ordem das tarefas de um filho (ids na ordem em que aparecem para ele)
 async function famKid(req) {
   const [[k]] = await pool.query('SELECT id FROM kids WHERE id=? AND family_id=?', [req.params.id, req.fid]);
