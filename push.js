@@ -55,21 +55,23 @@ async function tick() {
       await sendToFamily(f.id, { title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time}`, tag: `a${a.id}`, alarm: true, url: '/app#/' });
     }
 
-    // 2) Tarefas com horário: avisa `remind_before` minutos antes, só para quem ainda não fez.
+    // 2) Tarefas com horário: avisa `remind_before` minutos antes e de novo na hora, só para quem ainda não fez.
+    //    (Tarefa criada em cima da hora perde o aviso antecipado, mas ainda recebe o da hora.)
     const [tasks] = await pool.query('SELECT * FROM tasks WHERE family_id=? AND active=1 AND time IS NOT NULL', [f.id]);
     for (const t of tasks) {
       if (!taskOnDay(t, day)) continue;
-      const d = now - (toMin(t.time) - (f.remind_before || 0));
-      if (d < 0 || d > 3) continue;
-      if (!await once(`t${t.id}:${day}`)) continue;
+      const pre = f.remind_before || 0, at = toMin(t.time);
+      const slot = (m) => now - m >= 0 && now - m <= 3;
+      const which = slot(at) ? 'now' : pre && slot(at - pre) ? 'pre' : null;
+      if (!which || !await once(`t${t.id}:${day}:${which}`)) continue;
       let ids = kids.map(k => k.id);
       if (!t.all_kids) { const [tk] = await pool.query('SELECT kid_id FROM task_kids WHERE task_id=?', [t.id]); ids = tk.map(x => x.kid_id).filter(id => kidName[id]); }
       const [done] = await pool.query("SELECT kid_id FROM completions WHERE task_id=? AND day=? AND status<>'rejected'", [t.id, day]);
       const left = ids.filter(id => !done.some(x => x.kid_id === id)).map(id => kidName[id]);
       if (!left.length) continue;
       const names = left.length === 1 ? left[0] : left.slice(0, -1).join(', ') + ' e ' + left.at(-1);
-      const when = f.remind_before ? `daqui a ${f.remind_before} min (${t.time})` : `agora (${t.time})`;
-      await sendToFamily(f.id, { title: `${names}: ${t.title}`, body: `Missão ${when}. Valendo moedas!`, tag: `t${t.id}`, alarm: true, url: '/app#/' });
+      const body = which === 'pre' ? `Missão daqui a ${pre} min (${t.time}). Valendo moedas!` : `Hora da missão (${t.time})! Valendo moedas!`;
+      await sendToFamily(f.id, { title: `${names}: ${t.title}`, body, tag: `t${t.id}`, alarm: true, url: '/app#/' });
     }
   }
   // limpeza do registro de envios antigos
@@ -83,4 +85,4 @@ function start() {
   }).catch(e => console.error('push init', e.message));
 }
 
-module.exports = { start, init, sendToFamily, publicKey };
+module.exports = { start, init, tick, sendToFamily, publicKey };
