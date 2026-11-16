@@ -156,7 +156,15 @@ async function paymentReturn() {
 }
 window.addEventListener('hashchange', guard(route));
 guard(route)();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  // clique numa notificação com o app já aberto: vai para a tela do aviso
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type !== 'go') return;
+    const h = new URL(e.data.url, location.origin).hash;
+    if (h && h !== location.hash) location.hash = h; else route().catch(() => {});
+  });
+}
 
 // ---------- Login / cadastro ----------
 function viewLogin(mode = 'login') {
@@ -429,7 +437,9 @@ let tab = 'pending';
 const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
 const full = () => !!ME.actor?.full;
 const DAILY_TABS = ['pending', 'wallet', 'settings']; // quem só tem o dia a dia (ex.: babá)
+let adminShown = null; // aba que está na tela: ao salvar, a mesma aba se redesenha e volta para onde estava
 async function viewAdmin() {
+  const keepY = adminShown === tab && $('.admin') ? scrollY : 0;
   const pendingN = (await api('GET', '/admin/pending')).length;
   const ac = ME.access || {};
   const tabs = TABS.filter(([k]) => full() || DAILY_TABS.includes(k));
@@ -453,6 +463,8 @@ async function viewAdmin() {
   }
   const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wallet: adminWallet, settings: adminSettings };
   await (fns[tab] || (tab = 'pending', adminPending))($('#pane'), viewAdmin);
+  adminShown = tab;
+  if (keepY) scrollTo(0, keepY);
 }
 const zero = (icon, text) => `<div class="zero">${im(icon)}<span>${text}</span></div>`;
 
@@ -496,7 +508,7 @@ function sortable(list, onDrop) {
     e.preventDefault();
     const item = grip.closest('.item'), before = ids().join();
     const off = e.clientY - item.getBoundingClientRect().top;
-    item.classList.add('dragging'); grip.setPointerCapture(e.pointerId);
+    item.classList.add('dragging');
     const move = (ev) => {
       const y = ev.clientY;
       const next = $$('.item', list).filter(x => x !== item).find(s => { const b = s.getBoundingClientRect(); return y < b.top + b.height / 2; }) || null;
@@ -509,13 +521,11 @@ function sortable(list, onDrop) {
     const up = () => {
       if (done) return; done = true;
       removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
-      grip.removeEventListener('lostpointercapture', up);
       item.classList.remove('dragging'); item.style.transform = '';
       if (ids().join() !== before) onDrop(ids());
     };
-    // escuta na janela: o fim do gesto às vezes não chega na alça
+    // escuta na janela (sem prender o dedo na alça): ao reordenar, o navegador soltaria a alça e o arrasto acabaria após um passo
     addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', up);
-    grip.addEventListener('lostpointercapture', up);
   });
   list.addEventListener('keydown', (e) => {
     const grip = e.target.closest('.grip'); if (!grip || !['ArrowUp', 'ArrowDown'].includes(e.key)) return;
@@ -1043,7 +1053,17 @@ async function adminAlarms(pane, refresh) {
     try {
       if (await Notification.requestPermission() !== 'granted') throw new Error('Sem permissão, o aparelho não consegue receber os avisos.');
       const reg = await navigator.serviceWorker.ready;
-      const s = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64key(p.key) });
+      const key = b64key(p.key), subscribe = () => reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      let s = await reg.pushManager.getSubscription();
+      if (!s) {
+        try { s = await subscribe(); }
+        catch (e) { // inscrição antiga travada ou serviço do Google instável: limpa e tenta de novo
+          await new Promise(r => setTimeout(r, 800));
+          try { s = await subscribe(); }
+          catch (e2) { throw new Error(/push service|abort/i.test(e2.message) || e2.name === 'AbortError'
+            ? 'O aparelho não conseguiu falar com o serviço de avisos do Google. Confira se o celular está com internet e com o Google Play Services ativo, tire a economia de bateria do navegador e tente de novo. Em Brave ou navegadores sem Google, use o Chrome.' : e2.message); }
+        }
+      }
       await api('POST', '/admin/push', { sub: s.toJSON(), label: $('#dl').value, reminders: $('#dr').checked, approvals: $('#da').checked });
       sfx.done(); toast('Avisos ligados!'); await api('POST', '/admin/push/test'); refresh();
     } finally { on.disabled = false; }

@@ -1,5 +1,5 @@
 // Service worker: rede primeiro, cache só do shell do app para abrir offline, e avisos (Web Push).
-const C = 'gametask-v7', SHELL = ['/app', '/css/game.css', '/js/app.js', '/icons/icon.svg', '/fonts/lilita-one.woff2', '/fonts/nunito.woff2'];
+const C = 'gametask-v8', SHELL = ['/app', '/css/game.css', '/js/app.js', '/icons/icon.svg', '/fonts/lilita-one.woff2', '/fonts/nunito.woff2'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== C).map(x => caches.delete(x)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
@@ -22,9 +22,12 @@ self.addEventListener('push', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = new URL(e.notification.data?.url || '/app#/', location.origin).href;
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
     const w = list.find(c => new URL(c.url).origin === location.origin);
-    if (w) return w.navigate(url).then(c => (c || w).focus()).catch(() => w.focus());
-    return clients.openWindow(url);
+    if (!w) return clients.openWindow(url);
+    // janela já aberta: traz para a frente e manda o app ir para a tela certa (navigate() falha em páginas não controladas)
+    await w.focus().catch(() => {});
+    w.postMessage({ type: 'go', url });
+    await w.navigate(url).catch(() => {});
   }));
 });
