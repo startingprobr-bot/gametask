@@ -578,3 +578,21 @@ a.btn{text-decoration:none}
 }
 .sub-h{font-family:var(--display);font-weight:400;font-size:19px;margin:18px 4px 4px;color:var(--ink-soft)}
 .box p.lead .link{padding:0 2px;font-size:inherit;color:var(--navy)}
+/* v7: responsáveis, convite e digital */
+.who-chip{display:inline-flex;align-items:center;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.5);color:#fff;font-weight:900;font-size:15px}
+.fp-offer{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;margin:10px 0 4px;padding:10px 12px;border-radius:18px;background:#fff;border:2px solid var(--navy);box-shadow:0 3px 0 var(--navy);color:var(--ink)}
+.fp-offer>svg{width:34px;height:34px;flex:0 0 auto;color:var(--green-lo)}
+.fp-offer span{flex:1;min-width:200px;font-weight:700;font-size:15px}
+.fp-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px 12px;margin-top:14px;padding:12px;border-radius:16px;background:var(--mist)}
+.fp-row>svg{width:32px;height:32px;flex:0 0 auto;color:var(--navy)}
+.fp-row span{flex:1;min-width:200px;font-weight:700;font-size:15px;color:var(--ink-soft)}
+.fp-row span b{color:var(--ink)}
+.inline-form{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.inline-form .field{flex:1;min-width:180px;margin:0}
+.inline-form .btn{height:52px}
+.finger{width:100%;min-height:64px;font-size:20px;gap:10px}
+.finger svg{width:30px;height:30px}
+.or{text-align:center;color:var(--ink-soft);font-weight:800;margin:14px 0 4px}
+.share-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.share-row .btn{flex:1;min-width:130px}
+#lk{font-size:14px}

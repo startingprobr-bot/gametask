@@ -18,20 +18,20 @@ async function pendingGains(kidId, sh, day) {
 
 // Lista de jogadores com o resumo do dia para o card de seleção
 router.get('/kids', async (req, res) => {
-  const [kids] = await pool.query('SELECT id,name,avatar,color FROM kids WHERE family_id=? AND active=1 ORDER BY sort,id', [req.fid]);
+  const [kids] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE family_id=? AND active=1 ORDER BY adult,sort,id', [req.fid]);
   const day = today();
   for (const k of kids) {
     const tasks = (await kidTasks(req.fid, k.id)).filter(t => taskOnDay(t, day));
     const [[c]] = await pool.query(`SELECT COUNT(*) n FROM completions WHERE kid_id=? AND day=? AND status<>'rejected'`, [k.id, day]);
     const sh = await shares(req.fid, k.id);
-    k.coins = r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
+    k.coins = k.adult ? null : r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
     k.total = tasks.length; k.done = Math.min(c.n, tasks.length);
   }
   res.json(kids);
 });
 
 async function ownKid(req, res) {
-  const [[k]] = await pool.query('SELECT id,name,avatar,color FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
+  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
   if (!k) res.status(404).json({ error: 'Jogador não encontrado' });
   return k;
 }
@@ -40,12 +40,12 @@ router.get('/kids/:id/home', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today(), fid = req.fid;
   const tasks = await ordered(kid.id, (await kidTasks(fid, kid.id)).filter(t => taskOnDay(t, day)));
-  const sh = await shares(fid, kid.id);
+  const sh = kid.adult ? {} : await shares(fid, kid.id);
   const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
   const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
   const list = tasks.map(t => ({
     id: t.id, title: t.title, icon: t.icon, description: t.description, type: t.type,
-    time: t.time, until: t.until || null, coins: t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
+    time: t.time, until: t.until || null, coins: kid.adult ? 0 : t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
   }));
 
   // Tempo de tela de hoje (não acumula)
@@ -62,6 +62,7 @@ router.get('/kids/:id/home', async (req, res) => {
   const { pendingCoins, pTime, pGoal } = await pendingGains(kid.id, sh, day);
 
   const relevant = new Set(Object.values(sh).flat().map(s => s.reward_id));
+  if (kid.adult) rewards.length = 0;
   const time = rewards.filter(r => r.kind === 'time' && relevant.has(r.id)).map(r => ({
     id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value,
     earned: r2(tm[r.id]?.earned || 0), used: r2(tm[r.id]?.used || 0), pending: r2(pTime[r.id] || 0),
@@ -83,6 +84,11 @@ router.post('/kids/:id/complete', async (req, res) => {
   const day = today();
   const task = (await kidTasks(req.fid, kid.id)).find(t => t.id === +req.body.task_id);
   if (!task || !taskOnDay(task, day)) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
+  // adulto: fica feito na hora, sem ganhos e sem pedir aprovação
+  if (kid.adult) {
+    await pool.query("INSERT IGNORE INTO completions (family_id,task_id,kid_id,day,status,decided_at) VALUES (?,?,?,?,'approved',NOW())", [req.fid, task.id, kid.id, day]);
+    return res.json({ ok: true });
+  }
   const [r] = await pool.query('INSERT IGNORE INTO completions (family_id,task_id,kid_id,day) VALUES (?,?,?,?)', [req.fid, task.id, kid.id, day]);
   if (r.affectedRows) {
     const [[k]] = await pool.query('SELECT auto_approve FROM kids WHERE id=?', [kid.id]);
@@ -95,8 +101,8 @@ router.post('/kids/:id/complete', async (req, res) => {
 // Desfazer enquanto ainda pendente
 router.delete('/kids/:id/complete/:taskId', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
-  await pool.query(`DELETE FROM completions WHERE kid_id=? AND task_id=? AND day=? AND status='pending' AND family_id=?`,
-    [kid.id, req.params.taskId, today(), req.fid]);
+  await pool.query(`DELETE FROM completions WHERE kid_id=? AND task_id=? AND day=? AND (status='pending' OR ?) AND family_id=?`,
+    [kid.id, req.params.taskId, today(), kid.adult ? 1 : 0, req.fid]);
   res.json({ ok: true });
 });
 

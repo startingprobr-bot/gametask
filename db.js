@@ -63,6 +63,21 @@ const SCHEMA = [
 `CREATE TABLE IF NOT EXISTS password_resets (
   token_hash CHAR(64) PRIMARY KEY, family_id INT NOT NULL, expires_at DATETIME NOT NULL, INDEX(family_id))`,
 `CREATE TABLE IF NOT EXISTS push_log (k VARCHAR(100) PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+// Responsáveis da família (pai, mãe, babá...). O principal é quem criou a conta (e-mail e senha ficam em families).
+// full_access=0: só o dia a dia (aprovar, tempo usado, extrato). kid_id: perfil de jogador do adulto, se participa da rotina.
+`CREATE TABLE IF NOT EXISTS members (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, name VARCHAR(60) NOT NULL, role VARCHAR(30) NOT NULL DEFAULT 'Responsável',
+  full_access TINYINT NOT NULL DEFAULT 1, principal TINYINT NOT NULL DEFAULT 0,
+  email VARCHAR(160) NULL UNIQUE, password_hash VARCHAR(100) NULL, pin_hash VARCHAR(100) NOT NULL,
+  kid_id INT NULL, active TINYINT NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS invites (
+  token_hash CHAR(64) PRIMARY KEY, family_id INT NOT NULL, name VARCHAR(60) NOT NULL, role VARCHAR(30) NOT NULL,
+  full_access TINYINT NOT NULL DEFAULT 1, expires_at DATETIME NOT NULL, INDEX(family_id))`,
+// Digital/rosto (WebAuthn) para abrir o painel dos pais
+`CREATE TABLE IF NOT EXISTS passkeys (
+  id VARCHAR(255) PRIMARY KEY, member_id INT NOT NULL, family_id INT NOT NULL, public_key TEXT NOT NULL,
+  counter BIGINT NOT NULL DEFAULT 0, transports VARCHAR(100) NULL, label VARCHAR(60) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(member_id), INDEX(family_id))`,
 // Ordem das tarefas escolhida pelos pais, por filho (arrastar para ordenar)
 `CREATE TABLE IF NOT EXISTS task_order (kid_id INT NOT NULL, task_id INT NOT NULL, pos INT NOT NULL, PRIMARY KEY(kid_id, task_id))`,
 ];
@@ -76,7 +91,9 @@ const COLUMNS = [
   ['families', 'last_seen', 'DATE NULL'],
   ['families', 'remind_before', 'INT NOT NULL DEFAULT 10'], // minutos de antecedência do aviso das tarefas com horário
   ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],
-  ['tasks', 'sort', 'INT NULL'],                           // ordem da família (aba Tarefas → Todas)   // aprovação automática passou da família para cada filho
+  ['tasks', 'sort', 'INT NULL'],                           // ordem da família (aba Tarefas → Todas)
+  ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],          // perfil de jogador de um adulto (sem moedas)
+  ['password_resets', 'member_id', 'INT NULL'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 
@@ -100,6 +117,10 @@ async function migrate() {
   const days = +(await getSetting('trial_days'));
   await pool.query('UPDATE families SET trial_ends=DATE_ADD(DATE(created_at), INTERVAL ? DAY) WHERE trial_ends IS NULL', [days]);
   await pool.query('UPDATE families f SET onboarded=1 WHERE onboarded=0 AND EXISTS (SELECT 1 FROM tasks t WHERE t.family_id=f.id)');
+  // toda família tem o responsável principal (o PIN dos pais passa a ser o dele)
+  await pool.query(`INSERT INTO members (family_id,name,role,full_access,principal,pin_hash)
+    SELECT f.id,'Responsável','Responsável',1,1,f.parent_pin_hash FROM families f
+    WHERE NOT EXISTS (SELECT 1 FROM members m WHERE m.family_id=f.id AND m.principal=1)`);
 }
 
 async function getSetting(k) {

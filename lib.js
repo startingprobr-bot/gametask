@@ -1,11 +1,12 @@
 const { pool } = require('./db');
 const { r2 } = require('./util');
 
-// Tarefas ativas atribuídas ao filho (all_kids ou vínculo explícito)
+// Tarefas ativas de um jogador. all_kids: 1 = todos os filhos, 2 = toda a família (adultos também), 0 = só os escolhidos
 async function kidTasks(fid, kidId) {
   const [rows] = await pool.query(
     `SELECT t.* FROM tasks t WHERE t.family_id=? AND t.active=1 AND
-     (t.all_kids=1 OR EXISTS (SELECT 1 FROM task_kids k WHERE k.task_id=t.id AND k.kid_id=?))`, [fid, kidId]);
+     (t.all_kids=2 OR (t.all_kids=1 AND (SELECT adult FROM kids WHERE id=?)=0)
+      OR EXISTS (SELECT 1 FROM task_kids k WHERE k.task_id=t.id AND k.kid_id=?))`, [fid, kidId, kidId]);
   return rows;
 }
 

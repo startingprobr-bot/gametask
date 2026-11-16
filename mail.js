@@ -14,18 +14,19 @@ const transport = () => tx ||= nodemailer.createTransport({
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
 const base = (req) => (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 
-async function createResetLink(req, familyId, hours = 1) {
+// memberId: senha de um responsável convidado (sem ele, a senha é a da conta principal da família)
+async function createResetLink(req, familyId, hours = 1, memberId = null) {
   const token = crypto.randomBytes(32).toString('hex');
-  await pool.query('DELETE FROM password_resets WHERE family_id=? OR expires_at < NOW()', [familyId]);
-  await pool.query('INSERT INTO password_resets (token_hash,family_id,expires_at) VALUES (?,?,DATE_ADD(NOW(), INTERVAL ? HOUR))', [sha(token), familyId, hours]);
+  await pool.query('DELETE FROM password_resets WHERE (family_id=? AND member_id <=> ?) OR expires_at < NOW()', [familyId, memberId]);
+  await pool.query('INSERT INTO password_resets (token_hash,family_id,member_id,expires_at) VALUES (?,?,?,DATE_ADD(NOW(), INTERVAL ? HOUR))', [sha(token), familyId, memberId, hours]);
   return `${base(req)}/app#/redefinir/${token}`;
 }
 
 async function consumeReset(token) {
-  const [[r]] = await pool.query('SELECT family_id FROM password_resets WHERE token_hash=? AND expires_at > NOW()', [sha(String(token || ''))]);
+  const [[r]] = await pool.query('SELECT family_id,member_id FROM password_resets WHERE token_hash=? AND expires_at > NOW()', [sha(String(token || ''))]);
   if (!r) return null;
-  await pool.query('DELETE FROM password_resets WHERE family_id=?', [r.family_id]);
-  return r.family_id;
+  await pool.query('DELETE FROM password_resets WHERE family_id=? AND member_id <=> ?', [r.family_id, r.member_id]);
+  return r;
 }
 const peekReset = async (token) => !!(await pool.query('SELECT 1 FROM password_resets WHERE token_hash=? AND expires_at > NOW()', [sha(String(token || ''))]))[0].length;
 

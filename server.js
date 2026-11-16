@@ -7,6 +7,7 @@ const fs = require('fs');
 const { pool, migrate, ensureDatabase, getSetting } = require('./db');
 const billing = require('./billing');
 const mail = require('./mail');
+const members = require('./members');
 
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
@@ -33,20 +34,24 @@ app.post('/api/auth/register', wrap(async (req, res) => {
   if (!name?.trim() || !/^\S+@\S+\.\S+$/.test(email || '')) return res.status(400).json({ error: 'Nome e e-mail válidos são obrigatórios' });
   if ((password || '').length < 6) return res.status(400).json({ error: 'Senha com ao menos 6 caracteres' });
   if (!/^\d{4,8}$/.test(String(pin || ''))) return res.status(400).json({ error: 'PIN do responsável: 4 a 8 números' });
-  const [[ex]] = await pool.query('SELECT id FROM families WHERE email=?', [email.toLowerCase()]);
-  if (ex) return res.status(409).json({ error: 'E-mail já cadastrado' });
+  if (await members.emailTaken(email.toLowerCase())) return res.status(409).json({ error: 'E-mail já cadastrado' });
   const trial = +(await getSetting('trial_days'));
   const [r] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY))',
     [name.trim(), email.toLowerCase(), bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10), trial]);
-  req.session = { fid: r.insertId, parentUntil: Date.now() + PARENT_MIN * 60000 };
+  const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,?,'Responsável',1,1,?)",
+    [r.insertId, String(req.body.my_name || 'Responsável').trim().slice(0, 60) || 'Responsável', bcrypt.hashSync(String(pin), 10)]);
+  req.session = { fid: r.insertId, mid: m.insertId, actor: m.insertId, parentUntil: Date.now() + PARENT_MIN * 60000 };
   res.json({ ok: true });
 }));
 app.post('/api/auth/login', wrap(async (req, res) => {
   const k = 'l' + req.ip;
   if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
-  const [[f]] = await pool.query('SELECT * FROM families WHERE email=?', [(req.body.email || '').toLowerCase()]);
-  if (!f || !bcrypt.compareSync(req.body.password || '', f.password_hash)) { fail(k); return res.status(401).json({ error: 'E-mail ou senha incorretos' }); }
-  req.session = { fid: f.id };
+  const email = (req.body.email || '').toLowerCase().trim(), pw = req.body.password || '';
+  const [[f]] = await pool.query('SELECT id,password_hash FROM families WHERE email=?', [email]);
+  if (f && bcrypt.compareSync(pw, f.password_hash)) { req.session = { fid: f.id, mid: await members.principalId(f.id) }; return res.json({ ok: true }); }
+  const [[m]] = await pool.query('SELECT id,family_id,password_hash FROM members WHERE email=? AND active=1', [email]);
+  if (!m || !bcrypt.compareSync(pw, m.password_hash || '')) { fail(k); return res.status(401).json({ error: 'E-mail ou senha incorretos' }); }
+  req.session = { fid: m.family_id, mid: m.id };
   res.json({ ok: true });
 }));
 // Esqueci a senha: resposta sempre igual (não revela se o e-mail existe)
@@ -57,7 +62,9 @@ app.post('/api/auth/forgot', wrap(async (req, res) => {
   const email = String(req.body.email || '').toLowerCase().trim();
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido' });
   const [[f]] = await pool.query('SELECT id,name FROM families WHERE email=?', [email]);
+  const [[m]] = f ? [[]] : await pool.query('SELECT m.id,m.family_id,f.name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND m.active=1', [email]);
   if (f) mail.sendResetMail(email, f.name, await mail.createResetLink(req, f.id)).catch(e => console.error('e-mail', e.message));
+  else if (m) mail.sendResetMail(email, m.name, await mail.createResetLink(req, m.family_id, 1, m.id)).catch(e => console.error('e-mail', e.message));
   res.json({ ok: true });
 }));
 app.get('/api/auth/reset/:token', wrap(async (req, res) => res.json({ valid: await mail.peekReset(req.params.token) })));
@@ -65,10 +72,12 @@ app.post('/api/auth/reset', wrap(async (req, res) => {
   const k = 'r' + req.ip;
   if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
   if ((req.body.password || '').length < 6) return res.status(400).json({ error: 'Senha com ao menos 6 caracteres' });
-  const fid = await mail.consumeReset(req.body.token);
-  if (!fid) { fail(k); return res.status(400).json({ error: 'Este link venceu ou já foi usado. Peça um novo.' }); }
-  await pool.query('UPDATE families SET password_hash=? WHERE id=?', [bcrypt.hashSync(req.body.password, 10), fid]);
-  req.session = { fid };
+  const r = await mail.consumeReset(req.body.token);
+  if (!r) { fail(k); return res.status(400).json({ error: 'Este link venceu ou já foi usado. Peça um novo.' }); }
+  const hash = bcrypt.hashSync(req.body.password, 10);
+  if (r.member_id) await pool.query('UPDATE members SET password_hash=? WHERE id=? AND family_id=?', [hash, r.member_id, r.family_id]);
+  else await pool.query('UPDATE families SET password_hash=? WHERE id=?', [hash, r.family_id]);
+  req.session = { fid: r.family_id, mid: r.member_id || await members.principalId(r.family_id) };
   res.json({ ok: true });
 }));
 app.post('/api/auth/logout', (req, res) => { req.session = null; res.json({ ok: true }); });
@@ -76,8 +85,10 @@ app.get('/api/auth/me', wrap(async (req, res) => {
   if (!req.session?.fid) return res.json({ family: null });
   const [[f]] = await pool.query('SELECT name,email,plan,paid_until,trial_ends,onboarded FROM families WHERE id=?', [req.session.fid]);
   if (!f) { req.session = null; return res.json({ family: null }); }
-  const access = billing.access(f);
-  res.json({ family: f.name, parent: isParent(req.session), access, owner: !!access.owner, onboarded: !!f.onboarded });
+  const access = billing.access(f), parent = isParent(req.session);
+  const actor = parent ? members.pub(await members.member(req.session.fid, req.session.actor || await members.principalId(req.session.fid))) : null;
+  const me = members.pub(await members.member(req.session.fid, req.session.mid));
+  res.json({ family: f.name, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
 }));
 
 const needFamily = (req, res, next) => {
@@ -87,22 +98,33 @@ const needFamily = (req, res, next) => {
 app.post('/api/auth/parent', needFamily, wrap(async (req, res) => {
   const k = 'p' + req.fid;
   if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
-  const [[f]] = await pool.query('SELECT parent_pin_hash FROM families WHERE id=?', [req.fid]);
-  if (!bcrypt.compareSync(String(req.body.pin || ''), f.parent_pin_hash)) { fail(k); return res.status(401).json({ error: 'PIN incorreto' }); }
-  req.session.parentUntil = Date.now() + PARENT_MIN * 60000;
-  res.json({ ok: true });
+  const pin = String(req.body.pin || '');
+  const [ms] = await pool.query('SELECT * FROM members WHERE family_id=? AND active=1 ORDER BY (id=?) DESC, principal DESC', [req.fid, req.session.mid || 0]);
+  const m = ms.find(x => bcrypt.compareSync(pin, x.pin_hash));
+  if (!m) { fail(k); return res.status(401).json({ error: 'PIN incorreto' }); }
+  members.openParent(req, m);
+  res.json({ ok: true, name: m.name });
 }));
 app.post('/api/auth/parent/exit', needFamily, (req, res) => { req.session.parentUntil = 0; res.json({ ok: true }); });
 
-const needParent = (req, res, next) => isParent(req.session) ? next() : res.status(403).json({ error: 'Área do responsável' });
+// Painel aberto: carrega quem abriu (sessões antigas, sem "actor", contam como o responsável principal)
+const needParent = (req, res, next) => {
+  if (!isParent(req.session)) return res.status(403).json({ error: 'Área do responsável' });
+  (async () => req.session.actor || await members.principalId(req.fid))()
+    .then(id => members.member(req.fid, id))
+    .then(m => m ? (req.actor = m, next()) : (req.session.parentUntil = 0, res.status(403).json({ error: 'Área do responsável' })), next);
+};
+const needFull = (req, res, next) => req.actor?.full_access ? next() : res.status(403).json({ error: 'Só um responsável com acesso completo pode fazer isso' });
 
 const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHERE id=?', [req.fid])
   .then(([[f]]) => billing.isOwner(f) ? next() : res.status(403).json({ error: 'Área do dono do sistema' }), next);
 
 app.get('/api/public/pricing', wrap(async (req, res) => res.json(await billing.prices())));
+app.use('/api/auth', members.auth);
+app.post('/api/billing/checkout', needFamily, needParent, needFull);
 app.use('/api/billing', billing.router);
-app.use('/api/owner', needFamily, needParent, needOwner, require('./routes/owner'));
-app.use('/api/admin', needFamily, billing.needActive, needParent, require('./routes/admin'));
+app.use('/api/owner', needFamily, needParent, needFull, needOwner, require('./routes/owner'));
+app.use('/api/admin', needFamily, billing.needActive, needParent, members.limitDaily, members.admin, require('./routes/admin'));
 app.use('/api', needFamily, billing.needActive, require('./routes/kid'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Não encontrado' }));
 

@@ -19,6 +19,7 @@ const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn',
 const slug = (v, fb = 'star') => KNOWN.has(v) ? v : (LEGACY[v] || fb);
 const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" class="${cls}" decoding="async">`;
 const SVG = {
+  finger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v3a8 8 0 01-1.3 4.4"/><path d="M8.6 13a14 14 0 01-.7 4.5"/><path d="M15.5 12.5c0 2.5-.3 4.8-1 7"/><path d="M5.4 8.6A7.5 7.5 0 0119.5 12c0 2 0 4-.4 6"/><path d="M4.5 13.5c.3-1 .5-2 .5-3"/><path d="M8.5 9.6A4 4 0 0112 8a4 4 0 014 4"/><path d="M7.8 4.8A10 10 0 0121 9.5"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.9"/><circle cx="15" cy="6" r="1.9"/><circle cx="9" cy="12" r="1.9"/><circle cx="15" cy="12" r="1.9"/><circle cx="9" cy="18" r="1.9"/><circle cx="15" cy="18" r="1.9"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 010 6M18 6.5a8 8 0 010 11"/></svg>',
@@ -34,7 +35,7 @@ async function api(method, url, body) {
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
   if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
-  if (!r.ok) throw new Error(d.error || 'Algo deu errado. Tente de novo.');
+  if (!r.ok) throw Object.assign(new Error(d.error || 'Algo deu errado. Tente de novo.'), { code: d.code, status: r.status });
   return d;
 }
 function toast(msg, bad) {
@@ -128,6 +129,7 @@ async function route() {
   const [, a, b] = location.hash.split('/');
   if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
   if (a === 'redefinir' && b) return viewReset(b);
+  if (a === 'convite' && b) return viewInvite(b);
   if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
   if (a === 'criar' || a === 'login') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
@@ -163,7 +165,7 @@ function viewLogin(mode = 'login') {
     <div class="logo">${im('game')}<h1 class="d stroke">GameTask</h1></div>
     <form class="card" id="f" novalidate>
       <h2 class="d">${reg ? 'Criar a família' : 'Entrar na família'}</h2>
-      ${reg ? '<div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div>' : ''}
+      ${reg ? '<div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div><div class="field"><label for="mn">Seu nome</label><input id="mn" name="my_name" placeholder="Bruno" autocomplete="given-name"></div>' : ''}
       <div class="field"><label for="e">E-mail</label><input id="e" name="email" type="email" autocomplete="username" required></div>
       <div class="field"><label for="p">Senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div>${reg ? '<p class="hint">Mínimo de 6 caracteres.</p>' : ''}</div>
       ${reg ? `<div class="field"><label for="pin">PIN dos pais</label><div class="pw"><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><button type="button" class="eye" aria-label="Mostrar PIN" aria-pressed="false">${SVG.eye}</button></div><p class="hint">4 a 8 números. Ele protege o painel dos pais neste e em outros aparelhos.</p></div>` : ''}
@@ -201,7 +203,7 @@ async function viewPlayers(me = ME) {
     <div class="wrap">
       <div class="select-title"><h1 class="d stroke">GameTask</h1><p>${kids.length ? 'Quem vai jogar agora?' : 'Nenhum jogador ainda'}</p></div>
       ${kids.length ? `<div class="roster">${kids.map(k => `<button class="hero" data-id="${k.id}" style="--c:${esc(k.color)}" aria-label="Jogar como ${esc(k.name)}">
-        ${im(k.avatar, 'art', 'fox')}<div class="plate"><div class="d stroke-sm">${esc(k.name)}</div><small>${im('coin')}<b class="num">${num(k.coins)}</b><i class="dot"></i>${im('check')}<b class="num">${k.done}/${k.total}</b></small><div class="mini"><i style="width:${k.total ? k.done / k.total * 100 : 0}%"></i></div></div></button>`).join('')}</div>`
+        ${im(k.avatar, 'art', 'fox')}<div class="plate"><div class="d stroke-sm">${esc(k.name)}</div><small>${k.adult ? '' : `${im('coin')}<b class="num">${num(k.coins)}</b><i class="dot"></i>`}${im('check')}<b class="num">${k.done}/${k.total}</b></small><div class="mini"><i style="width:${k.total ? k.done / k.total * 100 : 0}%"></i></div></div></button>`).join('')}</div>`
       : `<div class="empty">${im('people')}<p class="d">Peça para um adulto cadastrar os jogadores.</p></div>`}
       <div class="parent-door"><button class="btn ghost sm" id="adm">${im('lock')} Painel dos pais</button></div>
     </div></div>`;
@@ -251,7 +253,7 @@ async function viewKid(id) {
         ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}+${num(r.value)} ${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}+1</span>`),
       ].join('');
       const act = t.status === 'todo' ? `<button class="btn green go" data-do="${t.id}">Concluí!</button>`
-        : doneLike(t.status) ? `<span class="status ok">${im('check')}Feito!</span>${t.status === 'pending' ? `<button class="link" data-undo="${t.id}">Desfazer</button>` : ''}`
+        : doneLike(t.status) ? `<span class="status ok">${im('check')}Feito!</span>${t.status === 'pending' || d.kid.adult ? `<button class="link" data-undo="${t.id}">Desfazer</button>` : ''}`
         : `<span class="status no">${im('cross')}Refazer</span>`;
       return `<article class="mission ${doneLike(t.status) ? 'done' : t.status === 'rejected' ? 'rejected' : ''}" data-m="${t.id}" style="animation-delay:${i * 45}ms">
         <div class="tile" data-tile="${t.id}">${im(t.icon)}</div>
@@ -265,7 +267,7 @@ async function viewKid(id) {
     app.innerHTML = `<div class="lobby">
       <div class="topbar"><div class="topbar-in"><button class="btn ghost round" id="back" aria-label="Trocar jogador">${SVG.back}</button>
         <span class="who d stroke-sm">${esc(d.kid.name)}</span>
-        <div class="pills"><div class="pill" id="coinPill" title="Moedas">${im('coin')}<b id="coinNum">${num(coins)}</b></div></div>
+        <div class="pills">${d.kid.adult ? '' : `<div class="pill" id="coinPill" title="Moedas">${im('coin')}<b id="coinNum">${num(coins)}</b></div>`}</div>
         ${soundBtn()}</div></div>
       <div class="wrap ${first ? 'intro' : ''}"><div class="hud">
         <section class="stage" style="--c:${esc(d.kid.color)}"><div class="avatar">${im(d.kid.avatar, '', 'fox')}</div>
@@ -293,9 +295,9 @@ async function viewKid(id) {
       const nd = await load();
       $('.done-list summary')?.classList.add('bump');
       const newCoins = nd.balance + nd.pending_coins;
-      $('#coinNum').textContent = num(coins);
-      if (tile) flyTo({ x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 }, $('#coinPill'), t.coins > 0 ? 'coin' : 'glow', t.coins > 0 ? Math.min(8, 3 + Math.round(t.coins)) : 3);
-      setTimeout(() => countUp($('#coinNum'), coins, newCoins), reduced ? 0 : 950);
+      if (!d.kid.adult) $('#coinNum').textContent = num(coins);
+      if (tile && !d.kid.adult) flyTo({ x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 }, $('#coinPill'), t.coins > 0 ? 'coin' : 'glow', t.coins > 0 ? Math.min(8, 3 + Math.round(t.coins)) : 3);
+      if (!d.kid.adult) setTimeout(() => countUp($('#coinNum'), coins, newCoins), reduced ? 0 : 950);
       if (last && !store.get(`gt-all-${id}-${d.day}`)) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
     }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
@@ -330,12 +332,73 @@ document.addEventListener('click', (e) => {
   w.nextElementSibling.value = b.dataset.v; sfx.tap();
 });
 
+// ---------- Digital / rosto (WebAuthn) ----------
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const pkIds = () => { try { return JSON.parse(store.get('gt-pk') || '[]'); } catch { return []; } };
+const pkSave = (ids) => store.set('gt-pk', JSON.stringify([...new Set(ids)]));
+const pkCan = async () => { try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; } };
+async function pkAdd() {
+  const o = await api('POST', '/auth/passkey/register/options', {});
+  const c = await navigator.credentials.create({ publicKey: { ...o, challenge: b64key(o.challenge), user: { ...o.user, id: b64key(o.user.id) },
+    excludeCredentials: (o.excludeCredentials || []).map(x => ({ ...x, id: b64key(x.id) })) } });
+  const r = c.response;
+  const res = await api('POST', '/auth/passkey/register', { label: guessLabel(), credential: { id: c.id, rawId: b64u(c.rawId), type: c.type,
+    authenticatorAttachment: c.authenticatorAttachment, clientExtensionResults: c.getClientExtensionResults(),
+    response: { clientDataJSON: b64u(r.clientDataJSON), attestationObject: b64u(r.attestationObject), transports: r.getTransports?.() || [] } } });
+  pkSave([...pkIds(), res.id]);
+}
+async function pkUse() {
+  let o;
+  try { o = await api('POST', '/auth/passkey/login/options', { ids: pkIds() }); }
+  catch (e) { if (e.code === 'none') store.set('gt-pk', '[]'); throw e; }
+  const c = await navigator.credentials.get({ publicKey: { ...o, challenge: b64key(o.challenge), allowCredentials: o.allowCredentials.map(x => ({ ...x, id: b64key(x.id) })) } });
+  const r = c.response;
+  try {
+    return await api('POST', '/auth/passkey/login', { credential: { id: c.id, rawId: b64u(c.rawId), type: c.type, authenticatorAttachment: c.authenticatorAttachment,
+      clientExtensionResults: c.getClientExtensionResults(), response: { clientDataJSON: b64u(r.clientDataJSON), authenticatorData: b64u(r.authenticatorData),
+        signature: b64u(r.signature), userHandle: r.userHandle ? b64u(r.userHandle) : undefined } } });
+  } catch (e) { if (e.code === 'unknown') pkSave(pkIds().filter(x => x !== c.id)); throw e; }
+}
+const pkErr = (e) => e.name === 'NotAllowedError' ? 'Leitura cancelada.' : e.name === 'InvalidStateError' ? 'Esta digital já está cadastrada neste aparelho.' : e.message;
+
+// ---------- Convite de responsável ----------
+async function viewInvite(token) {
+  let inv;
+  try { inv = await api('GET', '/auth/invite/' + token); }
+  catch (e) {
+    app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth"><div class="logo">${im('key')}<h1 class="d stroke" style="font-size:40px">Convite</h1></div>
+      <div class="card sent">${im('hourglass')}<h2 class="d">Convite vencido</h2><p>${esc(e.message)}</p><div class="actions"><a class="btn green" href="#/login">Entrar</a></div></div></div></div>`;
+    return;
+  }
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth">
+    <div class="logo">${im('people')}<h1 class="d stroke" style="font-size:40px">Convite</h1></div>
+    <form class="card" id="f" novalidate><h2 class="d">${esc(inv.family)}</h2>
+      <p class="lead" style="margin-top:6px;color:var(--ink-soft)">Você foi convidado(a) como <b>${esc(inv.role)}</b>. ${inv.full ? 'Terá acesso completo ao painel dos pais.' : 'Poderá aprovar tarefas, marcar o tempo de tela usado e ver a carteira.'}</p>
+      <div class="field"><label for="n">Seu nome</label><input id="n" name="name" value="${esc(inv.name)}" autocomplete="given-name" required></div>
+      <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="p">Crie uma senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="new-password" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div><p class="hint">Mínimo de 6 caracteres. Use para entrar no seu celular.</p></div>
+      <div class="field"><label for="pin">Seu PIN</label><div class="pw"><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><button type="button" class="eye" aria-label="Mostrar PIN" aria-pressed="false">${SVG.eye}</button></div><p class="hint">4 a 8 números. Abre o painel dos pais em qualquer aparelho da família.</p></div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="actions"><button class="btn green">Entrar na família</button></div></form></div></div>`;
+  $$('.eye').forEach(b => b.onclick = () => {
+    const i = b.previousElementSibling, show = i.type === 'password';
+    i.type = show ? 'text' : 'password'; b.innerHTML = show ? SVG.eyeOff : SVG.eye; b.setAttribute('aria-pressed', show);
+  });
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault(); const btn = e.target.querySelector('.btn'); btn.disabled = true;
+    try { await api('POST', '/auth/invite', { token, ...Object.fromEntries(new FormData(e.target)) }); sfx.win(); location.hash = '#/admin'; await route(); }
+    catch (er) { $('#err').textContent = er.message; sfx.bad(); }
+    finally { btn.disabled = false; }
+  };
+}
+
 // ---------- PIN dos pais ----------
 function viewPin() {
   let pin = '';
+  const finger = pkIds().length && window.PublicKeyCredential;
   app.innerHTML = `<div class="lobby"><div class="auth">
     <div class="logo">${im('lock')}<h1 class="d stroke" style="font-size:44px">Painel dos pais</h1></div>
-    <div class="card" id="card"><h2 class="d" style="text-align:center">Digite o PIN</h2>
+    <div class="card" id="card">${finger ? `<button class="btn green finger" id="fp">${SVG.finger}Entrar com a digital</button><p class="or">ou digite seu PIN</p>` : '<h2 class="d" style="text-align:center">Digite seu PIN</h2>'}
       <div class="pin-dots" id="dots" aria-hidden="true">${'<i></i>'.repeat(4)}</div>
       <div class="err" id="err" role="alert" style="text-align:center"></div>
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="btn ghost" data-k="${n}">${n}</button>`).join('')}
@@ -353,24 +416,41 @@ function viewPin() {
   document.addEventListener('keydown', kb);
   $$('[data-k]').forEach(b => b.onclick = () => press(b.dataset.k));
   $('#back').onclick = () => { document.removeEventListener('keydown', kb); location.hash = '#/'; };
+  const fp = $('#fp'); if (fp) fp.onclick = async () => {
+    fp.disabled = true;
+    try { await pkUse(); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
+    catch (er) { $('#err').textContent = pkErr(er); sfx.bad(); }
+    finally { fp.disabled = false; }
+  };
 }
 
 // ---------- Painel dos pais ----------
 let tab = 'pending';
 const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
+const full = () => !!ME.actor?.full;
+const DAILY_TABS = ['pending', 'wallet', 'settings']; // quem só tem o dia a dia (ex.: babá)
 async function viewAdmin() {
   const pendingN = (await api('GET', '/admin/pending')).length;
   const ac = ME.access || {};
-  const plan = ac.status === 'trial' ? `<a class="plan-chip ${ac.days_left <= 10 ? 'warn' : ''}" href="#/assinar">${im('hourglass')}Grátis: ${ac.days_left} ${ac.days_left === 1 ? 'dia' : 'dias'}</a>`
+  const tabs = TABS.filter(([k]) => full() || DAILY_TABS.includes(k));
+  if (!tabs.some(([k]) => k === tab)) tab = 'pending';
+  const plan = !full() ? '' : ac.status === 'trial' ? `<a class="plan-chip ${ac.days_left <= 10 ? 'warn' : ''}" href="#/assinar">${im('hourglass')}Grátis: ${ac.days_left} ${ac.days_left === 1 ? 'dia' : 'dias'}</a>`
     : ac.status === 'paid' && ac.days_left <= 10 ? `<a class="plan-chip warn" href="#/assinar">${im('hourglass')}Renovar em ${ac.days_left} d</a>` : '';
+  const offerFp = !pkIds().length && !store.get('gt-pk-skip') && await pkCan();
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
+      ${ME.actor ? `<span class="who-chip">Olá, ${esc(ME.actor.name)}</span>` : ''}
       ${plan}${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
       <button class="btn ghost sm" id="exit">Voltar ao jogo</button></div>
-    <nav class="tabs" aria-label="Seções">${TABS.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
+    ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
+    <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
   $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); viewAdmin().catch(e => toast(e.message, true)); });
   $('.tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
+  const fpOn = $('#fpOn'); if (fpOn) {
+    fpOn.onclick = async () => { try { await pkAdd(); sfx.win(); toast('Digital ativada neste aparelho'); $('.fp-offer').remove(); } catch (e) { toast(pkErr(e), true); } };
+    $('#fpNo').onclick = () => { store.set('gt-pk-skip', '1'); $('.fp-offer').remove(); };
+  }
   const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wallet: adminWallet, settings: adminSettings };
   await (fns[tab] || (tab = 'pending', adminPending))($('#pane'), viewAdmin);
 }
@@ -390,7 +470,7 @@ async function adminPending(pane, refresh) {
 }
 
 async function adminKids(pane, refresh) {
-  const kids = await api('GET', '/admin/kids');
+  const kids = (await api('GET', '/admin/kids')).filter(k => !k.adult); // adultos ficam em Ajustes → Responsáveis
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><button class="btn green sm" id="new">Adicionar filho</button></div>
     ${kids.length ? `<div class="list">${kids.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
       <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${!k.active ? 'Inativo' : k.auto_approve ? 'Tarefas aprovadas automaticamente' : 'Você confere as tarefas'}</div></div>
@@ -460,7 +540,7 @@ async function adminTasks(pane, refresh) {
   const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
   const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
     : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
-  const who = (t) => t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
+  const who = (t) => t.all_kids === 2 ? 'Toda a família' : t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
   const line = (t, until) => [
     esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
     t.coins > 0 ? `${num(t.coins)} moedas` : '',
@@ -504,22 +584,24 @@ async function adminTasks(pane, refresh) {
       <label class="check"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label></div>
     <div class="field"><label for="th">Horário (opcional)</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
     <div class="field"><label for="tc">Moedas por conclusão</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"><p class="hint">0 = não vale moeda.</p></div>
-    <div class="field"><span class="lab">Quem faz</span><label class="check"><input type="checkbox" name="all_kids" ${t.all_kids ? 'checked' : ''}>Todos os filhos, inclusive os novos</label>
-      <div data-kids>${kidsOn.map(k => `<label class="check"><input type="checkbox" name="kid" value="${k.id}" ${t.kid_ids.includes(k.id) ? 'checked' : ''}>${im(k.avatar, '', 'fox')}${esc(k.name)}</label>`).join('')}</div></div>
+    <div class="field"><span class="lab">Quem faz</span>${seg('all_kids', [['1', 'Os filhos'], ...(kidsOn.some(k => k.adult) ? [['2', 'Toda a família']] : []), ['0', 'Escolher']], String(t.all_kids === 2 && !kidsOn.some(k => k.adult) ? 1 : t.all_kids))}
+      <p class="hint" data-hint></p>
+      <div data-kids>${kidsOn.map(k => `<label class="check"><input type="checkbox" name="kid" value="${k.id}" ${t.kid_ids.includes(k.id) ? 'checked' : ''}>${im(k.avatar, '', 'fox')}${esc(k.name)}${k.adult ? ' <span class="muted">adulto</span>' : ''}</label>`).join('')}</div></div>
     <div class="field"><span class="lab">Recompensas que esta tarefa alimenta</span>
       ${rewards.filter(r => r.active).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div>
     <label class="check"><input type="checkbox" name="active" ${t.active ? 'checked' : ''}>Tarefa ativa</label>`;
   const read = (f) => ({
     title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value,
     weekdays: $$('[name=wd]:checked', f).map(x => x.value).join('') || '0123456', date: f.date.value, time: f.time.value,
-    repeat_weekly: f.repeat_weekly.checked, coins: f.coins.value, all_kids: f.all_kids.checked,
+    repeat_weekly: f.repeat_weekly.checked, coins: f.coins.value, all_kids: +f.all_kids.value,
     kid_ids: $$('[name=kid]:checked', f).map(x => +x.value), reward_ids: $$('[name=rw]:checked', f).map(x => +x.value), active: f.active.checked,
   });
   const wire = (bg) => {
     const f = bg.querySelector('form');
     const upd = () => {
       $$('[data-show]', f).forEach(d => d.hidden = d.dataset.show !== f.type.value);
-      $('[data-kids]', f).hidden = f.all_kids.checked;
+      $('[data-kids]', f).hidden = f.all_kids.value !== '0';
+      $('[data-hint]', f).textContent = f.all_kids.value === '1' ? 'Todos os filhos, inclusive os que entrarem depois.' : f.all_kids.value === '2' ? 'Filhos e adultos que participam da rotina. Adultos não ganham moedas.' : '';
       $$('[name=rw]', f).forEach(c => {
         const n = +c.dataset.n + (c.checked && c.dataset.linked === '0' ? 1 : 0) - (!c.checked && c.dataset.linked === '1' ? 1 : 0);
         c.parentElement.querySelector('[data-pv]').textContent = !c.checked ? '' : c.dataset.k === 'time' ? `${num(c.dataset.t / n)} ${c.dataset.u} cada (${n} tarefas)` : '+1 na meta';
@@ -593,9 +675,9 @@ async function adminWallet(pane, refresh) {
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Carteira</h2><span class="s" style="font-weight:800;color:var(--ink-soft)">1 moeda = ${brl(w.settings.coin_value)}</span></div>
     ${w.kids.map(k => `<div class="wallet-kid">${im(k.avatar, '', 'fox')}<div class="t" style="font-weight:900;font-size:18px">${esc(k.name)}</div>
       <div class="money"><span class="d num">${num(k.balance)} moedas</span><span class="s" style="font-weight:800;color:var(--ink-soft)">${brl(k.value)} · tempo hoje ${num(k.time_today)} min</span></div>
-      ${k.goals.length ? `<div class="goals">${k.goals.map(g => `<div class="g">${im(g.icon, '', 'trophy')}${esc(g.title)}: ${num(g.progress)}/${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'} ${g.ready ? `<button class="btn green sm" data-redeem="${k.id}:${g.id}">Entregar meta</button>` : ''}</div>`).join('')}</div>` : ''}
-      <div class="btns"><button class="btn sm" data-pay="${k.id}" ${k.balance > 0 ? '' : 'disabled'}>${im('moneybag')}Pagar moedas</button>
-        <button class="btn ghost sm" data-adj="${k.id}">Bônus ou desconto</button>${w.timeRewards.length ? `<button class="btn ghost sm" data-use="${k.id}">${im('stopwatch')}Tempo usado</button>` : ''}</div></div>`).join('') || zero('people', 'Cadastre os filhos primeiro.')}</section>
+      ${k.goals.length ? `<div class="goals">${k.goals.map(g => `<div class="g">${im(g.icon, '', 'trophy')}${esc(g.title)}: ${num(g.progress)}/${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'} ${g.ready && full() ? `<button class="btn green sm" data-redeem="${k.id}:${g.id}">Entregar meta</button>` : ''}</div>`).join('')}</div>` : ''}
+      <div class="btns">${full() ? `<button class="btn sm" data-pay="${k.id}" ${k.balance > 0 ? '' : 'disabled'}>${im('moneybag')}Pagar moedas</button>
+        <button class="btn ghost sm" data-adj="${k.id}">Bônus ou desconto</button>` : ''}${w.timeRewards.length ? `<button class="btn ghost sm" data-use="${k.id}">${im('stopwatch')}Tempo usado</button>` : ''}</div></div>`).join('') || zero('people', 'Cadastre os filhos primeiro.')}</section>
     <section class="box" id="stmt"></section>
     <section class="box"><div class="box-h"><h2 class="d">Pagamentos</h2></div>${w.payouts.length ? `<table><thead><tr><th>Data</th><th>Filho</th><th>Moedas</th><th>Valor</th></tr></thead><tbody>${w.payouts.map(p => `<tr><td>${dmy(p.created_at)}</td><td>${esc(p.kid)}</td><td>${num(p.coins)}</td><td>${brl(p.amount)}</td></tr>`).join('')}</tbody></table>` : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
   const kid = (id) => w.kids.find(k => k.id == id);
@@ -611,23 +693,92 @@ async function adminWallet(pane, refresh) {
 }
 
 async function adminSettings(pane, refresh) {
-  const w = await api('GET', '/admin/wallet');
-  pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Ajustes</h2></div>
-    <div class="field"><label for="cv">Valor de 1 moeda em reais</label><input id="cv" name="coin_value" type="number" step="0.01" min="0" value="${w.settings.coin_value}" inputmode="decimal"></div>
-    <div class="field"><label for="np">Novo PIN dos pais</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"><p class="hint">Deixe vazio para manter o atual.</p></div>
-    <p class="hint">A aprovação automática agora é escolhida em cada filho, na aba Filhos.</p>
-    <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar ajustes</button></div></form>
+  const [w, mb, canFp] = await Promise.all([full() ? api('GET', '/admin/wallet') : null, api('GET', '/admin/members'), pkCan()]);
+  const meM = mb.members.find(m => m.me) || {};
+  const access = (m) => m.full_access ? 'Acesso completo' : 'Dia a dia';
+  pane.innerHTML = `${full() ? `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Ajustes</h2></div>
+      <div class="field"><label for="cv">Valor de 1 moeda em reais</label><input id="cv" name="coin_value" type="number" step="0.01" min="0" value="${w.settings.coin_value}" inputmode="decimal"></div>
+      <p class="hint">A aprovação automática é escolhida em cada filho, na aba Filhos.</p>
+      <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar ajustes</button></div></form>` : ''}
+    <section class="box"><div class="box-h"><h2 class="d">Meu acesso</h2><span class="muted">${esc(meM.name || '')} · ${esc(meM.role || '')} · ${access(meM)}</span></div>
+      <form id="pinf" class="inline-form" novalidate><div class="field"><label for="np">Meu PIN</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="Novo PIN"></div>
+        <button class="btn sm">Trocar PIN</button></form>
+      <div class="fp-row">${SVG.finger}${!canFp ? '<span>Este aparelho não tem leitor de digital ou de rosto disponível para o navegador.</span>'
+        : pkIds().length ? '<span><b>Digital ativada neste aparelho.</b> O painel abre sem o PIN.</span><button class="btn ghost sm" id="fpOff">Desativar</button>'
+        : '<span>Abra o painel com a digital ou o rosto neste aparelho.</span><button class="btn green sm" id="fpAdd">Ativar</button>'}</div></section>
+    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Responsáveis</h2><button class="btn green sm" id="inv">${im('people')}Convidar</button></div>
+      <p class="lead">Pai, mãe, babá ou avós: cada um entra no próprio celular com e-mail, senha e PIN, e pode usar a digital.</p>
+      <div class="list">${mb.members.map(m => `<div class="item"><div class="ic">${im(m.plays ? m.avatar : 'people', '', 'fox')}</div>
+        <div class="grow"><div class="t">${esc(m.name)}${m.me ? ' <span class="tag ok">você</span>' : ''}</div>
+        <div class="s">${esc(m.role)} · ${access(m)}${m.plays ? ' · na rotina' : ''}${m.passkeys ? ' · digital' : ''}${m.email ? ' · ' + esc(m.email) : ''}</div></div>
+        <div class="btns"><button class="btn ghost sm" data-m="${m.id}">Editar</button></div></div>`).join('')}</div>
+      ${mb.invites.length ? `<p class="hint">${mb.invites.length === 1 ? '1 convite aguardando' : mb.invites.length + ' convites aguardando'} (${mb.invites.map(i => esc(i.name)).join(', ')}). <button type="button" class="link" id="invX">Cancelar convites</button></p>` : ''}</section>` : ''}
     <div id="alarms"></div>
-    <section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>
-    <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha da família de novo.</p><button class="btn red sm" id="out">Desconectar a família</button></section>`;
-  $('#f').onsubmit = async (e) => {
-    e.preventDefault(); const f = e.target;
-    try { await api('PUT', '/admin/settings', { coin_value: f.coin_value.value, new_pin: f.pin.value }); toast('Ajustes salvos'); f.pin.value = ''; f.querySelector('.err').textContent = ''; }
+    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>` : ''}
+    <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><button class="btn red sm" id="out">Desconectar</button></section>`;
+  const f = $('#f'); if (f) f.onsubmit = async (e) => {
+    e.preventDefault();
+    try { await api('PUT', '/admin/settings', { coin_value: f.coin_value.value }); toast('Ajustes salvos'); f.querySelector('.err').textContent = ''; }
     catch (er) { f.querySelector('.err').textContent = er.message; sfx.bad(); }
   };
-  $('#out').onclick = () => sheet('Desconectar a família?', '<p class="lead" style="margin-top:6px">As crianças não conseguirão usar este aparelho até alguém entrar de novo.</p>',
+  $('#pinf').onsubmit = guard(async (e) => { e.preventDefault(); await api('PUT', '/admin/me/pin', { pin: e.target.pin.value }); e.target.pin.value = ''; toast('PIN trocado'); });
+  const fa = $('#fpAdd'); if (fa) fa.onclick = async () => { try { await pkAdd(); sfx.win(); toast('Digital ativada neste aparelho'); refresh(); } catch (e) { toast(pkErr(e), true); } };
+  const fo = $('#fpOff'); if (fo) fo.onclick = guard(async () => {
+    const mine = (await api('GET', '/admin/me/passkeys')).map(k => k.id);
+    for (const id of pkIds().filter(x => mine.includes(x))) await api('DELETE', '/admin/me/passkeys/' + encodeURIComponent(id));
+    pkSave([]); store.set('gt-pk-skip', '1'); toast('Digital desativada neste aparelho'); refresh();
+  });
+  // convidar e editar responsáveis
+  const roleSel = (cur) => `<select id="mr" name="role">${mb.roles.map(r => `<option ${r === cur ? 'selected' : ''}>${r}</option>`).join('')}</select>`;
+  const accSeg = (cur) => seg('full_access', [['1', 'Acesso completo'], ['0', 'Só o dia a dia']], cur ? '1' : '0') + '<p class="hint">Dia a dia: aprovar tarefas, marcar tempo de tela usado e ver a carteira. Não paga moedas nem muda tarefas, recompensas ou assinatura.</p>';
+  const inv = $('#inv'); if (inv) inv.onclick = () => sheet('Convidar responsável', `
+      <div class="field"><label for="mn">Nome</label><input id="mn" name="name" placeholder="Ana" maxlength="60" required></div>
+      <div class="field"><label for="mr">Quem é</label>${roleSel('Mãe')}</div>
+      <div class="field"><span class="lab">O que pode fazer</span>${accSeg(true)}</div>`,
+    async (fm) => {
+      const r = await api('POST', '/admin/members/invite', { name: fm.name.value, role: fm.role.value, full_access: fm.full_access.value === '1' });
+      const name = fm.name.value; await refresh(); shareInvite(name, r);
+    }, { saveLabel: 'Criar convite' });
+  const ix = $('#invX'); if (ix) ix.onclick = guard(async () => { await api('DELETE', '/admin/members/invites'); toast('Convites cancelados'); refresh(); });
+  $$('[data-m]').forEach(b => b.onclick = () => {
+    const m = mb.members.find(x => x.id == b.dataset.m);
+    const bg = sheet('Editar ' + m.name, `
+      <div class="field"><label for="mn">Nome</label><input id="mn" name="name" value="${esc(m.name)}" maxlength="60" required></div>
+      <div class="field"><label for="mr">Quem é</label>${roleSel(m.role)}</div>
+      ${m.principal ? '<p class="hint">Responsável principal: sempre com acesso completo.</p>' : `<div class="field"><span class="lab">O que pode fazer</span>${accSeg(m.full_access)}</div>`}
+      <label class="check"><input type="checkbox" name="plays" ${m.plays ? 'checked' : ''}>Participa da rotina (aparece entre os jogadores, sem moedas)</label>
+      <div data-play><div class="field"><span class="lab">Personagem</span>${picker('avatar', AVATARS, slug(m.avatar, 'fox'))}</div>
+        <div class="field"><span class="lab">Cor do card</span>${swatches('color', m.color || COLORS[1])}</div></div>
+      ${!m.principal && !m.me ? '<button type="button" class="btn red sm" id="rmM" style="margin-top:16px">Remover acesso</button>' : ''}`,
+      async (fm) => {
+        await api('PUT', '/admin/members/' + m.id, { name: fm.name.value, role: fm.role.value, full_access: fm.full_access ? fm.full_access.value === '1' : true,
+          plays: fm.plays.checked, avatar: fm.avatar.value, color: fm.color.value });
+        toast('Responsável atualizado'); refresh();
+      });
+    const fm = bg.querySelector('form'), sync = () => { $('[data-play]', fm).hidden = !fm.plays.checked; };
+    fm.plays.addEventListener('change', sync); sync();
+    const rm = bg.querySelector('#rmM'); if (rm) rm.onclick = () => {
+      bg.remove();
+      sheet(`Remover ${m.name}?`, '<p class="lead" style="margin-top:6px">A pessoa não consegue mais entrar nem abrir o painel. As tarefas e o histórico ficam.</p>',
+        async () => { await api('DELETE', '/admin/members/' + m.id); toast('Acesso removido'); refresh(); }, { saveLabel: 'Remover', danger: true });
+    };
+  });
+  $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Este aparelho vai pedir o e-mail e a senha de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
   await adminAlarms($('#alarms'), refresh);
+}
+
+// Link do convite: compartilhar (WhatsApp etc.) ou copiar
+function shareInvite(name, r) {
+  const text = `${name}, este é o seu convite para o GameTask da nossa família: ${r.link}`;
+  const bg = sheet('Convite criado', `<p class="lead" style="margin-top:6px">Envie o link para ${esc(name)}. Ele vale por ${r.days} dias e só pode ser usado uma vez.</p>
+    <div class="field"><input id="lk" value="${esc(r.link)}" readonly aria-label="Link do convite"></div>
+    <div class="share-row">${navigator.share ? '<button type="button" class="btn green" id="sh">Compartilhar</button>' : ''}
+      <a class="btn" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">WhatsApp</a>
+      <button type="button" class="btn ghost" id="cp">Copiar link</button></div>`, async () => {}, { saveLabel: 'Pronto' });
+  bg.querySelector('[data-x]').remove(); // só "Pronto"
+  const sh = bg.querySelector('#sh'); if (sh) sh.onclick = () => navigator.share({ title: 'Convite GameTask', text }).catch(() => {});
+  bg.querySelector('#cp').onclick = async () => { const i = bg.querySelector('#lk'); i.select(); try { await navigator.clipboard.writeText(r.link); } catch { document.execCommand('copy'); } toast('Link copiado'); };
 }
 
 // ---------- Assinatura ----------
@@ -672,6 +823,7 @@ async function viewPaywall() {
     <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
   </div></div>`;
   $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
+    if (!ME.parent) return viewPin(); // só um responsável assina (volta para os planos depois do PIN)
     if (!s.enabled) throw new Error('O pagamento on-line ainda está sendo ativado. Tente mais tarde.');
     const label = b.textContent; b.disabled = true; b.textContent = 'Abrindo o Mercado Pago…';
     try { const r = await api('POST', '/billing/checkout', { plan: b.dataset.plan }); location.href = r.url; }
@@ -875,12 +1027,12 @@ async function adminAlarms(pane, refresh) {
        <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
 
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>
-    <section class="box"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
+    <section class="box"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus && full() ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
       <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
       ${alarms.length ? `<div class="list">${alarms.map(a => `<div class="item ${a.active ? '' : 'off'}"><div class="ic">${im('clock')}</div><div class="grow"><div class="t">${esc(a.title)}</div>
         <div class="s"><b class="num">${esc(a.time)}</b> · ${when(a.weekdays)} · ${a.kid_id ? esc(kidOf(a.kid_id)?.name || '?') : 'toda a família'}</div></div>
-        <div class="btns"><button class="btn ghost sm" data-e="${a.id}">Editar</button></div></div>`).join('')}</div>` : zero('clock', 'Nenhum aviso programado ainda.')}
-      <div class="field lead-time"><label for="rb">Tarefas com horário avisam</label><select id="rb" ${p.plus ? '' : 'disabled'}>${[[0, 'na hora certa'], [5, '5 minutos antes'], [10, '10 minutos antes'], [15, '15 minutos antes'], [30, '30 minutos antes'], [60, '1 hora antes']].map(([v, l]) => `<option value="${v}" ${+p.remind_before === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        ${full() ? `<div class="btns"><button class="btn ghost sm" data-e="${a.id}">Editar</button></div>` : ''}</div>`).join('')}</div>` : zero('clock', 'Nenhum aviso programado ainda.')}
+      <div class="field lead-time"><label for="rb">Tarefas com horário avisam</label><select id="rb" ${p.plus && full() ? '' : 'disabled'}>${[[0, 'na hora certa'], [5, '5 minutos antes'], [10, '10 minutos antes'], [15, '15 minutos antes'], [30, '30 minutos antes'], [60, '1 hora antes']].map(([v, l]) => `<option value="${v}" ${+p.remind_before === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <p class="hint">Vale para as tarefas que têm horário (natação 18h, por exemplo) e só avisa quem ainda não fez.</p></div></section>
     ${p.devices.length ? `<section class="box"><div class="box-h"><h2 class="d">Aparelhos com avisos</h2></div><div class="list">${p.devices.map(d => `<div class="item"><div class="ic">${im(/celular/i.test(d.label) ? 'phone' : /computador/i.test(d.label) ? 'laptop' : 'tv')}</div>
       <div class="grow"><div class="t">${esc(d.label)}${mine && mine.id === d.id ? ' <span class="tag ok">este</span>' : ''}</div><div class="s">${[d.reminders && 'Lembretes', d.approvals && 'Aprovações'].filter(Boolean).join(' · ') || 'Nada marcado'} · desde ${dmy(d.created_at)}</div></div>

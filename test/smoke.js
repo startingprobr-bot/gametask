@@ -132,6 +132,62 @@ const step = (m) => console.log('✔', m);
     const det = await ok('GET', '/api/admin/statement/' + st[0].day);
     assert.equal(det[eva].tasks.length, 2); assert.ok(det[eva].other.some(o => o.note === 'Pagamento')); step('extrato diário com detalhe do dia');
 
+    // responsáveis: convite da mãe (acesso completo) e da babá (só o dia a dia)
+    const main = cookie;
+    const mae = (await ok('POST', '/api/admin/members/invite', { name: 'Ana', role: 'Mãe', full_access: true })).link.split('/convite/')[1];
+    const baba = (await ok('POST', '/api/admin/members/invite', { name: 'Rosa', role: 'Babá', full_access: false })).link.split('/convite/')[1];
+    cookie = '';
+    assert.equal((await ok('GET', '/api/auth/invite/' + mae)).role, 'Mãe');
+    assert.equal((await api('POST', '/api/auth/invite', { token: mae, email: 'a@b.co', password: 'secret1', pin: '5555' })).status, 409); // e-mail da família
+    await ok('POST', '/api/auth/invite', { token: mae, email: 'ana@x.co', password: 'secret1', pin: '5555' });
+    assert.equal((await api('POST', '/api/auth/invite', { token: mae, email: 'ana2@x.co', password: 'secret1', pin: '5555' })).status, 400); // uso único
+    let me2 = await ok('GET', '/api/auth/me');
+    assert.equal(me2.actor.name, 'Ana'); assert.equal(me2.actor.full, true); assert.equal(me2.family, 'Família Teste');
+    await ok('POST', '/api/auth/parent/exit');
+    assert.equal((await api('POST', '/api/auth/parent', { pin: '1234' })).status, 200); // o PIN do pai também abre aqui
+    assert.equal((await ok('GET', '/api/auth/me')).actor.principal, true);
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'ana@x.co', password: 'secret1' });
+    await ok('POST', '/api/auth/parent', { pin: '5555' });
+    assert.equal((await ok('GET', '/api/auth/me')).actor.name, 'Ana'); step('convite: mãe entra com e-mail, senha e PIN próprios');
+
+    cookie = '';
+    await ok('POST', '/api/auth/invite', { token: baba, email: 'rosa@x.co', password: 'secret1', pin: '7777' });
+    assert.equal((await ok('GET', '/api/auth/me')).actor.full, false);
+    await ok('GET', '/api/admin/pending'); await ok('GET', '/api/admin/wallet');
+    await ok('POST', '/api/admin/approve', { ids: (await ok('GET', '/api/admin/pending')).map(p => p.id) });
+    assert.equal((await api('POST', '/api/admin/payout', { kid_id: eva, coins: 1 })).status, 403);
+    assert.equal((await api('POST', '/api/admin/tasks', { title: 'X', type: 'daily', all_kids: true })).status, 403);
+    assert.equal((await api('POST', '/api/admin/members/invite', { name: 'Y' })).status, 403);
+    assert.equal((await api('POST', '/api/billing/checkout', { plan: 'annual' })).status, 403);
+    await ok('PUT', '/api/admin/me/pin', { pin: '7788' }); step('babá: aprova, mas não paga, não mexe em tarefas nem convida');
+
+    // o pai vê os responsáveis e coloca a mãe na rotina (jogador sem moedas)
+    cookie = main;
+    const ms = (await ok('GET', '/api/admin/members')).members;
+    assert.equal(ms.length, 3); assert.ok(ms[0].principal && ms[0].me);
+    const anaM = ms.find(m => m.name === 'Ana');
+    await ok('PUT', '/api/admin/members/' + anaM.id, { name: 'Ana', role: 'Mãe', full_access: true, plays: true, avatar: 'cat', color: '#ff8a1f' });
+    const players = await ok('GET', '/api/kids'), anaKid = players.find(k => k.adult);
+    assert.equal(anaKid.name, 'Ana'); assert.equal(anaKid.coins, null);
+    const gym = (await ok('POST', '/api/admin/tasks', { title: 'Academia', type: 'daily', all_kids: 0, kid_ids: [anaKid.id] })).id;
+    const famT = (await ok('POST', '/api/admin/tasks', { title: 'Oração em família', type: 'daily', all_kids: 2 })).id;
+    let adh = await ok('GET', `/api/kids/${anaKid.id}/home`);
+    assert.deepEqual(adh.tasks.map(t => t.id).sort(), [gym, famT].sort()); // não recebe as tarefas só das crianças
+    assert.ok((await ok('GET', `/api/kids/${eva}/home`)).tasks.some(t => t.id === famT));
+    assert.ok(!(await ok('GET', `/api/kids/${eva}/home`)).tasks.some(t => t.id === gym));
+    await ok('POST', `/api/kids/${anaKid.id}/complete`, { task_id: gym });
+    adh = await ok('GET', `/api/kids/${anaKid.id}/home`);
+    assert.equal(adh.tasks.find(t => t.id === gym).status, 'approved'); assert.equal(adh.balance, 0);
+    assert.ok(!(await ok('GET', '/api/admin/wallet')).kids.some(k => k.id === anaKid.id)); step('adulto na rotina: missões próprias e da família, sem moedas');
+
+    assert.equal((await api('DELETE', '/api/admin/members/' + ms[0].id)).status, 400);
+    await ok('DELETE', '/api/admin/members/' + ms.find(m => m.name === 'Rosa').id);
+    cookie = '';
+    assert.equal((await api('POST', '/api/auth/login', { email: 'rosa@x.co', password: 'secret1' })).status, 401);
+    cookie = main; step('responsável removido perde o acesso');
+    assert.ok((await ok('POST', '/api/auth/passkey/register/options', {})).challenge); step('digital: opções de cadastro');
+
     // isolamento entre famílias
     cookie = '';
     await ok('POST', '/api/auth/register', { name: 'Outra', email: 'c@d.co', password: 'secret2', pin: '9999' });

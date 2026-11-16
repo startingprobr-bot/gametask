@@ -9,7 +9,7 @@ const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); r
 
 // ---------- Filhos ----------
 router.get('/kids', wrap(async (req, res) => {
-  const [rows] = await pool.query('SELECT * FROM kids WHERE family_id=? ORDER BY active DESC,sort,id', [req.fid]);
+  const [rows] = await pool.query('SELECT * FROM kids WHERE family_id=? ORDER BY active DESC,adult,sort,id', [req.fid]);
   res.json(rows);
 }));
 router.post('/kids', wrap(async (req, res) => {
@@ -56,7 +56,7 @@ async function saveTask(req, id) {
   const b = req.body, fid = req.fid;
   const v = [b.title.trim(), b.icon || 'star', b.description || null, b.type === 'one_off' ? 'one_off' : 'daily',
     b.weekdays || '0123456', b.type === 'one_off' ? b.date : null, b.time || null, bool(b.repeat_weekly),
-    +b.coins || 0, bool(b.all_kids), bool(b.active ?? 1)];
+    +b.coins || 0, Math.max(0, Math.min(2, +b.all_kids || 0)), bool(b.active ?? 1)];
   if (id) {
     await pool.query('UPDATE tasks SET title=?,icon=?,description=?,type=?,weekdays=?,date=?,time=?,repeat_weekly=?,coins=?,all_kids=?,active=? WHERE id=? AND family_id=?', [...v, id, fid]);
   } else {
@@ -64,7 +64,7 @@ async function saveTask(req, id) {
     id = r.insertId;
   }
   await pool.query('DELETE FROM task_kids WHERE task_id=?', [id]);
-  if (!b.all_kids && b.kid_ids?.length) await pool.query('INSERT INTO task_kids (task_id,kid_id) VALUES ?', [b.kid_ids.map(k => [id, +k])]);
+  if (!(+b.all_kids) && b.kid_ids?.length) await pool.query('INSERT INTO task_kids (task_id,kid_id) VALUES ?', [b.kid_ids.map(k => [id, +k])]);
   await pool.query('DELETE FROM task_rewards WHERE task_id=?', [id]);
   if (b.reward_ids?.length) await pool.query('INSERT INTO task_rewards (task_id,reward_id) VALUES ?', [b.reward_ids.map(r => [id, +r])]);
   return id;
@@ -162,7 +162,7 @@ router.post('/reject', wrap(async (req, res) => {
 // ---------- Carteira ----------
 router.get('/wallet', wrap(async (req, res) => {
   const [[f]] = await pool.query('SELECT coin_value FROM families WHERE id=?', [req.fid]);
-  const [kids] = await pool.query('SELECT id,name,avatar FROM kids WHERE family_id=? AND active=1 ORDER BY sort,id', [req.fid]);
+  const [kids] = await pool.query('SELECT id,name,avatar FROM kids WHERE family_id=? AND active=1 AND adult=0 ORDER BY sort,id', [req.fid]);
   const day = today();
   const [goals] = await pool.query("SELECT * FROM rewards WHERE family_id=? AND kind='goal' AND active=1", [req.fid]);
   const [timeRewards] = await pool.query("SELECT id,title,icon FROM rewards WHERE family_id=? AND kind='time' AND active=1", [req.fid]);
@@ -393,7 +393,7 @@ router.put('/settings', wrap(async (req, res) => {
   const { coin_value, new_pin } = req.body;
   if (new_pin && !/^\d{4,8}$/.test(String(new_pin))) return res.status(400).json({ error: 'PIN: 4 a 8 números' });
   await pool.query('UPDATE families SET coin_value=? WHERE id=?', [Math.max(0, +coin_value || 0), req.fid]);
-  if (new_pin) await pool.query('UPDATE families SET parent_pin_hash=? WHERE id=?', [bcrypt.hashSync(String(new_pin), 10), req.fid]);
+  if (new_pin) await pool.query('UPDATE members SET pin_hash=? WHERE id=?', [bcrypt.hashSync(String(new_pin), 10), req.actor.id]); // PIN de quem abriu o painel
   res.json({ ok: true });
 }));
 

@@ -52,7 +52,8 @@ router.get('/families', wrap(async (req, res) => {
   const q = `%${(req.query.q || '').trim()}%`;
   const [rows] = await pool.query(
     `SELECT f.id,f.name,f.email,f.plan,f.paid_until,f.trial_ends,f.created_at,f.last_seen,f.onboarded,
-      (SELECT COUNT(*) FROM kids k WHERE k.family_id=f.id AND k.active=1) kids,
+      (SELECT COUNT(*) FROM kids k WHERE k.family_id=f.id AND k.active=1 AND k.adult=0) kids,
+      (SELECT COUNT(*) FROM members m WHERE m.family_id=f.id AND m.active=1) adults,
       (SELECT COUNT(*) FROM tasks t WHERE t.family_id=f.id AND t.active=1) tasks,
       (SELECT COUNT(*) FROM completions c WHERE c.family_id=f.id AND c.day>=DATE_SUB(CURDATE(), INTERVAL 7 DAY)) done7,
       (SELECT COALESCE(SUM(amount),0) FROM payments p WHERE p.family_id=f.id AND p.status='approved') paid_total
