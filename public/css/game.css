@@ -686,3 +686,5 @@ a.btn{text-decoration:none}
 .wheel.won .disc{box-shadow:0 5px 0 var(--navy),0 0 0 8px var(--yellow-hi),0 0 0 11px var(--navy),0 0 40px 10px rgba(255,233,112,.7)}
 @media (prefers-reduced-motion:reduce){.wheel,.wheel .disc,.bulb,.wheel-rays,.wheel .pin{animation:none!important}}
 .wheel-won img,.wheel-hint img{flex:0 0 auto;width:34px;height:34px}
+
+.chip.late{background:#ffe3e6;color:#b3122a;border-color:#ff9aa6}

@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const { pool } = require('../db');
 const { today, r2, taskOnDay } = require('../util');
-const { kidTasks, shares, balance, approve, ordered } = require('../lib');
+const { kidTasks, dayTasks, shares, balance, approve, ordered } = require('../lib');
 const { access } = require('../billing');
 const push = require('../push');
 
@@ -21,7 +21,7 @@ router.get('/kids', async (req, res) => {
   const [kids] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE family_id=? AND active=1 ORDER BY adult,sort,id', [req.fid]);
   const day = today();
   for (const k of kids) {
-    const tasks = (await kidTasks(req.fid, k.id)).filter(t => taskOnDay(t, day));
+    const tasks = await dayTasks(req.fid, k.id, day);
     const [[c]] = await pool.query(`SELECT COUNT(*) n FROM completions WHERE kid_id=? AND day=? AND status<>'rejected'`, [k.id, day]);
     const sh = await shares(req.fid, k.id);
     k.coins = k.adult ? null : r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
@@ -53,7 +53,7 @@ async function wheelState(fid, kidId, day, list) {
 router.post('/kids/:id/spin', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today();
-  const tasks = (await kidTasks(req.fid, kid.id)).filter(t => taskOnDay(t, day));
+  const tasks = await dayTasks(req.fid, kid.id, day);
   const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
   const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
   const w = await wheelState(req.fid, kid.id, day, tasks.map(t => ({ status: st[t.id] || 'todo' })));
@@ -69,13 +69,13 @@ router.post('/kids/:id/spin', async (req, res) => {
 router.get('/kids/:id/home', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today(), fid = req.fid;
-  const tasks = await ordered(kid.id, (await kidTasks(fid, kid.id)).filter(t => taskOnDay(t, day)));
+  const tasks = await ordered(kid.id, await dayTasks(fid, kid.id, day));
   const sh = kid.adult ? {} : await shares(fid, kid.id);
   const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
   const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
   const list = tasks.map(t => ({
     id: t.id, title: t.title, icon: t.icon, description: t.description, type: t.type,
-    time: t.time, until: t.until || null, coins: kid.adult ? 0 : t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
+    time: t.time, until: t.until || null, late: t.type === 'one_off' && !t.repeat_weekly && t.date < day, coins: kid.adult ? 0 : t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
   }));
 
   // Tempo de tela de hoje (não acumula)
@@ -113,8 +113,8 @@ router.get('/kids/:id/home', async (req, res) => {
 router.post('/kids/:id/complete', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const day = today();
-  const task = (await kidTasks(req.fid, kid.id)).find(t => t.id === +req.body.task_id);
-  if (!task || !taskOnDay(task, day)) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
+  const task = (await dayTasks(req.fid, kid.id, day)).find(t => t.id === +req.body.task_id);
+  if (!task) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
   // adulto: fica feito na hora, sem ganhos e sem pedir aprovação
   if (kid.adult) {
     await pool.query("INSERT IGNORE INTO completions (family_id,task_id,kid_id,day,status,decided_at) VALUES (?,?,?,?,'approved',NOW())", [req.fid, task.id, kid.id, day]);

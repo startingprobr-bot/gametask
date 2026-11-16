@@ -66,7 +66,8 @@ async function tick() {
       if (!which || !await once(`t${t.id}:${day}:${which}`)) continue;
       let ids = kids.map(k => k.id);
       if (!t.all_kids) { const [tk] = await pool.query('SELECT kid_id FROM task_kids WHERE task_id=?', [t.id]); ids = tk.map(x => x.kid_id).filter(id => kidName[id]); }
-      const [done] = await pool.query("SELECT kid_id FROM completions WHERE task_id=? AND day=? AND status<>'rejected'", [t.id, day]);
+      // tarefa que passa para o dia seguinte: quem já fez num dia anterior não é avisado de novo
+      const [done] = await pool.query(`SELECT kid_id FROM completions WHERE task_id=? AND ${t.carry ? 'day<=?' : 'day=?'} AND status<>'rejected'`, [t.id, day]);
       const left = ids.filter(id => !done.some(x => x.kid_id === id)).map(id => kidName[id]);
       if (!left.length) continue;
       const names = left.length === 1 ? left[0] : left.slice(0, -1).join(', ') + ' e ' + left.at(-1);

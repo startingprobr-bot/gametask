@@ -99,7 +99,8 @@ const COLUMNS = [
   ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],
   ['tasks', 'sort', 'INT NULL'],                           // ordem da família (aba Tarefas → Todas)
   ['families', 'setup_pending', 'TINYINT NOT NULL DEFAULT 0'], // comprou pela página de vendas e ainda não criou senha e PIN
-  ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],          // perfil de jogador de um adulto (sem moedas)
+  ['tasks', 'carry', 'TINYINT NOT NULL DEFAULT 0'],        // dia marcado: se não fizer, passa para o dia seguinte
+  ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],         // perfil de jogador de um adulto (sem moedas)
   ['password_resets', 'member_id', 'INT NULL'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };

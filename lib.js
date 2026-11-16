@@ -10,6 +10,18 @@ async function kidTasks(fid, kidId) {
   return rows;
 }
 
+// Tarefas do jogador em `day`. A que "passa para o dia seguinte" some depois do dia em que foi feita
+// (se o pai rejeitar, ela volta a aparecer).
+async function dayTasks(fid, kidId, day) {
+  const { taskOnDay } = require('./util');
+  const list = (await kidTasks(fid, kidId)).filter(t => taskOnDay(t, day));
+  const carry = list.filter(t => t.carry && !t.repeat_weekly && t.type === 'one_off').map(t => t.id);
+  if (!carry.length) return list;
+  const [done] = await pool.query("SELECT task_id FROM completions WHERE kid_id=? AND task_id IN (?) AND day<? AND status<>'rejected'", [kidId, carry, day]);
+  const gone = new Set(done.map(d => d.task_id));
+  return list.filter(t => !gone.has(t.id));
+}
+
 // Valor de cada recompensa por tarefa: tempo = total ÷ nº de tarefas vinculadas; meta por tarefas = +1.
 // Retorna { taskId: [{reward, value}] }
 async function shares(fid, kidId) {
@@ -78,4 +90,4 @@ function arrange(tasks, pos) {
   return list;
 }
 
-module.exports = { kidTasks, shares, balance, approve, ordered, arrange, familyPos };
+module.exports = { kidTasks, dayTasks, shares, balance, approve, ordered, arrange, familyPos };

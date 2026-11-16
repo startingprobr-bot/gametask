@@ -304,6 +304,7 @@ async function viewKid(id) {
     };
     const mission = (t, i) => {
       const chips = [
+        t.late && !doneLike(t.status) ? `<span class="chip late">Ficou de ontem</span>` : '',
         t.time ? `<span class="chip hour">${esc(t.time)}</span>` : t.until && !doneLike(t.status) ? `<span class="chip until">até ${esc(t.until)}</span>` : '',
         t.coins > 0 ? `<span class="chip">${im('coin')}+${num(t.coins)}</span>` : '',
         ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}+${num(r.value)} ${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}+1</span>`),
@@ -623,7 +624,7 @@ async function adminTasks(pane, refresh) {
   const off = kid ? [] : tasks.filter(t => !t.active);
   const byId = Object.fromEntries(tasks.map(t => [t.id, t]));
   const when = (t) => t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
-    : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
+    : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : t.carry ? ', passa para o dia seguinte até ser feita' : ''}`;
   const who = (t) => t.all_kids === 2 ? 'Toda a família' : t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
   const line = (t, until) => [
     esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
@@ -672,7 +673,9 @@ async function adminTasks(pane, refresh) {
     <div class="field"><span class="lab">Quando</span>${seg('type', [['daily', 'Repete'], ['one_off', 'Dia marcado']], t.type)}</div>
     <div class="field" data-show="daily"><span class="lab">Dias da semana</span><div class="days">${DAYS.map((d, i) => `<label><input type="checkbox" name="wd" value="${i}" ${t.weekdays.includes(i) ? 'checked' : ''}><span title="${DAYN[i]}">${d}</span></label>`).join('')}</div></div>
     <div data-show="one_off"><div class="field"><label for="tdt">Data</label><input id="tdt" type="date" name="date" value="${esc(t.date || '')}"></div>
-      <label class="check"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label></div>
+      <label class="check"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label>
+      <label class="check" data-carry><input type="checkbox" name="carry" ${t.carry ? 'checked' : ''}>Se não fizer, passa para o dia seguinte</label>
+      <p class="hint" data-carry>Boa para tarefas raras, como limpar o ventilador: fica aparecendo todo dia até ser feita.</p></div>
     <div class="field"><label for="th">Horário (opcional)</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
     <div class="field"><label for="tc">Moedas por conclusão</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"><p class="hint">0 = não vale moeda.</p></div>
     <div class="field"><span class="lab">Quem faz</span>${seg('all_kids', [['1', 'Os filhos'], ...(kidsOn.some(k => k.adult) ? [['2', 'Toda a família']] : []), ['0', 'Escolher']], String(t.all_kids === 2 && !kidsOn.some(k => k.adult) ? 1 : t.all_kids))}
@@ -684,7 +687,7 @@ async function adminTasks(pane, refresh) {
   const read = (f) => ({
     title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value,
     weekdays: $$('[name=wd]:checked', f).map(x => x.value).join('') || '0123456', date: f.date.value, time: f.time.value,
-    repeat_weekly: f.repeat_weekly.checked, coins: f.coins.value, all_kids: +f.all_kids.value,
+    repeat_weekly: f.repeat_weekly.checked, carry: f.carry.checked && !f.repeat_weekly.checked, coins: f.coins.value, all_kids: +f.all_kids.value,
     kid_ids: $$('[name=kid]:checked', f).map(x => +x.value), reward_ids: $$('[name=rw]:checked', f).map(x => +x.value), active: f.active.checked,
   });
   const wire = (bg) => {
@@ -692,6 +695,7 @@ async function adminTasks(pane, refresh) {
     const upd = () => {
       $$('[data-show]', f).forEach(d => d.hidden = d.dataset.show !== f.type.value);
       $('[data-kids]', f).hidden = f.all_kids.value !== '0';
+      $$('[data-carry]', f).forEach(x => x.hidden = f.repeat_weekly.checked);
       $('[data-hint]', f).textContent = f.all_kids.value === '1' ? 'Todos os filhos, inclusive os que entrarem depois.' : f.all_kids.value === '2' ? 'Filhos e adultos que participam da rotina. Adultos não ganham moedas.' : '';
       $$('[name=rw]', f).forEach(c => {
         const n = +c.dataset.n + (c.checked && c.dataset.linked === '0' ? 1 : 0) - (!c.checked && c.dataset.linked === '1' ? 1 : 0);

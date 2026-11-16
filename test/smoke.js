@@ -218,6 +218,21 @@ const step = (m) => console.log('✔', m);
     assert.equal((await api('POST', `/api/kids/${anaKid.id}/spin`, {})).status, 400);
     assert.equal((await ok('GET', '/api/admin/wheel')).spins[0].kid, 'Ana'); step('roleta: prêmios, libera ao terminar o dia, um giro por dia');
 
+    // tarefa que passa para o dia seguinte: aparece desde a data até ser feita; quem fez num dia anterior não vê mais
+    const ago = (n) => { const d = new Date(Date.now() - n * 864e5); return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d); };
+    const fan = (await ok('POST', '/api/admin/tasks', { title: 'Limpar o ventilador', type: 'one_off', date: ago(2), carry: true, all_kids: 1 })).id;
+    const fanE = (await ok('GET', `/api/kids/${eva}/home`)).tasks.find(t => t.id === fan);
+    assert.ok(fanE && fanE.late);
+    const dbc = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+    await dbc.query("INSERT INTO completions (family_id,task_id,kid_id,day,status) SELECT family_id,id,?,?,'approved' FROM tasks WHERE id=?", [ber, ago(1), fan]);
+    assert.ok(!(await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === fan));
+    await dbc.query("UPDATE completions SET status='rejected' WHERE task_id=? AND kid_id=?", [fan, ber]);
+    assert.ok((await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === fan)); // rejeitada volta
+    await dbc.end();
+    await ok('PUT', '/api/admin/tasks/' + fan, { title: 'Limpar o ventilador', type: 'one_off', date: ago(2), carry: false, all_kids: 1 });
+    assert.ok(!(await ok('GET', `/api/kids/${eva}/home`)).tasks.some(t => t.id === fan)); // sem a opção, fica só no dia
+    await ok('DELETE', '/api/admin/tasks/' + fan); step('dia marcado que passa para o dia seguinte até ser feito');
+
     // apagar por arrastar: num filho tira só dele; em "Todas" apaga para todos
     const sw = (await ok('POST', '/api/admin/tasks', { title: 'Arrastar', type: 'daily', all_kids: 1 })).id;
     await ok('DELETE', `/api/admin/kids/${eva}/tasks/${sw}`);

@@ -8,6 +8,7 @@ function taskOnDay(t, day) {
   if (!t.active) return false;
   if (t.type === 'daily') return t.weekdays.includes(String(dow(day)));
   if (t.repeat_weekly) return day >= t.date && dow(day) === dow(t.date);
+  if (t.carry) return day >= t.date; // passa para o dia seguinte até ser feita (quem já fez sai em lib.dayTasks)
   return t.date === day;
 }
 // Dias de teste em palavras: 30 = "1 mês", 90 = "3 meses", 45 = "45 dias"
