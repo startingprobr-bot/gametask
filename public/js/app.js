@@ -11,8 +11,14 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- Ícones 3D (Fluent Emoji, MIT) ----------
 const AVATARS = ['unicorn', 'fox', 'robot', 'dragon', 'lion', 'panda', 'frog', 'tiger', 'dog', 'cat', 'owl', 'penguin', 'octopus', 'alien', 'koala', 'butterfly', 'dolphin'];
-const TASK_ICONS = ['star', 'bed', 'tooth', 'toothbrush', 'shower', 'shirt', 'bowl', 'plate', 'sandwich', 'apple', 'spaghetti', 'broom', 'basket', 'bucket', 'trash', 'socks', 'house', 'books', 'openbook', 'pray', 'pencil', 'backpack', 'plant', 'paw', 'teddy', 'karate', 'swim', 'goggles', 'basketball', 'music', 'church', 'soap', 'sun', 'moon'];
-const REWARD_ICONS = ['game', 'tv', 'phone', 'movie', 'ferris', 'coaster', 'icecream', 'pizza', 'soccer', 'gift', 'trophy', 'crown'];
+const TASK_ICONS = ['star', 'bed', 'tooth', 'toothbrush', 'shower', 'shirt', 'bowl', 'plate', 'sandwich', 'apple', 'spaghetti', 'broom', 'basket', 'bucket', 'trash', 'socks', 'house', 'books', 'openbook', 'pray', 'pencil', 'backpack', 'plant', 'paw', 'teddy', 'karate', 'swim', 'goggles', 'basketball', 'music', 'church', 'soap', 'sun', 'moon',
+  'sponge', 'bathtub', 'toilet', 'paper', 'lotion', 'wastebasket', 'recycle', 'jeans', 'dress', 'coat', 'cap', 'glasses', 'door', 'window', 'couch', 'bulb',
+  'cooking', 'milk', 'cup', 'bread', 'egg', 'banana', 'carrot', 'broccoli', 'water', 'baby', 'pill', 'bandage', 'alarm', 'bell', 'sleep',
+  'notebook', 'memo', 'crayon', 'palette', 'scissors', 'ruler', 'abacus', 'globe', 'microscope', 'laptop', 'nophone',
+  'bike', 'skate', 'shoe', 'tennis', 'pingpong', 'volleyball', 'soccer', 'guitar', 'piano', 'violin', 'drum', 'headphone', 'camera',
+  'seedling', 'flower', 'tree', 'fish', 'bone', 'dog', 'cat', 'package', 'cart', 'bag', 'car', 'wrench', 'hammer', 'toolbox', 'money',
+  'heart', 'hug', 'puzzle', 'dice', 'kite', 'balloon', 'candle', 'umbrella', 'tent', 'beach'];
+const REWARD_ICONS = ['game', 'tv', 'phone', 'movie', 'ferris', 'coaster', 'icecream', 'pizza', 'soccer', 'gift', 'trophy', 'crown', 'bike', 'balloon', 'kite', 'dice', 'puzzle', 'camera', 'headphone', 'beach', 'tent', 'money', 'heart', 'hug', 'cup', 'bag', 'car'];
 const COLORS = ['#ff4fae', '#ff8a1f', '#3bd15f', '#8b5bff', '#19c3c9', '#ff4d5e', '#f5b800'];
 const KNOWN = new Set([...AVATARS, ...TASK_ICONS, ...REWARD_ICONS, 'coin', 'clock', 'stopwatch', 'lock', 'check', 'glow', 'party', 'fire', 'hourglass', 'gem', 'moneybag', 'chart', 'gear', 'people', 'clipboard', 'calendar', 'sparkles', 'key', 'cross', 'chest', 'rocket', 'shield', 'card', 'laptop']);
 const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn', '🐉': 'dragon', '🤖': 'robot', '👾': 'alien', '🐼': 'panda', '🦁': 'lion', '🐸': 'frog', '🧚': 'butterfly', '⭐': 'star', '🛏️': 'bed', '🦷': 'tooth', '🍽️': 'plate', '🧹': 'broom', '📚': 'books', '🐕': 'paw', '🧺': 'basket', '🗑️': 'trash', '🥋': 'karate', '🏊': 'swim', '⛪': 'church', '🎒': 'backpack', '🚿': 'shower', '🪥': 'toothbrush', '🌱': 'plant', '🎮': 'game', '📺': 'tv', '📱': 'phone', '🎡': 'ferris', '🍦': 'icecream', '🎬': 'movie', '🏆': 'trophy', '🍕': 'pizza', '⚽': 'soccer', '🧸': 'teddy' };
@@ -384,11 +390,19 @@ function sheet(title, body, onSave, { saveLabel = 'Salvar', danger } = {}) {
   setTimeout(() => f.querySelector('input:not([type=hidden]),select')?.focus(), 50);
   return bg;
 }
-const picker = (name, list, cur) => `<div class="picker" data-pick>${list.map(e => `<button type="button" class="${e === cur ? 'on' : ''}" data-v="${e}" aria-label="${e}">${im(e)}</button>`).join('')}</div><input type="hidden" name="${name}" value="${esc(cur)}">`;
+const picker = (name, list, cur, hidden) => `<div class="picker" data-pick ${hidden ? 'hidden' : ''}>${list.map(e => `<button type="button" class="${e === cur ? 'on' : ''}" data-v="${e}" aria-label="${e}"><img src="/img/3d/${slug(e)}.png" alt="" loading="lazy" decoding="async"></button>`).join('')}</div><input type="hidden" name="${name}" value="${esc(cur)}">`;
 const swatches = (name, cur) => `<div class="swatches" data-pick>${COLORS.map(c => `<button type="button" class="${c === cur ? 'on' : ''}" data-v="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join('')}</div><input type="hidden" name="${name}" value="${esc(cur)}">`;
+// Nome com o ícone do lado: tocar no ícone abre a grade; escolher fecha
+const iconName = (id, label, input, list, cur) => `<div class="field ifield"><label for="${id}">${label}</label>
+  <div class="name-row"><button type="button" class="icon-btn" data-ipick aria-expanded="false" aria-label="Trocar o ícone">${im(cur)}</button>${input}</div>
+  <p class="hint ipick-hint" hidden>Toque no ícone que combina:</p>${picker('icon', list, cur, true)}</div>`;
 const seg = (name, opts, cur) => `<div class="seg-ctl">${opts.map(([v, l]) => `<label><input type="radio" name="${name}" value="${v}" ${v === cur ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
 document.addEventListener('click', (e) => {
+  const ip = e.target.closest('[data-ipick]');
+  if (ip) { const f = ip.closest('.ifield'), g = $('[data-pick]', f), open = g.hidden; g.hidden = !open; $('.ipick-hint', f).hidden = !open; ip.setAttribute('aria-expanded', open); sfx.tap(); return; }
   const b = e.target.closest('[data-pick] button'); if (!b) return;
+  const fld = b.closest('.ifield');
+  if (fld) { $('[data-ipick]', fld).innerHTML = im(b.dataset.v); b.parentElement.hidden = true; $('.ipick-hint', fld).hidden = true; $('[data-ipick]', fld).setAttribute('aria-expanded', 'false'); }
   const w = b.parentElement; $$('button', w).forEach(x => x.classList.remove('on')); b.classList.add('on');
   w.nextElementSibling.value = b.dataset.v; sfx.tap();
 });
@@ -667,8 +681,7 @@ async function adminTasks(pane, refresh) {
       async () => { const r = await api('DELETE', `/admin/tasks/${id}`); toast(r.archived ? 'Tarefa desativada (já tinha histórico)' : 'Tarefa apagada'); refresh(); }, { saveLabel: 'Apagar', danger: true });
   });
   const form = (t = { title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 }) => `
-    <div class="field"><label for="tt">Nome da tarefa</label><input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required></div>
-    <div class="field"><span class="lab">Ícone</span>${picker('icon', TASK_ICONS, slug(t.icon))}</div>
+    ${iconName('tt', 'Nome da tarefa', `<input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required>`, TASK_ICONS, slug(t.icon))}
     <div class="field"><label for="td">Detalhe (opcional)</label><input id="td" name="description" value="${esc(t.description)}" placeholder="Antes do café"></div>
     <div class="field"><span class="lab">Quando</span>${seg('type', [['daily', 'Repete'], ['one_off', 'Dia marcado']], t.type)}</div>
     <div class="field" data-show="daily"><span class="lab">Dias da semana</span><div class="days">${DAYS.map((d, i) => `<label><input type="checkbox" name="wd" value="${i}" ${t.weekdays.includes(i) ? 'checked' : ''}><span title="${DAYN[i]}">${d}</span></label>`).join('')}</div></div>
@@ -756,8 +769,7 @@ async function adminRewards(pane, refresh) {
     <section class="box" id="wheelBox"></section>`;
   adminWheel($('#wheelBox')).catch(e => toast(e.message, true));
   const form = (r = { title: '', icon: 'game', kind: 'time', unit: 'min', total_value: 20, goal_mode: 'tasks', active: 1 }) => `
-    <div class="field"><label for="rn">Nome</label><input id="rn" name="title" value="${esc(r.title)}" placeholder="Videogame, YouTube, Parque de diversão" required></div>
-    <div class="field"><span class="lab">Ícone</span>${picker('icon', REWARD_ICONS, slug(r.icon, 'game'))}</div>
+    ${iconName('rn', 'Nome', `<input id="rn" name="title" value="${esc(r.title)}" placeholder="Videogame, YouTube, Parque de diversão" required>`, REWARD_ICONS, slug(r.icon, 'game'))}
     <div class="field"><span class="lab">Tipo</span>${seg('kind', [['time', 'Tempo por dia'], ['goal', 'Meta']], r.kind)}</div>
     <div class="field" data-show="goal"><span class="lab">A meta conta</span>${seg('goal_mode', [['tasks', 'Missões feitas'], ['coins', 'Moedas']], r.goal_mode || 'tasks')}</div>
     <div class="field"><label for="rv" data-lbl>Minutos por dia</label><input id="rv" type="number" step="any" min="1" name="total_value" value="${r.total_value}" inputmode="decimal" required></div>

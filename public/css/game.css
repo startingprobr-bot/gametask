@@ -688,3 +688,14 @@ a.btn{text-decoration:none}
 .wheel-won img,.wheel-hint img{flex:0 0 auto;width:34px;height:34px}
 
 .chip.late{background:#ffe3e6;color:#b3122a;border-color:#ff9aa6}
+
+/* ---------- v10: ícone ao lado do nome, grade só ao tocar ---------- */
+.name-row{display:flex;gap:10px;align-items:stretch}
+.name-row input{flex:1;min-width:0}
+.icon-btn{flex:0 0 auto;width:58px;min-height:54px;border-radius:14px;border:2px solid var(--navy);background:var(--mist);display:grid;place-items:center;cursor:pointer;box-shadow:0 3px 0 var(--navy);position:relative}
+.icon-btn img{width:40px;height:40px}
+.icon-btn::after{content:'';position:absolute;right:3px;bottom:3px;width:0;height:0;border:5px solid transparent;border-top:6px solid var(--navy);border-bottom:0}
+.icon-btn[aria-expanded=true]{outline:3px solid var(--yellow)}
+.icon-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--navy)}
+.ifield .picker{margin-top:8px;max-height:300px;overflow:auto;animation:slide .25s var(--out) both}
+[hidden]{display:none!important}
