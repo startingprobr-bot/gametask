@@ -141,11 +141,13 @@ function openWheel(kidId, w, done, celebrate) {
     btn.disabled = true; sfx.tap(); wheel.classList.add('go');
     let r; try { r = await api('POST', `/kids/${kidId}/spin`, {}); } catch (e) { toast(e.message, true); sfx.bad(); return close(); }
     const n = r.prizes.length, seg = 360 / n, c = (r.index + .5) * seg;
-    const ms = reduced ? 50 : 5200, final = 360 * 6 - c + (Math.random() - .5) * seg * .6;
-    const ticks = reduced ? 0 : setInterval(() => sfx.tap(), 170);
-    disc.style.transition = `transform ${ms}ms cubic-bezier(.12,.62,.08,1)`; void disc.offsetWidth; disc.style.transform = `rotate(${final}deg)`;
+    // gira bastante e vai freando devagar; o "tic" da setinha também desacelera
+    const ms = reduced ? 50 : 9500, final = 360 * 12 - c + (Math.random() - .5) * seg * .6, t0 = performance.now();
+    let ticks = 0; const tick = () => { const p = (performance.now() - t0) / ms; if (reduced || p >= .97) return; sfx.tap(); ticks = setTimeout(tick, 90 + 520 * p * p); };
+    tick();
+    disc.style.transition = `transform ${ms}ms cubic-bezier(.15,.55,.1,1)`; void disc.offsetWidth; disc.style.transform = `rotate(${final}deg)`;
     setTimeout(() => {
-      clearInterval(ticks); sfx.win(); wheel.classList.replace('go', 'won');
+      clearTimeout(ticks); sfx.win(); wheel.classList.replace('go', 'won');
       res.innerHTML = `<div>Você ganhou<b>${esc(r.prize.emoji || '')} ${esc(r.prize.label)}</b></div>`;
       const b = disc.getBoundingClientRect();
       [0, 350, 700].forEach((t, i) => setTimeout(() => sparks(b.left + b.width * [.5, .2, .8][i], b.top + b.height * [.1, .4, .4][i]), t));
@@ -330,8 +332,7 @@ async function viewKid(id) {
         </section>
         ${d.time.length || d.goals.length ? `<section class="panel">${d.time.map(timeMeter).join('')}${d.time.length && d.goals.length ? '<div class="gap"></div>' : ''}${d.goals.map(goalRoad).join('')}</section>` : ''}</div>
         ${!d.wheel ? '' : d.wheel.ready ? `<button type="button" class="wheel-cta" id="wheelGo"><i class="wi"></i><span><b>Roleta liberada!</b><span>Gire e ganhe uma surpresa</span></span></button>`
-          : d.wheel.spun ? `<div class="wheel-won">${im('gift')}<span>Prêmio de hoje: <b>${esc(d.wheel.spun.emoji || '')} ${esc(d.wheel.spun.label)}</b></span></div>`
-          : d.total ? `<div class="wheel-hint">${im('sparkles')}<span>Termine todas as missões para girar a roleta!</span></div>` : ''}
+          : d.wheel.spun ? `<div class="wheel-won">${im('gift')}<span>Prêmio de hoje: <b>${esc(d.wheel.spun.emoji || '')} ${esc(d.wheel.spun.label)}</b></span></div>` : ''}
         <div class="section-h"><h2 class="d stroke-sm">Missões</h2></div>
         ${!d.tasks.length ? `<div class="empty">${im('party')}<p class="d stroke-sm">Nenhuma missão hoje. Aproveite!</p></div>`
           : todo.length ? `<div class="missions">${todo.map(mission).join('')}</div>` : `<div class="all-done">${im('trophy')}<b class="d stroke-sm">Todas as missões feitas!</b></div>`}
