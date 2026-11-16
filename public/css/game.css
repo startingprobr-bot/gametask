@@ -653,7 +653,7 @@ a.btn{text-decoration:none}
 .prizes{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 6px}
 .prize{padding:7px 12px;border-radius:999px;background:var(--mist);font-weight:800;font-size:15px}
 .prow{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-.prow .pe{flex:0 0 58px;text-align:center;font-size:22px;padding-inline:4px}
+.prow .pe{flex:0 0 58px;min-height:44px;font-size:24px;padding:0}.prow .pe.sel{outline:3px solid var(--yellow)}.emo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;margin:6px 0 10px}.emo{min-height:46px;font-size:26px;border-radius:12px;border:2px solid var(--mist);background:#fff;cursor:pointer}.emo:active{background:var(--mist)}
 .prow .pl{flex:1;min-width:0}
 .prow .px{min-width:40px;padding:0}
 .list .item[data-id]{touch-action:pan-y;-webkit-user-select:none;user-select:none;position:relative}

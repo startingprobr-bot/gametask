@@ -713,18 +713,25 @@ async function adminWheel(box) {
     ${prizes.length ? `<div class="prizes">${prizes.map(p => `<span class="prize">${esc(p.emoji || '🎁')} ${esc(p.label)}</span>`).join('')}</div>${prizes.length < 2 ? '<p class="hint">Falta mais 1 prêmio para a roleta aparecer para as crianças.</p>' : ''}` : ''}
     ${spins.length ? `<h3 class="sub-h">Últimos giros</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} ganhou ${esc(s.emoji || '')} ${esc(s.label)}</div><div class="s">${dayName(s.day)}</div></div></div>`).join('')}</div>` : ''}`;
   const sample = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme']];
-  const row = (e, l) => `<div class="prow"><input class="pe" aria-label="Emoji" maxlength="4" value="${esc(e)}" placeholder="🎁"><input class="pl" aria-label="Prêmio" maxlength="40" value="${esc(l)}" placeholder="Abraço do pai"><button type="button" class="btn ghost sm px" aria-label="Tirar este prêmio">✕</button></div>`;
+  const EMOJIS = ['🤗','😘','🎮','📺','🎬','🍦','🍫','🍕','🍔','🍿','🎂','🧁','🎁','🎈','🎉','⭐','🏆','🎯','🎲','🧩','🎨','📚','⚽','🚲','🏊','🛝','🎡','🎢','🐶','🐱','🦄','🚗','✈️','🌙','🛏️','🛁','🧸','🎵','💰','🪙','❤️','👏','🎤','🏖️'];
+  const row = (e, l) => `<div class="prow"><button type="button" class="btn ghost sm pe" aria-label="Escolher ícone" data-v="${esc(e)}">${esc(e) || '🎁'}</button><input class="pl" aria-label="Prêmio" maxlength="40" value="${esc(l)}" placeholder="Abraço do pai"><button type="button" class="btn ghost sm px" aria-label="Tirar este prêmio">✕</button></div>`;
   $('#wedit').onclick = () => {
     const bg = sheet('Prêmios da roleta', `<p class="lead" style="margin-top:6px">Um emoji e o nome de cada prêmio (até 12). Todos têm a mesma chance de sair.</p>
       <div id="prows">${(prizes.length ? prizes.map(p => [p.emoji || '', p.label]) : sample).map(([e, l]) => row(e, l)).join('')}</div>
-      <button type="button" class="btn ghost sm" id="padd">Adicionar prêmio</button>`,
+      <button type="button" class="btn ghost sm" id="padd">Adicionar prêmio</button>
+      <div class="emo-pick" id="emo" hidden><p class="hint">Toque no ícone do prêmio:</p><div class="emo-grid">${EMOJIS.map(e => `<button type="button" class="emo" data-e="${e}">${e}</button>`).join('')}</div></div>`,
       async (f) => {
-        const list = $$('.prow', f).map(r => ({ emoji: $('.pe', r).value, label: $('.pl', r).value })).filter(p => p.label.trim());
+        const list = $$('.prow', f).map(r => ({ emoji: $('.pe', r).dataset.v, label: $('.pl', r).value })).filter(p => p.label.trim());
         if (list.length === 1) throw new Error('Coloque pelo menos 2 prêmios');
         await api('PUT', '/admin/wheel', { prizes: list }); toast('Roleta salva'); adminWheel(box);
       });
     $('#padd', bg).onclick = () => { if ($$('.prow', bg).length >= 12) return toast('No máximo 12 prêmios', true); $('#prows', bg).insertAdjacentHTML('beforeend', row('', '')); $$('.pl', bg).at(-1).focus(); };
-    bg.addEventListener('click', (e) => { const x = e.target.closest('.px'); if (x) x.parentElement.remove(); });
+    let cur = null; const emo = $('#emo', bg);
+    bg.addEventListener('click', (e) => {
+      const x = e.target.closest('.px'); if (x) { if (cur && x.parentElement.contains(cur)) { cur = null; emo.hidden = true; } x.parentElement.remove(); return; }
+      const pe = e.target.closest('.pe'); if (pe) { cur = pe; $$('.pe', bg).forEach(b => b.classList.toggle('sel', b === pe)); emo.hidden = false; emo.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
+      const em = e.target.closest('.emo'); if (em && cur) { cur.dataset.v = em.dataset.e; cur.textContent = em.dataset.e; cur.classList.remove('sel'); cur = null; emo.hidden = true; sfx.tap(); }
+    });
   };
 }
 
