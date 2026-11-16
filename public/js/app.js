@@ -837,9 +837,14 @@ async function viewPaywall() {
   $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
     if (!ME.parent) return viewPin(); // só um responsável assina (volta para os planos depois do PIN)
     if (!s.enabled) throw new Error('O pagamento on-line ainda está sendo ativado. Tente mais tarde.');
-    const label = b.textContent; b.disabled = true; b.textContent = 'Abrindo o Mercado Pago…';
-    try { const r = await api('POST', '/billing/checkout', { plan: b.dataset.plan }); location.href = r.url; }
-    catch (e) { b.disabled = false; b.textContent = label; throw e; }
+    const plan = b.dataset.plan;
+    const ch = sheet('Como você quer pagar?', '<div class="pay-opts"><button type="button" class="btn green" data-via="pix">Pix, rápido e aqui mesmo</button><button type="button" class="btn ghost" data-via="mp">Cartão ou boleto</button></div>', async () => {});
+    ch.querySelector('.actions').remove();
+    ch.querySelector('[data-via=pix]').onclick = guard(async () => {
+      const r = await api('POST', '/billing/pix', { plan }); ch.remove();
+      showPix(r, async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); });
+    });
+    ch.querySelector('[data-via=mp]').onclick = guard(async () => { const r = await api('POST', '/billing/checkout', { plan }); location.href = r.url; });
   }));
   const back = $('#back'); if (back) back.onclick = () => { location.hash = ME.parent ? '#/admin' : '#/'; };
   const keep = $('#keepFree'); if (keep) keep.onclick = () => { sfx.tap(); location.hash = '#/'; };
@@ -1102,6 +1107,31 @@ async function adminAlarms(pane, refresh) {
   });
 }
 
+// ---------- Pix dentro do app ----------
+// r = { ref, amount, plan, code, qr }. Consulta a cada 4 s até o pagamento cair; onPaid roda uma vez.
+function showPix(r, onPaid) {
+  const bg = sheet('Pague com Pix', `
+    <p class="lead" style="margin-top:6px">Abra o app do seu banco, escolha <b>Pix</b> e leia o QR Code ou use o código copia e cola.</p>
+    <div class="pix">${r.qr ? `<img class="pix-qr" src="data:image/png;base64,${r.qr}" alt="QR Code do Pix">` : ''}
+      <div class="pix-amount"><span>Valor</span><b class="d num">${brl(r.amount)}</b></div></div>
+    <div class="field"><label for="pc">Pix copia e cola</label><input id="pc" value="${esc(r.code)}" readonly></div>
+    <div class="share-row"><button type="button" class="btn green" id="pcp">Copiar código</button></div>
+    <p class="pix-wait" id="pw"><i class="spin"></i><span>Aguardando o pagamento… assim que cair, esta tela avança sozinha.</span></p>`,
+    async () => { if (!await check()) throw new Error('Ainda não recebemos o pagamento. Pode levar alguns segundos depois de pagar.'); }, { saveLabel: 'Já paguei' });
+  let done = false, timer;
+  const stop = () => { done = true; clearTimeout(timer); };
+  const check = async () => {
+    if (done) return true;
+    const st = (await api('GET', '/billing/pix/' + r.ref)).status;
+    if (st === 'approved') { stop(); sfx.win(); bg.remove(); onPaid(); return true; }
+    if (['rejected', 'cancelled', 'invalid'].includes(st)) { stop(); $('#pw span', bg).textContent = 'O Mercado Pago não confirmou este Pix. Feche e gere outro.'; }
+    return false;
+  };
+  const tick = () => { if (done || !document.body.contains(bg)) return stop(); check().catch(() => {}).finally(() => { if (!done) timer = setTimeout(tick, 4000); }); };
+  timer = setTimeout(tick, 4000);
+  bg.querySelector('#pcp').onclick = async () => { const i = bg.querySelector('#pc'); i.select(); try { await navigator.clipboard.writeText(r.code); } catch { document.execCommand('copy'); } toast('Código copiado'); };
+}
+
 // ---------- Carrinho (vindo da página de vendas): paga primeiro, cria a senha depois ----------
 const trialText = (d) => { d = Math.round(+d) || 0; return d >= 30 && d % 30 === 0 ? (d === 30 ? '1 mês' : `${d / 30} meses`) : `${d} ${d === 1 ? 'dia' : 'dias'}`; };
 const CART = {
@@ -1126,8 +1156,8 @@ async function viewBuy(planIn) {
       <div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div>
       <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" autocomplete="email" required><p class="hint">Enviamos a confirmação para ele. A senha você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>
-      <div class="actions"><button class="btn green big">Ir para o pagamento</button></div>
-      <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago: Pix, cartão ou boleto.</p>
+      <div class="actions pay-actions"><button class="btn green big" name="via" value="pix">Pagar com Pix</button><button class="btn ghost" name="via" value="mp">Cartão ou boleto</button></div>
+      <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago.</p>
     </form>
     <button class="switch" id="free">Prefiro testar de graça primeiro</button>
     <a class="switch home-link" href="#/login">Já tenho conta</a>
@@ -1136,12 +1166,19 @@ async function viewBuy(planIn) {
   $('#f').addEventListener('change', (e) => { if (e.target.name === 'plan') { plan = e.target.value; draw(); sfx.tap(); } });
   $('#free').onclick = () => { location.hash = '#/criar'; };
   $('#f').onsubmit = async (e) => {
-    e.preventDefault(); const btn = e.target.querySelector('.actions .btn'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Abrindo o Mercado Pago…';
-    try { const r = await api('POST', '/billing/guest-checkout', { plan, name: e.target.name.value, email: e.target.email.value }); location.href = r.url; }
-    catch (er) {
+    e.preventDefault();
+    const via = e.submitter?.value || 'pix', btns = $$('.actions .btn', e.target), label = e.submitter?.textContent;
+    btns.forEach(b => { b.disabled = true; }); if (e.submitter) e.submitter.textContent = via === 'pix' ? 'Gerando o Pix…' : 'Abrindo o Mercado Pago…';
+    const body = { plan, name: e.target.name.value, email: e.target.email.value };
+    try {
+      $('#err').textContent = '';
+      if (via === 'mp') { const r = await api('POST', '/billing/guest-checkout', body); location.href = r.url; return; }
+      const r = await api('POST', '/billing/guest-pix', body);
+      showPix(r, async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só criar a sua senha e o PIN dos pais.', 'Continuar'); });
+    } catch (er) {
       $('#err').innerHTML = esc(er.message) + (er.code === 'exists' ? ' <a href="#/login">Entrar</a>' : '');
-      btn.disabled = false; btn.textContent = label; e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad();
-    }
+      e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad();
+    } finally { if (e.submitter && document.body.contains(e.submitter)) { btns.forEach(b => { b.disabled = false; }); e.submitter.textContent = label; } }
   };
 }
 

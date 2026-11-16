@@ -32,6 +32,9 @@ async function dropStale(email) {
   if (!f) return;
   const [[p]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND status='approved' LIMIT 1", [f.id]);
   if (p) return;
+  // Pix gerado há menos de 24h ainda pode ser pago: não apaga o cadastro
+  const [[open]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND status='pending' AND mp_payment_id IS NOT NULL AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY) LIMIT 1", [f.id]);
+  if (open) return;
   for (const t of ['members', 'payments', 'kids', 'tasks', 'rewards', 'password_resets']) await pool.query(`DELETE FROM ${t} WHERE family_id=?`, [f.id]);
   await pool.query('DELETE FROM families WHERE id=?', [f.id]);
 }

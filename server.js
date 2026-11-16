@@ -124,7 +124,7 @@ const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHE
 
 app.get('/api/public/pricing', wrap(async (req, res) => res.json(await billing.prices())));
 app.use('/api/auth', members.auth);
-app.post('/api/billing/checkout', needFamily, needParent, needFull);
+app.post(['/api/billing/checkout', '/api/billing/pix'], needFamily, needParent, needFull);
 app.use('/api/billing', billing.router);
 app.use('/api/owner', needFamily, needParent, needFull, needOwner, require('./routes/owner'));
 app.use('/api/admin', needFamily, billing.needActive, needParent, members.limitDaily, members.admin, require('./routes/admin'));

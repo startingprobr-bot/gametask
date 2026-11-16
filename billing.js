@@ -55,9 +55,9 @@ async function needActive(req, res, next) {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Erro interno' }); }
 }
 
-async function mp(method, path, body) {
+async function mp(method, path, body, headers = {}) {
   const r = await fetch(MP + path, {
-    method, headers: { authorization: `Bearer ${mpToken()}`, 'content-type': 'application/json' },
+    method, headers: { authorization: `Bearer ${mpToken()}`, 'content-type': 'application/json', ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json().catch(() => ({}));
@@ -147,25 +147,76 @@ router.post('/checkout', needSession, wrap(async (req, res) => {
   res.json({ url: await startCheckout(req, req.fid, req.body.plan) });
 }));
 
-// Carrinho da página de vendas: quem ainda não tem conta paga primeiro e cria a senha e o PIN depois.
-// A família nasce "pendente" (senha aleatória) e a sessão deste aparelho fica ligada a ela para finalizar na volta.
-const tries = new Map();
-router.post('/guest-checkout', wrap(async (req, res) => {
-  const hits = (tries.get(req.ip) || []).filter(t => Date.now() - t < 3600e3);
-  if (hits.length >= 10) return res.status(429).json({ error: 'Muitas tentativas. Tente de novo em alguns minutos.' });
-  tries.set(req.ip, [...hits, Date.now()]);
+// Pix dentro do app (Checkout Transparente): gera o QR Code e o "copia e cola"; o app consulta até cair (e o webhook também confirma)
+async function startPix(req, fid, planIn) {
+  const plan = PLANS.includes(planIn) ? planIn : 'annual';
+  const amount = (await prices())[plan];
+  const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [fid]);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount,method) VALUES (?,?,?,?)', [fid, plan, amount, 'pix']);
+  const base = appUrl() || `${req.protocol}://${req.get('host')}`;
+  const pay = await mp('POST', '/v1/payments', {
+    transaction_amount: amount, description: `GameTask: plano ${PLAN_TITLE[plan]}`, payment_method_id: 'pix',
+    payer: { email: f.email, first_name: String(f.name).slice(0, 40) }, external_reference: String(r.insertId),
+    ...(base.startsWith('https://') ? { notification_url: `${base}/api/billing/webhook` } : {}),
+  }, { 'X-Idempotency-Key': `gt-pix-${r.insertId}-${crypto.randomBytes(4).toString('hex')}` });
+  const td = pay.point_of_interaction?.transaction_data;
+  if (!td?.qr_code) throw Object.assign(new Error('Pix sem QR Code'), { mp: { message: 'O Mercado Pago não devolveu o QR Code do Pix.' }, mpStatus: 502 });
+  await pool.query('UPDATE payments SET mp_payment_id=? WHERE id=?', [String(pay.id), r.insertId]);
+  return { ref: r.insertId, amount, plan, code: td.qr_code, qr: td.qr_code_base64 || null };
+}
+
+router.post('/pix', needSession, wrap(async (req, res) => {
   if (!mpToken()) return noMp(res);
+  res.json(await startPix(req, req.fid, req.body.plan));
+}));
+// O app pergunta a cada poucos segundos se o Pix já caiu
+router.get('/pix/:ref', needSession, wrap(async (req, res) => {
+  const [[row]] = await pool.query('SELECT id,status,mp_payment_id FROM payments WHERE id=? AND family_id=?', [+req.params.ref, req.fid]);
+  if (!row) return res.status(404).json({ error: 'Pagamento não encontrado' });
+  let status = row.status;
+  if (status !== 'approved' && row.mp_payment_id) status = (await syncPayment(row.mp_payment_id).catch(e => (console.error(e.mp || e), row)))?.status || status;
+  res.json({ status });
+}));
+
+// Carrinho da página de vendas: quem ainda não tem conta paga primeiro e cria a senha e o PIN depois.
+// A família nasce "pendente" (senha aleatória) e a sessão deste aparelho fica ligada a ela para finalizar depois de pagar.
+// Quem volta a tentar com o mesmo e-mail (QR vencido, trocou de forma de pagar) reaproveita o cadastro ainda sem pagamento.
+const tries = new Map();
+async function guestFamily(req, res) {
+  const hits = (tries.get(req.ip) || []).filter(t => Date.now() - t < 3600e3);
+  if (hits.length >= 15) { res.status(429).json({ error: 'Muitas tentativas. Tente de novo em alguns minutos.' }); return null; }
+  tries.set(req.ip, [...hits, Date.now()]);
+  if (!mpToken()) { noMp(res); return null; }
   const email = String(req.body.email || '').toLowerCase().trim(), name = String(req.body.name || '').trim().slice(0, 80);
-  if (!name) return res.status(400).json({ error: 'Escreva o nome da família' });
-  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido' });
-  await members.dropStale(email);
-  if (await members.emailTaken(email)) return res.status(409).json({ error: 'Este e-mail já tem conta. Entre e escolha o plano em "Ver planos".', code: 'exists' });
-  const trial = +(await settings()).trial_days;
-  const junk = () => bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 4);
-  const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name, email, junk(), junk(), trial]);
-  const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,'Responsável','Responsável',1,1,?)", [f.insertId, junk()]);
-  req.session = { fid: f.insertId, mid: m.insertId, actor: m.insertId, parentUntil: Date.now() + 30 * 60000 };
-  res.json({ url: await startCheckout(req, f.insertId, req.body.plan) });
+  if (!name) { res.status(400).json({ error: 'Escreva o nome da família' }); return null; }
+  if (!/^\S+@\S+\.\S+$/.test(email)) { res.status(400).json({ error: 'Digite um e-mail válido' }); return null; }
+  const exists = () => res.status(409).json({ error: 'Este e-mail já tem conta. Entre e escolha o plano em "Ver planos".', code: 'exists' });
+  const [[old]] = await pool.query('SELECT id,setup_pending FROM families WHERE email=?', [email]);
+  let fid, mid;
+  if (old) {
+    if (!old.setup_pending) { exists(); return null; }
+    const [[paid]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND status='approved' LIMIT 1", [old.id]);
+    if (paid) { res.status(409).json({ error: 'O pagamento deste e-mail já foi confirmado. Toque em "Esqueci a senha" na tela de entrada para criar o acesso.', code: 'exists' }); return null; }
+    await pool.query('UPDATE families SET name=? WHERE id=?', [name, old.id]);
+    fid = old.id; mid = await members.principalId(fid);
+  } else {
+    if (await members.emailTaken(email)) { exists(); return null; }
+    const trial = +(await settings()).trial_days;
+    const junk = () => bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 4);
+    const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name, email, junk(), junk(), trial]);
+    const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,'Responsável','Responsável',1,1,?)", [f.insertId, junk()]);
+    fid = f.insertId; mid = m.insertId;
+  }
+  req.session = { fid, mid, actor: mid, parentUntil: Date.now() + 30 * 60000 };
+  return fid;
+}
+router.post('/guest-checkout', wrap(async (req, res) => {
+  const fid = await guestFamily(req, res); if (!fid) return;
+  res.json({ url: await startCheckout(req, fid, req.body.plan) });
+}));
+router.post('/guest-pix', wrap(async (req, res) => {
+  const fid = await guestFamily(req, res); if (!fid) return;
+  res.json(await startPix(req, fid, req.body.plan));
 }));
 
 // Volta do checkout: confere na hora, sem esperar o webhook

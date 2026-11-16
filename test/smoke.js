@@ -33,6 +33,10 @@ const step = (m) => console.log('✔', m);
         const j = JSON.parse(b); lastPref = { ref: j.external_reference, amount: j.items[0].unit_price };
         return res.end(JSON.stringify({ init_point: 'https://mp.test/pay/' + j.external_reference }));
       }
+      if (req.method === 'POST' && req.url === '/v1/payments') {
+        const j = JSON.parse(b); lastPref = { ref: j.external_reference, amount: j.transaction_amount };
+        return res.end(JSON.stringify({ id: 777, status: 'pending', point_of_interaction: { transaction_data: { qr_code: '00020126PIXTESTE', qr_code_base64: 'iVBORw0KGgo=' } } }));
+      }
       if (req.url.startsWith('/v1/payments/') && lastPref)
         return res.end(JSON.stringify({ id: 777, status: 'approved', transaction_amount: lastPref.amount, currency_id: 'BRL', external_reference: lastPref.ref, payment_method_id: 'pix' }));
       res.statusCode = 404; res.end('{}');
@@ -308,6 +312,21 @@ const step = (m) => console.log('✔', m);
     await ok('POST', '/api/auth/register', { name: 'Família Velho', email: 'velho@x.co', password: 'secret1', pin: '1111' });
     assert.equal((await ok('GET', '/api/auth/me')).pending, false);
     step('carrinho: paga primeiro, finaliza com senha e PIN, e e-mail abandonado é liberado');
+
+    // Pix dentro do app: QR no carrinho, consulta até cair, e quem volta a tentar reaproveita o cadastro
+    cookie = '';
+    const px = await ok('POST', '/api/billing/guest-pix', { plan: 'annual', name: 'Família Pix', email: 'pix@x.co' });
+    assert.ok(px.code.startsWith('0002') && px.qr && px.ref);
+    assert.equal((await ok('GET', '/api/auth/me')).pending, true);
+    const px2 = await ok('POST', '/api/billing/guest-pix', { plan: 'monthly', name: 'Família Pix', email: 'pix@x.co' });
+    assert.ok(px2.ref !== px.ref);
+    assert.equal((await ok('GET', '/api/billing/pix/' + px2.ref)).status, 'approved');
+    assert.equal((await ok('GET', '/api/auth/me')).access.status, 'paid');
+    assert.equal((await api('GET', '/api/billing/pix/' + px.ref)).status, 200); // o outro Pix da mesma família segue consultável
+    assert.equal((await api('POST', '/api/billing/guest-pix', { plan: 'annual', name: 'Outro', email: 'pix@x.co' })).status, 409); // já pago: não reabre
+    cookie = '';
+    assert.equal((await api('GET', '/api/billing/pix/' + px.ref)).status, 401); // sem sessão não consulta
+    step('Pix: QR dentro do app, confirmação por consulta e reaproveita cadastro sem pagamento');
     cookie = '';
     await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
 
