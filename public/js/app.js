@@ -210,8 +210,52 @@ async function paymentReturn() {
 }
 window.addEventListener('hashchange', guard(route));
 guard(route)();
+// ---------- Atualização automática ----------
+// O app instalado fica aberto em segundo plano e não recarrega sozinho. Ao voltar para ele (e a cada 10 min),
+// pergunta a versão ao servidor; se mudou depois de um deploy, recarrega (sem atrapalhar um formulário aberto).
+const APP_V = new URL(document.currentScript?.src || location.href).searchParams.get('v');
+let swReg = null, lastCheck = 0;
+async function checkUpdate() {
+  if (!APP_V || Date.now() - lastCheck < 30000) return;
+  lastCheck = Date.now();
+  try {
+    const { v } = await (await fetch('/api/version', { cache: 'no-store' })).json();
+    if (!v || v === APP_V) return;
+    swReg?.update().catch(() => {});
+    const go = () => { if ($('.sheet-bg,.burst')) return setTimeout(go, 5000); location.reload(); };
+    go();
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+addEventListener('focus', checkUpdate);
+setInterval(checkUpdate, 10 * 60000);
+
+// ---------- Convite para instalar ----------
+// Android/Chrome: botão que abre o pedido de instalação. iPhone: explica o "Adicionar à Tela de Início".
+let installEv = null;
+const inApp = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const onIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEv = e; setTimeout(installBanner, 2500); });
+addEventListener('appinstalled', () => { $('.install')?.remove(); toast('GameTask instalado!'); });
+function installBanner() {
+  if (inApp() || $('.install')) return;
+  const snooze = +(store.get('gt-install-later') || 0);
+  if (Date.now() < snooze) return;
+  if (!installEv && !onIOS) return;
+  if ($('.sheet-bg,.burst')) return setTimeout(installBanner, 8000);
+  const d = document.createElement('div'); d.className = 'install'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Instalar o GameTask');
+  d.innerHTML = `<img src="/icons/icon-192.png" alt="" class="install-ic"><div class="grow"><b>Instale o GameTask</b>
+    <span>${installEv ? 'Abre como um app, em tela cheia, direto da tela inicial.' : 'Toque em <b>Compartilhar</b> <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg> e depois em <b>Adicionar à Tela de Início</b>.'}</span></div>
+    ${installEv ? '<button class="btn green sm" data-in>Instalar</button>' : ''}<button class="install-x" data-later aria-label="Agora não">✕</button>`;
+  document.body.append(d);
+  $('[data-later]', d).onclick = () => { store.set('gt-install-later', String(Date.now() + 5 * 864e5)); d.remove(); };
+  const b = $('[data-in]', d);
+  if (b) b.onclick = async () => { d.remove(); installEv.prompt(); const r = await installEv.userChoice.catch(() => null); installEv = null; if (r?.outcome !== 'accepted') store.set('gt-install-later', String(Date.now() + 5 * 864e5)); };
+}
+if (onIOS) setTimeout(installBanner, 3000);
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(r => { swReg = r; }).catch(() => {});
   // clique numa notificação com o app já aberto: vai para a tela do aviso
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type !== 'go') return;

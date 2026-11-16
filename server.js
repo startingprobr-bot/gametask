@@ -122,6 +122,7 @@ const needFull = (req, res, next) => req.actor?.full_access ? next() : res.statu
 const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHERE id=?', [req.fid])
   .then(([[f]]) => billing.isOwner(f) ? next() : res.status(403).json({ error: 'Área do dono do sistema' }), next);
 
+app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ v: VERSION }));
 app.get('/api/public/pricing', wrap(async (req, res) => res.json(await billing.prices())));
 app.use('/api/auth', members.auth);
 app.post(['/api/billing/checkout', '/api/billing/pix'], needFamily, needParent, needFull);
@@ -134,7 +135,13 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Não encontrado' })
 // Página de vendas em "/" para quem não está logado; o app fica em "/app" (e em "/" para aparelhos já conectados)
 const PUB = path.join(__dirname, 'public');
 const brl = (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const sendApp = (req, res) => res.sendFile(path.join(PUB, 'index.html'));
+// Versão do app = impressão digital dos arquivos do front. Vai na URL do JS/CSS (fura cache) e o app
+// aberto no celular compara com /api/version para se atualizar sozinho depois de um deploy.
+const VERSION = require('crypto').createHash('sha1')
+  .update(['js/app.js', 'css/game.css', 'sw.js', 'index.html'].map(f => fs.readFileSync(path.join(PUB, f))).join('')).digest('hex').slice(0, 10);
+const INDEX = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8')
+  .replace('/js/app.js"', `/js/app.js?v=${VERSION}"`).replace('/css/game.css"', `/css/game.css?v=${VERSION}"`);
+const sendApp = (req, res) => res.set('cache-control', 'no-cache').type('html').send(INDEX);
 app.get('/', wrap(async (req, res) => {
   if (req.session?.fid) return sendApp(req, res);
   const p = await billing.prices();

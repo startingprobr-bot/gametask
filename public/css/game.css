@@ -699,3 +699,11 @@ a.btn{text-decoration:none}
 .icon-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--navy)}
 .ifield .picker{margin-top:8px;max-height:300px;overflow:auto;animation:slide .25s var(--out) both}
 [hidden]{display:none!important}
+
+/* ---------- v11: convite para instalar ---------- */
+.install{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:90;max-width:560px;margin:0 auto;display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border-radius:20px;background:#fff;color:var(--navy);border:2px solid var(--navy);box-shadow:0 5px 0 var(--navy),0 12px 30px rgba(8,18,58,.35);animation:sheet .45s var(--out) both}
+.install-ic{flex:0 0 auto;width:48px;height:48px;border-radius:12px}
+.install b{display:block;font-family:var(--display);font-weight:400;font-size:19px}
+.install span{display:block;font-size:14px;font-weight:700;color:var(--ink-soft);line-height:1.3}
+.install span b{display:inline;font-family:var(--body);font-weight:900;font-size:14px;color:var(--navy)}
+.install-x{flex:0 0 auto;width:36px;height:36px;border:0;border-radius:50%;background:var(--mist);color:var(--navy);font-weight:900;cursor:pointer}
