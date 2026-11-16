@@ -26,6 +26,15 @@ async function emailTaken(email) {
   const [[b]] = await pool.query('SELECT 1 x FROM members WHERE email=?', [email]);
   return !!(a || b);
 }
+// Cadastro iniciado na página de vendas e abandonado (sem pagamento): libera o e-mail para quem quiser usá-lo de verdade.
+async function dropStale(email) {
+  const [[f]] = await pool.query('SELECT id FROM families WHERE email=? AND setup_pending=1', [email]);
+  if (!f) return;
+  const [[p]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND status='approved' LIMIT 1", [f.id]);
+  if (p) return;
+  for (const t of ['members', 'payments', 'kids', 'tasks', 'rewards', 'password_resets']) await pool.query(`DELETE FROM ${t} WHERE family_id=?`, [f.id]);
+  await pool.query('DELETE FROM families WHERE id=?', [f.id]);
+}
 const openParent = (req, m) => { req.session.parentUntil = Date.now() + PARENT_MIN * 60000; req.session.actor = m.id; };
 const pub = (m) => m && { id: m.id, name: m.name, role: m.role, full: !!m.full_access, principal: !!m.principal };
 
@@ -52,6 +61,27 @@ auth.post('/invite', wrap(async (req, res) => {
     [i.family_id, name || i.name, i.role, i.full_access, email, bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10)]);
   await pool.query('DELETE FROM invites WHERE token_hash=?', [i.token_hash]);
   req.session = { fid: i.family_id, mid: r.insertId, parentUntil: Date.now() + PARENT_MIN * 60000, actor: r.insertId };
+  res.json({ ok: true });
+}));
+
+// Finaliza o cadastro de quem comprou pela página de vendas: senha, PIN e nome. Vale pela sessão ou pelo link do e-mail.
+auth.post('/complete', wrap(async (req, res) => {
+  const { token, password, pin } = req.body;
+  if ((password || '').length < 6) return res.status(400).json({ error: 'Senha com ao menos 6 caracteres' });
+  if (!/^\d{4,8}$/.test(String(pin || ''))) return res.status(400).json({ error: 'PIN: 4 a 8 números' });
+  let fid = req.session?.fid;
+  if (token) {
+    const [[r]] = await pool.query('SELECT family_id FROM password_resets WHERE token_hash=? AND member_id IS NULL AND expires_at>NOW()', [sha(token)]);
+    if (!r) return res.status(400).json({ error: 'Este link venceu ou já foi usado. Use "Esqueci a senha" na tela de entrada.' });
+    fid = r.family_id;
+  }
+  const [[f]] = fid ? await pool.query('SELECT id,setup_pending FROM families WHERE id=?', [fid]) : [[]];
+  if (!f || !f.setup_pending) return res.status(400).json({ error: 'Este cadastro já foi finalizado. Entre com seu e-mail e senha.' });
+  await pool.query('UPDATE families SET password_hash=?, parent_pin_hash=?, setup_pending=0 WHERE id=?', [bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10), f.id]);
+  const mid = await principalId(f.id);
+  await pool.query("UPDATE members SET pin_hash=?, name=COALESCE(NULLIF(?,''),name) WHERE id=?", [bcrypt.hashSync(String(pin), 10), cleanName(req.body.my_name), mid]);
+  await pool.query('DELETE FROM password_resets WHERE family_id=?', [f.id]);
+  req.session = { fid: f.id, mid, actor: mid, parentUntil: Date.now() + PARENT_MIN * 60000 };
   res.json({ ok: true });
 }));
 
@@ -201,4 +231,4 @@ const limitDaily = (req, res, next) => {
   res.status(403).json({ error: 'Só um responsável com acesso completo pode fazer isso', code: 'daily' });
 };
 
-module.exports = { auth, admin, limitDaily, member, principalId, emailTaken, openParent, pub, PARENT_MIN };
+module.exports = { auth, admin, limitDaily, member, principalId, emailTaken, dropStale, openParent, pub, PARENT_MIN };

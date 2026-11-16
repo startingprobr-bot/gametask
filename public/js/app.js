@@ -127,11 +127,13 @@ async function route() {
   const paid = await paymentReturn();
   const me = ME = await api('GET', '/auth/me');
   const [, a, b] = location.hash.split('/');
-  if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
+  if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login', 'comprar'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
   if (a === 'redefinir' && b) return viewReset(b);
   if (a === 'convite' && b) return viewInvite(b);
-  if (!me.family) return viewLogin(a === 'criar' ? 'register' : 'login');
-  if (a === 'criar' || a === 'login') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
+  if (a === 'finalizar' && b) return viewFinalize(b);
+  if (!me.family) return a === 'comprar' ? viewBuy(b) : viewLogin(a === 'criar' ? 'register' : 'login');
+  if (me.pending) { await viewFinalize(); return paid?.(); } // comprou pela página de vendas: falta criar senha e PIN
+  if (a === 'criar' || a === 'login' || a === 'comprar') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
   if (a === 'kid' && b) return viewKid(+b);
@@ -1098,6 +1100,72 @@ async function adminAlarms(pane, refresh) {
       async (f) => { await api('PUT', '/admin/alarms/' + a.id, read(f)); refresh(); });
     bg.querySelector('#del').onclick = guard(async () => { await api('DELETE', '/admin/alarms/' + a.id); bg.remove(); toast('Aviso apagado'); refresh(); });
   });
+}
+
+// ---------- Carrinho (vindo da página de vendas): paga primeiro, cria a senha depois ----------
+const CART = {
+  annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Pix, cartão ou boleto'] },
+  monthly: { t: 'Mensal', note: 'por mês', perks: ['Tudo do plano anual', 'Sem fidelidade: renove quando quiser'] },
+  plus: { t: 'Plus', note: 'por ano', perks: ['Tudo do plano anual', 'Avisos no celular e no tablet', 'Lembrete antes de cada horário'] },
+};
+async function viewBuy(planIn) {
+  const p = await api('GET', '/public/pricing');
+  let plan = CART[planIn] ? planIn : 'annual';
+  const months = Math.round(p.trial_days / 30);
+  const draw = () => {
+    const c = CART[plan];
+    $('#cart').innerHTML = `<div class="cart-top">${im(plan === 'plus' ? 'rocket' : 'trophy')}<div><b class="d">Plano ${c.t}</b><span>${c.perks.join(' · ')}</span></div></div>
+      <div class="cart-total"><span>Total hoje</span><b class="d num">${brl(p[plan])}</b><small>${c.note}</small></div>
+      <p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa depois dos ${months} meses grátis</b>. Nenhum dia se perde.</span></p>`;
+  };
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth cartwrap">
+    <div class="logo">${im('game')}<h1 class="d stroke" style="font-size:40px">Seu carrinho</h1></div>
+    <form class="card" id="f" novalidate>
+      <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal'], ['plus', 'Plus']], plan)}</div>
+      <div id="cart" class="cart"></div>
+      <div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div>
+      <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" autocomplete="email" required><p class="hint">Enviamos a confirmação para ele. A senha você cria logo depois do pagamento.</p></div>
+      <div class="err" id="err" role="alert"></div>
+      <div class="actions"><button class="btn green big">Ir para o pagamento</button></div>
+      <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago: Pix, cartão ou boleto.</p>
+    </form>
+    <button class="switch" id="free">Prefiro testar de graça primeiro</button>
+    <a class="switch home-link" href="#/login">Já tenho conta</a>
+  </div></div>`;
+  draw();
+  $('#f').addEventListener('change', (e) => { if (e.target.name === 'plan') { plan = e.target.value; draw(); sfx.tap(); } });
+  $('#free').onclick = () => { location.hash = '#/criar'; };
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault(); const btn = e.target.querySelector('.actions .btn'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Abrindo o Mercado Pago…';
+    try { const r = await api('POST', '/billing/guest-checkout', { plan, name: e.target.name.value, email: e.target.email.value }); location.href = r.url; }
+    catch (er) {
+      $('#err').innerHTML = esc(er.message) + (er.code === 'exists' ? ' <a href="#/login">Entrar</a>' : '');
+      btn.disabled = false; btn.textContent = label; e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad();
+    }
+  };
+}
+
+// Depois do pagamento: senha e PIN (vale pela sessão deste aparelho ou pelo link do e-mail)
+async function viewFinalize(token) {
+  const ok = token ? (await api('GET', '/auth/reset/' + encodeURIComponent(token)).catch(() => ({}))).valid : !!ME.pending;
+  const paid = ME.access?.status === 'paid';
+  app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth">
+    <div class="logo">${im(ok ? 'trophy' : 'lock')}<h1 class="d stroke" style="font-size:40px">${ok ? (paid || token ? 'Pagamento confirmado!' : 'Quase lá!') : 'Link vencido'}</h1></div>
+    ${ok ? `<form class="card" id="f" novalidate><h2 class="d">Crie seu acesso</h2>
+      <p class="lead" style="margin-top:6px;color:var(--ink-soft)">Falta só a senha para entrar e o PIN que protege o painel dos pais.</p>
+      <div class="field"><label for="mn">Seu nome</label><input id="mn" name="my_name" placeholder="Bruno" autocomplete="given-name"></div>
+      <div class="field"><label for="p">Senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="new-password" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div><p class="hint">Mínimo de 6 caracteres. Você entra com o e-mail da compra e esta senha.</p></div>
+      <div class="field"><label for="pin">PIN dos pais</label><div class="pw"><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><button type="button" class="eye" aria-label="Mostrar PIN" aria-pressed="false">${SVG.eye}</button></div><p class="hint">4 a 8 números. Protege o painel dos pais.</p></div>
+      <div class="err" id="err" role="alert"></div><div class="actions"><button class="btn green">Começar a usar</button></div></form>`
+    : `<div class="card"><div class="sent">${im('cross')}<h2 class="d">Não foi possível continuar</h2><p>Este link já foi usado ou venceu. Se você já pagou, toque em "Esqueci a senha" e use o e-mail da compra.</p></div><div class="actions"><a class="btn green" href="#/login">Ir para a entrada</a></div></div>`}
+  </div></div>`;
+  if (!ok) return;
+  $$('.eye').forEach(b => b.onclick = () => { const i = b.previousElementSibling, show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.innerHTML = show ? SVG.eyeOff : SVG.eye; b.setAttribute('aria-pressed', show); i.focus(); });
+  $('#f').onsubmit = async (e) => {
+    e.preventDefault(); const btn = e.target.querySelector('.btn'); btn.disabled = true;
+    try { await api('POST', '/auth/complete', { token, ...Object.fromEntries(new FormData(e.target)) }); sfx.win(); location.hash = '#/setup'; await route(); }
+    catch (er) { $('#err').textContent = er.message; btn.disabled = false; sfx.bad(); }
+  };
 }
 
 // ---------- Esqueci a senha ----------

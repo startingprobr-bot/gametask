@@ -12,14 +12,14 @@ const transport = () => tx ||= nodemailer.createTransport({
   auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
 });
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
-const base = (req) => (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+const base = (req) => (process.env.APP_URL || (req ? `${req.protocol}://${req.get('host')}` : 'https://gametask.startingpro.com.br')).replace(/\/$/, '');
 
 // memberId: senha de um responsável convidado (sem ele, a senha é a da conta principal da família)
-async function createResetLink(req, familyId, hours = 1, memberId = null) {
+async function createResetLink(req, familyId, hours = 1, memberId = null, path = 'redefinir') {
   const token = crypto.randomBytes(32).toString('hex');
   await pool.query('DELETE FROM password_resets WHERE (family_id=? AND member_id <=> ?) OR expires_at < NOW()', [familyId, memberId]);
   await pool.query('INSERT INTO password_resets (token_hash,family_id,member_id,expires_at) VALUES (?,?,?,DATE_ADD(NOW(), INTERVAL ? HOUR))', [sha(token), familyId, memberId, hours]);
-  return `${base(req)}/app#/redefinir/${token}`;
+  return `${base(req)}/app#/${path}/${token}`;
 }
 
 async function consumeReset(token) {
@@ -79,6 +79,25 @@ GameTask`,
   };
 }
 
+function finalizeMail(name, link, origin) {
+  return {
+    subject: 'GameTask: pagamento confirmado, falta criar sua senha',
+    html: layout({ origin, preheader: 'Seu pagamento foi confirmado. Crie a senha e o PIN para começar.', title: 'Pagamento confirmado!',
+      paragraphs: [`Olá, família <b style="color:#0d1b4c;">${esc(name)}</b>! Obrigado por assinar o GameTask. Falta só um passo: criar a sua senha e o PIN dos pais.`],
+      button: { label: 'Finalizar meu cadastro', url: link }, fallbackLink: link,
+      note: '<b>O link vale por 3 dias</b> e só funciona uma vez. Se ele vencer, toque em "Esqueci a senha" na tela de entrada e use este e-mail.' }),
+    text: `Olá, família ${name}!\n\nPagamento confirmado. Para criar a senha e o PIN dos pais, abra o link (vale por 3 dias):\n${link}\n\nGameTask`,
+  };
+}
+async function sendFinalizeMail(to, name, link) {
+  if (!smtpOn()) { console.log(`[cadastro] SMTP não configurado. Link para ${to}: ${link}`); return false; }
+  const from = process.env.MAIL_FROM || process.env.SMTP_USER || 'GameTask <no-reply@startingpro.com.br>';
+  const origin = (process.env.APP_URL || new URL(link).origin).replace(/\/$/, '');
+  const m = finalizeMail(name, link, origin);
+  await transport().sendMail({ from, to, subject: m.subject, text: m.text, html: m.html });
+  return true;
+}
+
 async function sendResetMail(to, name, link) {
   if (!smtpOn()) { console.log(`[senha] SMTP não configurado. Link para ${to}: ${link}`); return false; }
   const from = process.env.MAIL_FROM || process.env.SMTP_USER || 'GameTask <no-reply@startingpro.com.br>';
@@ -88,4 +107,4 @@ async function sendResetMail(to, name, link) {
   return true;
 }
 
-module.exports = { createResetLink, consumeReset, peekReset, sendResetMail, smtpOn, layout, resetMail };
+module.exports = { createResetLink, consumeReset, peekReset, sendResetMail, sendFinalizeMail, smtpOn, layout, resetMail };

@@ -6,7 +6,11 @@ const { today } = require('./util');
 
 const OWNERS = (process.env.OWNER_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 const isOwner = (f) => !!f && OWNERS.includes(String(f.email).toLowerCase());
-const MP = 'https://api.mercadopago.com';
+const MP = process.env.MP_API || 'https://api.mercadopago.com';
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const members = require('./members');
+const mail = require('./mail');
 const mpToken = () => process.env.MP_ACCESS_TOKEN || '';
 const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '');
 
@@ -67,6 +71,7 @@ async function syncPayment(mpId) {
   const rowId = +p.external_reference;
   if (!rowId) return null;
   const c = await pool.getConnection();
+  let fresh = false;
   try {
     await c.beginTransaction();
     const [[row]] = await c.query('SELECT * FROM payments WHERE id=? FOR UPDATE', [rowId]);
@@ -74,6 +79,7 @@ async function syncPayment(mpId) {
     const amountOk = Math.abs(+p.transaction_amount - +row.amount) < 0.01 && p.currency_id === 'BRL';
     if (row.status === 'approved') { await c.commit(); return row; }
     if (p.status === 'approved' && amountOk) {
+      fresh = true;
       const [[f]] = await c.query('SELECT paid_until,trial_ends FROM families WHERE id=? FOR UPDATE', [row.family_id]);
       // o período pago começa depois do que já está garantido (dias grátis ou pagos não se perdem)
       const start = [today(), f.paid_until, f.trial_ends].filter(Boolean).sort().at(-1);
@@ -86,9 +92,16 @@ async function syncPayment(mpId) {
         [amountOk ? p.status : 'invalid', p.payment_method_id || null, String(p.id), row.id]);
     }
     await c.commit();
+    if (fresh) finishSignup(row.family_id).catch(e => console.error('e-mail', e.message));
     const [[out]] = await pool.query('SELECT * FROM payments WHERE id=?', [row.id]);
     return out;
   } catch (e) { await c.rollback(); throw e; } finally { c.release(); }
+}
+
+// Pagou pela página de vendas e ainda não tem senha: manda o link para finalizar (vale mesmo se o pagamento voltar em outro aparelho)
+async function finishSignup(fid) {
+  const [[f]] = await pool.query('SELECT name,email,setup_pending FROM families WHERE id=?', [fid]);
+  if (f?.setup_pending) await mail.sendFinalizeMail(f.email, f.name, await mail.createResetLink(null, fid, 72, null, 'finalizar'));
 }
 
 const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e.mp || e); res.status(500).json({ error: e.mp ? 'O Mercado Pago recusou a operação. Tente de novo.' : 'Erro interno' }); });
@@ -101,13 +114,12 @@ router.get('/status', needSession, wrap(async (req, res) => {
   res.json({ access: access(f), prices: await prices(), enabled: !!mpToken(), payments: hist });
 }));
 
-router.post('/checkout', needSession, wrap(async (req, res) => {
-  if (!mpToken()) return res.status(503).json({ error: 'O pagamento on-line ainda não foi ativado. Fale com o suporte.' });
-  const plan = PLANS.includes(req.body.plan) ? req.body.plan : 'annual';
+async function startCheckout(req, fid, planIn) {
+  const plan = PLANS.includes(planIn) ? planIn : 'annual';
   const pr = await prices();
   const amount = pr[plan];
-  const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [req.fid]);
-  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [req.fid, plan, amount]);
+  const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [fid]);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [fid, plan, amount]);
   const base = appUrl() || `${req.protocol}://${req.get('host')}`;
   const https = base.startsWith('https://');
   const back = `${base}/app?pagamento=${r.insertId}`;
@@ -119,7 +131,34 @@ router.post('/checkout', needSession, wrap(async (req, res) => {
     ...(https ? { auto_return: 'approved', notification_url: `${base}/api/billing/webhook` } : {}),
     statement_descriptor: 'GAMETASK',
   });
-  res.json({ url: pref.init_point });
+  return pref.init_point;
+}
+const noMp = (res) => res.status(503).json({ error: 'O pagamento on-line ainda não foi ativado. Fale com o suporte.' });
+
+router.post('/checkout', needSession, wrap(async (req, res) => {
+  if (!mpToken()) return noMp(res);
+  res.json({ url: await startCheckout(req, req.fid, req.body.plan) });
+}));
+
+// Carrinho da página de vendas: quem ainda não tem conta paga primeiro e cria a senha e o PIN depois.
+// A família nasce "pendente" (senha aleatória) e a sessão deste aparelho fica ligada a ela para finalizar na volta.
+const tries = new Map();
+router.post('/guest-checkout', wrap(async (req, res) => {
+  const hits = (tries.get(req.ip) || []).filter(t => Date.now() - t < 3600e3);
+  if (hits.length >= 10) return res.status(429).json({ error: 'Muitas tentativas. Tente de novo em alguns minutos.' });
+  tries.set(req.ip, [...hits, Date.now()]);
+  if (!mpToken()) return noMp(res);
+  const email = String(req.body.email || '').toLowerCase().trim(), name = String(req.body.name || '').trim().slice(0, 80);
+  if (!name) return res.status(400).json({ error: 'Escreva o nome da família' });
+  if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido' });
+  await members.dropStale(email);
+  if (await members.emailTaken(email)) return res.status(409).json({ error: 'Este e-mail já tem conta. Entre e escolha o plano em "Ver planos".', code: 'exists' });
+  const trial = +(await settings()).trial_days;
+  const junk = () => bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 4);
+  const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name, email, junk(), junk(), trial]);
+  const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,'Responsável','Responsável',1,1,?)", [f.insertId, junk()]);
+  req.session = { fid: f.insertId, mid: m.insertId, actor: m.insertId, parentUntil: Date.now() + 30 * 60000 };
+  res.json({ url: await startCheckout(req, f.insertId, req.body.plan) });
 }));
 
 // Volta do checkout: confere na hora, sem esperar o webhook

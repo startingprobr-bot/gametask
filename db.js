@@ -92,6 +92,7 @@ const COLUMNS = [
   ['families', 'remind_before', 'INT NOT NULL DEFAULT 10'], // minutos de antecedência do aviso das tarefas com horário
   ['kids', 'auto_approve', 'TINYINT NOT NULL DEFAULT 0'],
   ['tasks', 'sort', 'INT NULL'],                           // ordem da família (aba Tarefas → Todas)
+  ['families', 'setup_pending', 'TINYINT NOT NULL DEFAULT 0'], // comprou pela página de vendas e ainda não criou senha e PIN
   ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],          // perfil de jogador de um adulto (sem moedas)
   ['password_resets', 'member_id', 'INT NULL'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];

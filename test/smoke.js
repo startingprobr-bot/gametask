@@ -3,6 +3,7 @@ require('dotenv').config();
 const assert = require('assert');
 const { spawn } = require('child_process');
 const mysql = require('mysql2/promise');
+const http = require('http');
 
 const PORT = 3199, BASE = `http://127.0.0.1:${PORT}`;
 let cookie = '';
@@ -23,7 +24,22 @@ const step = (m) => console.log('✔', m);
   const c = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '' });
   await c.query('DROP DATABASE IF EXISTS gametask_test'); await c.end();
 
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: '' }, stdio: 'inherit' });
+  // Mercado Pago de mentira: cria a preferência e devolve o pagamento 777 como aprovado
+  let lastPref = null;
+  const mpFake = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => { b += d; }); req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      if (req.method === 'POST' && req.url === '/checkout/preferences') {
+        const j = JSON.parse(b); lastPref = { ref: j.external_reference, amount: j.items[0].unit_price };
+        return res.end(JSON.stringify({ init_point: 'https://mp.test/pay/' + j.external_reference }));
+      }
+      if (req.url.startsWith('/v1/payments/') && lastPref)
+        return res.end(JSON.stringify({ id: 777, status: 'approved', transaction_amount: lastPref.amount, currency_id: 'BRL', external_reference: lastPref.ref, payment_method_id: 'pix' }));
+      res.statusCode = 404; res.end('{}');
+    });
+  });
+  await new Promise(r => mpFake.listen(3198, '127.0.0.1', r));
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 120; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
 
@@ -266,6 +282,35 @@ const step = (m) => console.log('✔', m);
     cookie = '';
     await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
 
+    // carrinho da página de vendas: paga primeiro, cria a senha e o PIN depois
+    cookie = '';
+    assert.equal((await api('POST', '/api/billing/guest-checkout', { plan: 'monthly', name: 'X', email: 'invalido' })).status, 400);
+    const gc = await ok('POST', '/api/billing/guest-checkout', { plan: 'monthly', name: 'Família Nova', email: 'novo@x.co' });
+    assert.ok(gc.url.startsWith('https://mp.test/pay/'));
+    let g = await ok('GET', '/api/auth/me');
+    assert.equal(g.pending, true); assert.equal(g.access.status, 'trial');
+    const ref = gc.url.split('/').pop();
+    assert.equal((await ok('GET', `/api/billing/return?ref=${ref}&payment_id=777`)).payment.status, 'approved');
+    g = await ok('GET', '/api/auth/me'); assert.equal(g.access.status, 'paid'); assert.equal(g.pending, true);
+    assert.equal((await api('POST', '/api/auth/complete', { password: 'abc', pin: '1234' })).status, 400);
+    assert.equal((await api('POST', '/api/auth/complete', { password: 'segredo1', pin: '12' })).status, 400);
+    await ok('POST', '/api/auth/complete', { password: 'segredo1', pin: '4321', my_name: 'Marta' });
+    g = await ok('GET', '/api/auth/me'); assert.equal(g.pending, false); assert.equal(g.actor.name, 'Marta'); assert.equal(g.access.status, 'paid');
+    assert.equal((await api('POST', '/api/auth/complete', { password: 'segredo1', pin: '4321' })).status, 400); // já finalizado
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'novo@x.co', password: 'segredo1' });
+    await ok('POST', '/api/auth/parent', { pin: '4321' });
+    cookie = '';
+    assert.equal((await api('POST', '/api/billing/guest-checkout', { plan: 'annual', name: 'Y', email: 'novo@x.co' })).status, 409);
+    // cadastro de venda abandonado (sem pagamento) não prende o e-mail
+    await ok('POST', '/api/billing/guest-checkout', { plan: 'annual', name: 'Abandonou', email: 'velho@x.co' });
+    cookie = '';
+    await ok('POST', '/api/auth/register', { name: 'Família Velho', email: 'velho@x.co', password: 'secret1', pin: '1111' });
+    assert.equal((await ok('GET', '/api/auth/me')).pending, false);
+    step('carrinho: paga primeiro, finaliza com senha e PIN, e e-mail abandonado é liberado');
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
+
     // página de vendas em "/" com os preços do painel; app em "/app"
     const land = await (await fetch(BASE + '/')).text();
     assert.ok(land.includes('59,90') && land.includes('9,90') && !land.includes('{{'));
@@ -274,5 +319,5 @@ const step = (m) => console.log('✔', m);
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');
-  } finally { srv.kill(); }
+  } finally { srv.kill(); mpFake.close(); }
 })().catch(e => { console.error('\n✘ FALHOU:', e.message); process.exit(1); });

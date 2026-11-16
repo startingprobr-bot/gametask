@@ -34,6 +34,7 @@ app.post('/api/auth/register', wrap(async (req, res) => {
   if (!name?.trim() || !/^\S+@\S+\.\S+$/.test(email || '')) return res.status(400).json({ error: 'Nome e e-mail válidos são obrigatórios' });
   if ((password || '').length < 6) return res.status(400).json({ error: 'Senha com ao menos 6 caracteres' });
   if (!/^\d{4,8}$/.test(String(pin || ''))) return res.status(400).json({ error: 'PIN do responsável: 4 a 8 números' });
+  await members.dropStale(email.toLowerCase());
   if (await members.emailTaken(email.toLowerCase())) return res.status(409).json({ error: 'E-mail já cadastrado' });
   const trial = +(await getSetting('trial_days'));
   const [r] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY))',
@@ -61,9 +62,10 @@ app.post('/api/auth/forgot', wrap(async (req, res) => {
   fail(k);
   const email = String(req.body.email || '').toLowerCase().trim();
   if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido' });
-  const [[f]] = await pool.query('SELECT id,name FROM families WHERE email=?', [email]);
+  const [[f]] = await pool.query('SELECT id,name,setup_pending FROM families WHERE email=?', [email]);
   const [[m]] = f ? [[]] : await pool.query('SELECT m.id,m.family_id,f.name FROM members m JOIN families f ON f.id=m.family_id WHERE m.email=? AND m.active=1', [email]);
-  if (f) mail.sendResetMail(email, f.name, await mail.createResetLink(req, f.id)).catch(e => console.error('e-mail', e.message));
+  if (f?.setup_pending) mail.sendFinalizeMail(email, f.name, await mail.createResetLink(req, f.id, 72, null, 'finalizar')).catch(e => console.error('e-mail', e.message));
+  else if (f) mail.sendResetMail(email, f.name, await mail.createResetLink(req, f.id)).catch(e => console.error('e-mail', e.message));
   else if (m) mail.sendResetMail(email, m.name, await mail.createResetLink(req, m.family_id, 1, m.id)).catch(e => console.error('e-mail', e.message));
   res.json({ ok: true });
 }));
@@ -83,12 +85,12 @@ app.post('/api/auth/reset', wrap(async (req, res) => {
 app.post('/api/auth/logout', (req, res) => { req.session = null; res.json({ ok: true }); });
 app.get('/api/auth/me', wrap(async (req, res) => {
   if (!req.session?.fid) return res.json({ family: null });
-  const [[f]] = await pool.query('SELECT name,email,plan,paid_until,trial_ends,onboarded FROM families WHERE id=?', [req.session.fid]);
+  const [[f]] = await pool.query('SELECT name,email,plan,paid_until,trial_ends,onboarded,setup_pending FROM families WHERE id=?', [req.session.fid]);
   if (!f) { req.session = null; return res.json({ family: null }); }
   const access = billing.access(f), parent = isParent(req.session);
   const actor = parent ? members.pub(await members.member(req.session.fid, req.session.actor || await members.principalId(req.session.fid))) : null;
   const me = members.pub(await members.member(req.session.fid, req.session.mid));
-  res.json({ family: f.name, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
+  res.json({ family: f.name, pending: !!f.setup_pending, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
 }));
 
 const needFamily = (req, res, next) => {
