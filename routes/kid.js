@@ -26,6 +26,8 @@ router.get('/kids', async (req, res) => {
     const sh = await shares(req.fid, k.id);
     k.coins = k.adult ? null : r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
     k.total = tasks.length; k.done = Math.min(c.n, tasks.length);
+    const [[m]] = await pool.query('SELECT COUNT(*) n FROM messages WHERE kid_id=? AND read_at IS NULL', [k.id]);
+    k.msgs = m.n;
   }
   res.json(kids);
 });
@@ -103,8 +105,9 @@ router.get('/kids/:id/home', async (req, res) => {
     pending: r2(r.goal_mode === 'coins' ? pendingCoins : (pGoal[r.id] || 0)),
   }));
   const wheel = await wheelState(req.fid, kid.id, day, list);
+  const [messages] = await pool.query('SELECT id,from_name,text,created_at FROM messages WHERE kid_id=? AND read_at IS NULL ORDER BY id', [kid.id]);
   res.json({
-    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel,
+    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel, messages,
     done: list.filter(t => t.status === 'approved').length,
     pending: list.filter(t => t.status === 'pending').length, total: list.length,
   });
@@ -125,6 +128,19 @@ router.post('/kids/:id/complete', async (req, res) => {
     const [[k]] = await pool.query('SELECT auto_approve FROM kids WHERE id=?', [kid.id]);
     if (k.auto_approve) await approve(req.fid, r.insertId);
     else if (access(req.family).plus) push.sendToFamily(req.fid, { title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
+  }
+  res.json({ ok: true });
+});
+
+// Recado lido (com resposta rápida opcional, que avisa os pais)
+const REPLIES = ['Ok!', 'Já vou!', 'Preciso de ajuda'];
+router.post('/kids/:id/messages/:mid', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const reply = REPLIES.includes(req.body.reply) ? req.body.reply : null;
+  const [r] = await pool.query('UPDATE messages SET read_at=NOW(),reply=? WHERE id=? AND kid_id=? AND read_at IS NULL', [reply, req.params.mid, kid.id]);
+  if (r.affectedRows && reply && access(req.family).plus) {
+    const [[m]] = await pool.query('SELECT text FROM messages WHERE id=?', [req.params.mid]);
+    push.sendToFamily(req.fid, { title: `${kid.name}: ${reply}`, body: `Resposta ao recado "${m.text.slice(0, 80)}"`, tag: 'reply' + req.params.mid, url: '/app#/admin' }, 'approvals').catch(() => {});
   }
   res.json({ ok: true });
 });

@@ -389,7 +389,32 @@ const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 router.get('/push', wrap(async (req, res) => {
   const [subs] = await pool.query('SELECT id,label,reminders,approvals,created_at,endpoint FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
   const [[f]] = await pool.query('SELECT remind_before FROM families WHERE id=?', [req.fid]);
-  res.json({ key: await push.publicKey(), plus: access(req.family).plus, remind_before: f.remind_before, devices: subs });
+  const [log] = await pool.query('SELECT title,ok,fail,err,created_at FROM push_sent WHERE family_id=? ORDER BY id DESC LIMIT 12', [req.fid]);
+  res.json({ key: await push.publicKey(), plus: access(req.family).plus, remind_before: f.remind_before, devices: subs, log });
+}));
+
+// ---------- Recados para os jogadores ----------
+// Aparece na tela do jogador na hora (e toca nos aparelhos com avisos ligados, no plano Plus).
+router.get('/messages', wrap(async (req, res) => {
+  const [rows] = await pool.query(`SELECT m.id,m.text,m.from_name,m.reply,m.created_at,m.read_at,k.name kid,k.avatar FROM messages m JOIN kids k ON k.id=m.kid_id
+    WHERE m.family_id=? ORDER BY m.id DESC LIMIT 15`, [req.fid]);
+  res.json(rows);
+}));
+router.post('/messages', wrap(async (req, res) => {
+  const text = String(req.body.text || '').trim().slice(0, 300);
+  if (!text) return res.status(400).json({ error: 'Escreva o recado' });
+  const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [req.fid]);
+  const want = new Set((req.body.kid_ids || []).map(Number));
+  const to = kids.filter(k => want.has(k.id));
+  if (!to.length) return res.status(400).json({ error: 'Escolha para quem vai o recado' });
+  const from = String(req.actor?.name || 'Pais').slice(0, 60);
+  await pool.query('INSERT INTO messages (family_id,kid_id,from_name,text) VALUES ?', [to.map(k => [req.fid, k.id, from, text])]);
+  let sent = 0;
+  if (access(req.family).plus) {
+    const names = to.length === kids.length && kids.length > 1 ? 'Todos' : to.map(k => k.name).join(', ');
+    sent = await push.sendToFamily(req.fid, { title: `Recado de ${from} para ${names}`, body: text, tag: 'msg' + Date.now(), alarm: true, url: to.length === 1 ? `/app#/kid/${to[0].id}` : '/app#/' }, 'all');
+  }
+  res.json({ ok: true, sent });
 }));
 router.post('/push', needPlus, wrap(async (req, res) => {
   const s = req.body.sub || {};

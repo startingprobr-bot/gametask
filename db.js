@@ -80,6 +80,14 @@ const SCHEMA = [
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(member_id), INDEX(family_id))`,
 // Ordem das tarefas escolhida pelos pais, por filho (arrastar para ordenar)
 `CREATE TABLE IF NOT EXISTS task_order (kid_id INT NOT NULL, task_id INT NOT NULL, pos INT NOT NULL, PRIMARY KEY(kid_id, task_id))`,
+// Recados dos pais para cada jogador (uma linha por jogador; a criança marca como lido e pode responder rápido)
+`CREATE TABLE IF NOT EXISTS messages (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, kid_id INT NOT NULL, from_name VARCHAR(60) NOT NULL, text VARCHAR(300) NOT NULL,
+  reply VARCHAR(60) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, read_at TIMESTAMP NULL, INDEX(kid_id, read_at), INDEX(family_id))`,
+// Registro dos avisos enviados (para os pais verem se chegou nos aparelhos)
+`CREATE TABLE IF NOT EXISTS push_sent (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, title VARCHAR(120) NOT NULL, ok INT NOT NULL DEFAULT 0, fail INT NOT NULL DEFAULT 0,
+  err VARCHAR(80) NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(family_id))`,
 // Roleta do dia: prêmios que os pais escolhem e o que cada jogador tirou (um giro por dia)
 `CREATE TABLE IF NOT EXISTS wheel_prizes (
   id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, label VARCHAR(60) NOT NULL, emoji VARCHAR(16) NULL, sort INT NOT NULL DEFAULT 0, INDEX(family_id))`,

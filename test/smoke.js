@@ -243,6 +243,18 @@ const step = (m) => console.log('✔', m);
     assert.ok(!(await ok('GET', `/api/kids/${ber}/home`)).tasks.some(t => t.id === sw));
     assert.ok(!(await ok('GET', '/api/admin/tasks')).some(t => t.id === sw)); step('apagar tarefa: só de um filho ou de todos');
 
+    // recado: aparece para quem foi escolhido, some quando lido, e a resposta fica para os pais
+    assert.equal((await api('POST', '/api/admin/messages', { text: 'Venha jantar!', kid_ids: [] })).status, 400);
+    await ok('POST', '/api/admin/messages', { text: 'Venha jantar!', kid_ids: [eva] });
+    const em = (await ok('GET', `/api/kids/${eva}/home`)).messages;
+    assert.equal(em.length, 1); assert.equal(em[0].text, 'Venha jantar!');
+    assert.equal((await ok('GET', `/api/kids/${ber}/home`)).messages.length, 0);
+    assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).msgs, 1);
+    await ok('POST', `/api/kids/${eva}/messages/${em[0].id}`, { reply: 'Já vou!' });
+    assert.equal((await ok('GET', `/api/kids/${eva}/home`)).messages.length, 0);
+    assert.equal((await ok('GET', '/api/admin/messages'))[0].reply, 'Já vou!');
+    assert.ok(Array.isArray((await ok('GET', '/api/admin/push')).log)); step('recado para o filho com resposta rápida');
+
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;
     await ok('DELETE', '/api/admin/kids/' + tmp);

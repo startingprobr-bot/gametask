@@ -71,6 +71,7 @@ const sfx = {
   coin: () => tone([[1318, .06], [1975, .18]], 'square', .04),
   win: () => tone([[523, .14], [659, .14], [784, .14], [1047, .14], [1318, .4]]),
   bad: () => tone([[220, .18], [180, .25]], 'sawtooth', .04),
+  ring: () => tone([[988, .12], [784, .12], [988, .12], [784, .12], [1175, .3]], 'triangle', .09),
 };
 function soundBtn() {
   return `<button class="btn ghost round" id="snd" aria-label="${muted ? 'Ligar som' : 'Desligar som'}">${muted ? SVG.off : SVG.on}</button>`;
@@ -160,6 +161,24 @@ function openWheel(kidId, w, done, celebrate) {
       btn.textContent = 'Oba!'; btn.disabled = false; btn.onclick = close; btn.focus();
     }, ms + 150);
   };
+}
+
+// Recado dos pais: aparece por cima da tela do jogador, toca e pede uma resposta rápida
+function showMessage(kidId, m, done) {
+  const bg = document.createElement('div'); bg.className = 'sheet-bg msg-bg';
+  bg.innerHTML = `<div class="msg-card" role="alertdialog" aria-label="Recado de ${esc(m.from_name)}">
+    <div class="msg-ic">${im('bell')}</div><p class="msg-from">Recado de <b>${esc(m.from_name)}</b></p>
+    <p class="msg-text">${esc(m.text)}</p>
+    <div class="msg-replies">${['Ok!', 'Já vou!', 'Preciso de ajuda'].map((r, i) => `<button class="btn ${i ? 'ghost' : 'green'}" data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>`;
+  document.body.append(bg);
+  sfx.ring(); const again = setInterval(() => sfx.ring(), 4000); setTimeout(() => clearInterval(again), 12500);
+  navigator.vibrate?.([300, 120, 300]);
+  $$('[data-r]', bg).forEach(b => b.onclick = guard(async () => {
+    clearInterval(again); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
+    await api('POST', `/kids/${kidId}/messages/${m.id}`, { reply: b.dataset.r });
+    sfx.done(); bg.remove(); done?.();
+  }));
+  $('[data-r]', bg).focus();
 }
 
 function burst(icon, title, text, btn = 'Continuar', onClose) {
@@ -309,7 +328,7 @@ async function viewPlayers(me = ME) {
     <div class="wrap">
       <div class="select-title"><h1 class="d stroke">GameTask</h1><p>${kids.length ? 'Quem vai jogar agora?' : 'Nenhum jogador ainda'}</p></div>
       ${kids.length ? `<div class="roster">${kids.map(k => `<button class="hero" data-id="${k.id}" style="--c:${esc(k.color)}" aria-label="Jogar como ${esc(k.name)}">
-        ${im(k.avatar, 'art', 'fox')}<div class="plate"><div class="d stroke-sm">${esc(k.name)}</div><small>${k.adult ? '' : `${im('coin')}<b class="num">${num(k.coins)}</b><i class="dot"></i>`}${im('check')}<b class="num">${k.done}/${k.total}</b></small><div class="mini"><i style="width:${k.total ? k.done / k.total * 100 : 0}%"></i></div></div></button>`).join('')}</div>`
+        ${k.msgs ? `<span class="msg-badge" aria-label="Recado novo">${im('bell')}</span>` : ''}${im(k.avatar, 'art', 'fox')}<div class="plate"><div class="d stroke-sm">${esc(k.name)}</div><small>${k.adult ? '' : `${im('coin')}<b class="num">${num(k.coins)}</b><i class="dot"></i>`}${im('check')}<b class="num">${k.done}/${k.total}</b></small><div class="mini"><i style="width:${k.total ? k.done / k.total * 100 : 0}%"></i></div></div></button>`).join('')}</div>`
       : `<div class="empty">${im('people')}<p class="d">Peça para um adulto cadastrar os jogadores.</p></div>`}
       <div class="parent-door"><button class="btn ghost sm" id="adm">${im('lock')} Painel dos pais</button></div>
     </div></div>`;
@@ -394,6 +413,7 @@ async function viewKid(id) {
     $('.done-list')?.addEventListener('toggle', (e) => { showDone = e.target.open; sfx.tap(); });
     $('#back').onclick = () => { sfx.tap(); location.hash = '#/'; };
     const spinIt = (w) => openWheel(id, w, () => load().catch(() => {}));
+    if (d.messages?.length && !$('.sheet-bg,.burst')) showMessage(id, d.messages[0], () => load().catch(() => {}));
     if ($('#wheelGo')) $('#wheelGo').onclick = () => { sfx.tap(); spinIt(d.wheel); };
     $$('[data-do]').forEach(b => b.onclick = guard(async () => {
       b.disabled = true;
@@ -584,13 +604,37 @@ async function viewAdmin() {
 }
 const zero = (icon, text) => `<div class="zero">${im(icon)}<span>${text}</span></div>`;
 
+// Recados para os jogadores: aparece na tela deles na hora e toca nos aparelhos com avisos
+async function adminMessages(box) {
+  const [msgs, kids] = await Promise.all([api('GET', '/admin/messages'), api('GET', '/admin/kids')]);
+  const on = kids.filter(k => k.active);
+  const ago = (t) => { const d = new Date(t.replace(' ', 'T') + (t.endsWith('Z') ? '' : 'Z')), m = Math.round((Date.now() - d) / 60000); return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : dmy(t.slice(0, 10)); };
+  box.innerHTML = `<div class="box-h"><h2 class="d">Recados</h2><button class="btn green sm" id="msgNew">${im('bell')}Mandar recado</button></div>
+    <p class="lead">Aparece na tela do jogador na hora e toca nos aparelhos com avisos ligados. Ele responde com um toque.</p>
+    ${msgs.length ? `<div class="list">${msgs.map(m => `<div class="item"><div class="ic">${im(m.avatar, '', 'fox')}</div><div class="grow"><div class="t">${esc(m.text)}</div>
+      <div class="s">Para ${esc(m.kid)} · ${ago(m.created_at)} · ${m.read_at ? (m.reply ? `<b>respondeu: ${esc(m.reply)}</b>` : 'visto') : 'ainda não viu'}</div></div></div>`).join('')}</div>` : ''}`;
+  $('#msgNew').onclick = () => {
+    const quick = ['Hora do banho!', 'Venha jantar!', 'Hora de dormir', 'Vem aqui um minutinho', 'Desliga a TV, por favor'];
+    const bg = sheet('Mandar recado', `<div class="field"><span class="lab">Para quem</span><div class="kid-pick">${on.map(k => `<label class="kp-check"><input type="checkbox" name="to" value="${k.id}" checked><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
+      <div class="field"><label for="mt">Recado</label><textarea id="mt" name="text" rows="3" maxlength="300" placeholder="Venha jantar!" required></textarea>
+      <div class="quick">${quick.map(q => `<button type="button" class="chip-btn" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`,
+      async (f) => {
+        const r = await api('POST', '/admin/messages', { text: f.text.value, kid_ids: $$('[name=to]:checked', f).map(x => +x.value) });
+        toast(r.sent ? `Recado enviado e tocou em ${r.sent} aparelho(s)` : 'Recado enviado. Aparece na tela do jogador.'); adminMessages(box);
+      }, { saveLabel: 'Enviar' });
+    $$('[data-q]', bg).forEach(b => b.onclick = () => { bg.querySelector('#mt').value = b.dataset.q; sfx.tap(); });
+  };
+}
+
 async function adminPending(pane, refresh) {
   const rows = await api('GET', '/admin/pending');
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Esperando aprovação</h2>${rows.length > 1 ? `<button class="btn green sm" id="all">Aprovar todas (${rows.length})</button>` : ''}</div>
     ${rows.length ? `<div class="list">${rows.map(r => `<div class="item"><div class="ic">${im(r.icon)}</div><div class="grow"><div class="t">${esc(r.title)}</div>
       <div class="s">${esc(r.kid)} · ${dmy(r.day)}${r.coins > 0 ? ` · ${num(r.coins)} moedas` : ''}</div></div>
       <div class="btns"><button class="btn green sm" data-ok="${r.id}">Aprovar</button><button class="btn ghost sm" data-no="${r.id}">Rejeitar</button></div></div>`).join('')}</div>`
-    : zero('party', 'Nada para aprovar agora.')}</section>`;
+    : zero('party', 'Nada para aprovar agora.')}</section>
+    <section class="box" id="msgBox"></section>`;
+  adminMessages($('#msgBox')).catch(e => toast(e.message, true));
   const act = (url, ids, msg) => guard(async () => { await api('POST', url, { ids }); sfx.done(); toast(msg); refresh(); });
   $$('[data-ok]').forEach(b => b.onclick = act('/admin/approve', [+b.dataset.ok], 'Aprovada'));
   $$('[data-no]').forEach(b => b.onclick = act('/admin/reject', [+b.dataset.no], 'Rejeitada'));
@@ -1242,6 +1286,11 @@ async function adminAlarms(pane, refresh) {
         ${full() ? `<div class="btns"><button class="btn ghost sm" data-e="${a.id}">Editar</button></div>` : ''}</div>`).join('')}</div>` : zero('clock', 'Nenhum aviso programado ainda.')}
       <div class="field lead-time"><label for="rb">Tarefas com horário avisam</label><select id="rb" ${p.plus && full() ? '' : 'disabled'}>${[[0, 'na hora certa'], [5, '5 minutos antes'], [10, '10 minutos antes'], [15, '15 minutos antes'], [30, '30 minutos antes'], [60, '1 hora antes']].map(([v, l]) => `<option value="${v}" ${+p.remind_before === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <p class="hint">Vale para as tarefas que têm horário (natação 18h, por exemplo) e só avisa quem ainda não fez.</p></div></section>
+    ${p.plus ? `<section class="box"><div class="box-h"><h2 class="d">Últimos avisos enviados</h2></div>
+      <p class="lead">Se um aviso não tocou, veja aqui se ele saiu e em quantos aparelhos chegou.</p>
+      ${p.log?.length ? `<div class="list">${p.log.map(l => `<div class="item"><div class="ic">${im(l.fail || !l.ok ? 'cross' : 'check')}</div><div class="grow"><div class="t">${esc(l.title)}</div>
+        <div class="s">${new Date(l.created_at.replace(' ', 'T') + (l.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · chegou em ${l.ok} aparelho(s)${l.fail ? ` · falhou em ${l.fail}` : ''}${l.err ? ` · ${esc(l.err)}` : ''}</div></div></div>`).join('')}</div>`
+        : zero('clock', 'Nenhum aviso enviado ainda.')}</section>` : ''}
     ${p.devices.length ? `<section class="box"><div class="box-h"><h2 class="d">Aparelhos com avisos</h2></div><div class="list">${p.devices.map(d => `<div class="item"><div class="ic">${im(/celular/i.test(d.label) ? 'phone' : /computador/i.test(d.label) ? 'laptop' : 'tv')}</div>
       <div class="grow"><div class="t">${esc(d.label)}${mine && mine.id === d.id ? ' <span class="tag ok">este</span>' : ''}</div><div class="s">${[d.reminders && 'Lembretes', d.approvals && 'Aprovações'].filter(Boolean).join(' · ') || 'Nada marcado'} · desde ${dmy(d.created_at)}</div></div>
       <div class="btns"><button class="btn ghost sm" data-dev="${d.id}">Ajustar</button></div></div>`).join('')}</div></section>` : ''}`;

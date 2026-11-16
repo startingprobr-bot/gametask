@@ -226,7 +226,7 @@ admin.delete('/me/passkeys/:id', wrap(async (req, res) => {
 
 // Quem só tem o dia a dia: ler tudo e as ações do dia
 const DAILY = [
-  ['POST', /^\/(approve|reject|use-time|push|push\/test)$/], ['PUT', /^\/(push\/\d+|me\/pin|members\/\d+)$/],
+  ['POST', /^\/(approve|reject|use-time|push|push\/test|messages)$/], ['PUT', /^\/(push\/\d+|me\/pin|members\/\d+)$/],
   ['DELETE', /^\/(push\/\d+|me\/passkeys\/.+)$/],
 ];
 const limitDaily = (req, res, next) => {

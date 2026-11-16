@@ -20,10 +20,17 @@ async function sendToFamily(fid, payload, kind = 'reminders') {
   const where = kind === 'all' ? '' : ` AND ${kind === 'approvals' ? 'approvals' : 'reminders'}=1`;
   const [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
   const body = JSON.stringify(payload);
-  let ok = 0;
+  let ok = 0, fail = 0, err = null;
   await Promise.all(subs.map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 900, urgency: 'high' })
     .then(() => ok++)
-    .catch(e => { if (e.statusCode === 404 || e.statusCode === 410) return pool.query('DELETE FROM push_subs WHERE id=?', [s.id]); console.error('push', e.statusCode || e.message); })));
+    .catch(e => {
+      fail++; err = e.statusCode === 404 || e.statusCode === 410 ? 'aparelho desinscrito (ligue os avisos de novo nele)' : `erro ${e.statusCode || e.message}`.slice(0, 80);
+      if (e.statusCode === 404 || e.statusCode === 410) return pool.query('DELETE FROM push_subs WHERE id=?', [s.id]);
+      console.error('push', e.statusCode || e.message);
+    })));
+  // registro para os pais conferirem em Ajustes → Avisos
+  await pool.query('INSERT INTO push_sent (family_id,title,ok,fail,err) VALUES (?,?,?,?,?)',
+    [fid, String(payload.title || '').slice(0, 120), ok, fail, subs.length ? err : 'nenhum aparelho com avisos ligados']).catch(() => {});
   return ok;
 }
 
@@ -76,7 +83,11 @@ async function tick() {
     }
   }
   // limpeza do registro de envios antigos
-  if (Math.random() < 0.01) pool.query('DELETE FROM push_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)').catch(() => {});
+  if (Math.random() < 0.01) {
+    pool.query('DELETE FROM push_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)').catch(() => {});
+    pool.query('DELETE FROM push_sent WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)').catch(() => {});
+    pool.query('DELETE FROM messages WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)').catch(() => {});
+  }
 }
 
 function start() {
