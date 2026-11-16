@@ -10,4 +10,6 @@ function taskOnDay(t, day) {
   if (t.repeat_weekly) return day >= t.date && dow(day) === dow(t.date);
   return t.date === day;
 }
-module.exports = { today, dow, r2, taskOnDay };
+// Dias de teste em palavras: 30 = "1 mês", 90 = "3 meses", 45 = "45 dias"
+const trialText = (d) => { d = Math.round(+d) || 0; return d >= 30 && d % 30 === 0 ? (d === 30 ? '1 mês' : `${d / 30} meses`) : `${d} ${d === 1 ? 'dia' : 'dias'}`; };
+module.exports = { today, dow, r2, taskOnDay, trialText };

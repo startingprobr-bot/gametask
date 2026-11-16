@@ -812,7 +812,7 @@ async function viewPaywall() {
     <div class="pw-head">${im(a.active ? 'rocket' : 'lock')}<h1 class="d stroke">${head}</h1><p>${sub}</p></div>
     <div class="plans">
       <article class="plan free ${a.status === 'trial' ? 'current' : ''}">${a.status === 'trial' ? '<span class="ribbon blue">Você está aqui</span>' : ''}
-        <h2 class="d">Grátis</h2><div class="price"><small>R$</small><b class="d num">0</b><small>por ${Math.round(p.trial_days / 30)} meses</small></div>
+        <h2 class="d">Grátis</h2><div class="price"><small>R$</small><b class="d num">0</b><small>por ${trialText(p.trial_days)}</small></div>
         <p class="bill">${a.status === 'trial' ? `Faltam <b>${a.days_left} ${a.days_left === 1 ? 'dia' : 'dias'}</b>, até ${dmy(a.until)}` : 'Para conhecer, sem cartão'}</p>
         <ul><li>${im('check')}Tudo liberado</li><li>${im('check')}Depois, escolha um plano</li></ul>
         ${a.status === 'trial' ? '<button class="btn ghost" id="keepFree">Continuar no grátis</button>' : `<button class="btn ghost" disabled>${a.active ? 'Você já é assinante' : 'Período grátis usado'}</button>`}</article>
@@ -1103,6 +1103,7 @@ async function adminAlarms(pane, refresh) {
 }
 
 // ---------- Carrinho (vindo da página de vendas): paga primeiro, cria a senha depois ----------
+const trialText = (d) => { d = Math.round(+d) || 0; return d >= 30 && d % 30 === 0 ? (d === 30 ? '1 mês' : `${d / 30} meses`) : `${d} ${d === 1 ? 'dia' : 'dias'}`; };
 const CART = {
   annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Pix, cartão ou boleto'] },
   monthly: { t: 'Mensal', note: 'por mês', perks: ['Tudo do plano anual', 'Sem fidelidade: renove quando quiser'] },
@@ -1111,12 +1112,11 @@ const CART = {
 async function viewBuy(planIn) {
   const p = await api('GET', '/public/pricing');
   let plan = CART[planIn] ? planIn : 'annual';
-  const months = Math.round(p.trial_days / 30);
   const draw = () => {
     const c = CART[plan];
     $('#cart').innerHTML = `<div class="cart-top">${im(plan === 'plus' ? 'rocket' : 'trophy')}<div><b class="d">Plano ${c.t}</b><span>${c.perks.join(' · ')}</span></div></div>
       <div class="cart-total"><span>Total hoje</span><b class="d num">${brl(p[plan])}</b><small>${c.note}</small></div>
-      <p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa depois dos ${months} meses grátis</b>. Nenhum dia se perde.</span></p>`;
+      <p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa quando o teste grátis acabar (${trialText(p.trial_days)})</b>. Nenhum dia se perde.</span></p>`;
   };
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth cartwrap">
     <div class="logo">${im('game')}<h1 class="d stroke" style="font-size:40px">Seu carrinho</h1></div>

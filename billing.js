@@ -61,7 +61,7 @@ async function mp(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(d.message || `Mercado Pago ${r.status}`), { mp: d });
+  if (!r.ok) throw Object.assign(new Error(d.message || `Mercado Pago ${r.status}`), { mp: d, mpStatus: r.status });
   return d;
 }
 
@@ -104,7 +104,14 @@ async function finishSignup(fid) {
   if (f?.setup_pending) await mail.sendFinalizeMail(f.email, f.name, await mail.createResetLink(null, fid, 72, null, 'finalizar'));
 }
 
-const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e.mp || e); res.status(500).json({ error: e.mp ? 'O Mercado Pago recusou a operação. Tente de novo.' : 'Erro interno' }); });
+// Traduz a recusa do Mercado Pago em algo que dê para agir (o texto original vai para o log do servidor)
+function mpReason(e) {
+  const why = e.mp?.cause?.[0]?.description || e.mp?.message || '';
+  if (e.mpStatus === 401 || e.mpStatus === 403) return 'O Mercado Pago não aceitou a chave (MP_ACCESS_TOKEN). Use o Access Token de produção da aplicação Checkout Pro.' + (why ? ' (' + why + ')' : '');
+  return 'O Mercado Pago recusou a operação' + (why ? ': ' + why : '') + '. Tente de novo.';
+}
+
+const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e.mp || e); res.status(500).json({ error: e.mp ? mpReason(e) : 'Erro interno' }); });
 const needSession = (req, res, next) => req.session?.fid ? (req.fid = req.session.fid, next()) : res.status(401).json({ error: 'Faça login da família' });
 
 router.get('/status', needSession, wrap(async (req, res) => {

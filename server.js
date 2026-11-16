@@ -8,6 +8,7 @@ const { pool, migrate, ensureDatabase, getSetting } = require('./db');
 const billing = require('./billing');
 const mail = require('./mail');
 const members = require('./members');
+const { trialText } = require('./util');
 
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
@@ -142,7 +143,7 @@ app.get('/', wrap(async (req, res) => {
     .replaceAll('{{ANUAL_MES}}', brl(Math.floor(p.annual / 12 * 100) / 100))
     .replaceAll('{{PLUS_MES}}', brl(Math.floor(p.plus / 12 * 100) / 100)).replaceAll('{{PLUS}}', brl(p.plus))
     .replaceAll('{{ECONOMIA}}', String(Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100))))
-    .replaceAll('{{MESES}}', String(Math.round(p.trial_days / 30)));
+    .replaceAll('{{TESTE}}', trialText(p.trial_days));
   res.set('cache-control', 'no-cache').type('html').send(html);
 }));
 app.get('/app', sendApp);
