@@ -34,7 +34,9 @@ const step = (m) => console.log('✔', m);
         return res.end(JSON.stringify({ init_point: 'https://mp.test/pay/' + j.external_reference }));
       }
       if (req.method === 'POST' && req.url === '/v1/payments') {
-        const j = JSON.parse(b); lastPref = { ref: j.external_reference, amount: j.transaction_amount };
+        const j = JSON.parse(b);
+        if (j.payer.email === 'semapi@x.co') { res.statusCode = 401; return res.end(JSON.stringify({ message: 'Unauthorized use of live credentials' })); }
+        lastPref = { ref: j.external_reference, amount: j.transaction_amount };
         return res.end(JSON.stringify({ id: 777, status: 'pending', point_of_interaction: { transaction_data: { qr_code: '00020126PIXTESTE', qr_code_base64: 'iVBORw0KGgo=' } } }));
       }
       if (req.url.startsWith('/v1/payments/') && lastPref)
@@ -378,6 +380,10 @@ const step = (m) => console.log('✔', m);
     // Pix dentro do app: QR no carrinho, consulta até cair, e quem volta a tentar reaproveita o cadastro
     cookie = '';
     await ok('POST', '/api/billing/guest-checkout', { plan: 'monthly', email: 'soemail@x.co' }); // só e-mail basta
+    cookie = '';
+    const fb = await ok('POST', '/api/billing/guest-pix', { plan: 'monthly', email: 'semapi@x.co' }); // Pix pela API recusado: vai para a página do MP
+    assert.ok(fb.url && fb.url.startsWith('https://mp.test/pay/') && !fb.code);
+    cookie = '';
     const px = await ok('POST', '/api/billing/guest-pix', { plan: 'annual', name: 'Família Pix', email: 'pix@x.co' });
     assert.ok(px.code.startsWith('0002') && px.qr && px.ref);
     assert.equal((await ok('GET', '/api/auth/me')).pending, true);

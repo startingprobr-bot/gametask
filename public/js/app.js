@@ -1077,6 +1077,7 @@ async function viewPaywall() {
     ch.querySelector('.actions').remove();
     ch.querySelector('[data-via=pix]').onclick = guard(async () => {
       const r = await api('POST', '/billing/pix', { plan }); ch.remove();
+      if (r.url) { location.href = r.url; return; }
       showPix(r, async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); });
     });
     ch.querySelector('[data-via=mp]').onclick = guard(async () => { const r = await api('POST', '/billing/checkout', { plan }); location.href = r.url; });
@@ -1413,6 +1414,7 @@ async function viewBuy(planIn) {
       $('#err').textContent = '';
       if (via === 'mp') { const r = await api('POST', '/billing/guest-checkout', body); location.href = r.url; return; }
       const r = await api('POST', '/billing/guest-pix', body);
+      if (r.url) { location.href = r.url; return; }
       showPix(r, async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); });
     } catch (er) {
       $('#err').innerHTML = esc(er.message) + (er.code === 'exists' ? ' <a href="#/login">Entrar</a>' : '');

@@ -107,6 +107,7 @@ async function finishSignup(fid) {
 // Traduz a recusa do Mercado Pago em algo que dê para agir (o texto original vai para o log do servidor)
 function mpReason(e) {
   const why = e.mp?.cause?.[0]?.description || e.mp?.message || '';
+  if (/live credentials/i.test(why)) return 'O Mercado Pago ainda não liberou esta forma de pagamento na sua conta. Tente "Cartão ou boleto", que também aceita Pix.';
   if (e.mpStatus === 401 || e.mpStatus === 403) return 'O Mercado Pago não aceitou a chave (MP_ACCESS_TOKEN). Use o Access Token de produção da aplicação Checkout Pro.' + (why ? ' (' + why + ')' : '');
   return 'O Mercado Pago recusou a operação' + (why ? ': ' + why : '') + '. Tente de novo.';
 }
@@ -165,9 +166,19 @@ async function startPix(req, fid, planIn) {
   return { ref: r.insertId, amount, plan, code: td.qr_code, qr: td.qr_code_base64 || null };
 }
 
+// Se o Pix pela API for recusado por permissão (aplicação sem a API de pagamentos liberada em produção),
+// cai para a página do Mercado Pago, que também aceita Pix.
+const denied = (e) => e.mpStatus === 401 || e.mpStatus === 403;
+async function pixOrCheckout(req, fid, plan) {
+  try { return await startPix(req, fid, plan); } catch (e) {
+    if (!denied(e)) throw e;
+    console.error('Pix pela API recusado, usando o Checkout Pro:', e.mp?.message || e.message);
+    return { url: await startCheckout(req, fid, plan) };
+  }
+}
 router.post('/pix', needSession, wrap(async (req, res) => {
   if (!mpToken()) return noMp(res);
-  res.json(await startPix(req, req.fid, req.body.plan));
+  res.json(await pixOrCheckout(req, req.fid, req.body.plan));
 }));
 // O app pergunta a cada poucos segundos se o Pix já caiu
 router.get('/pix/:ref', needSession, wrap(async (req, res) => {
@@ -216,7 +227,7 @@ router.post('/guest-checkout', wrap(async (req, res) => {
 }));
 router.post('/guest-pix', wrap(async (req, res) => {
   const fid = await guestFamily(req, res); if (!fid) return;
-  res.json(await startPix(req, fid, req.body.plan));
+  res.json(await pixOrCheckout(req, fid, req.body.plan));
 }));
 
 // Volta do checkout: confere na hora, sem esperar o webhook

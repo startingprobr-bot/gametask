@@ -613,7 +613,7 @@ a.btn{text-decoration:none}
 .cart-note b{color:var(--ink)}
 /* Pix dentro do app */
 .pay-actions{display:flex;flex-direction:column;gap:10px}
-.pay-actions .btn{width:100%}
+.pay-actions .btn{width:100%;flex:0 0 auto}
 .pay-opts{display:flex;flex-direction:column;gap:12px;margin:14px 0 6px}
 .pay-opts .btn{width:100%;min-height:60px;font-size:19px}
 .pix{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px 20px;margin:12px 0 14px}
