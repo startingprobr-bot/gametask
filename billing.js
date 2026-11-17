@@ -187,8 +187,8 @@ async function guestFamily(req, res) {
   if (hits.length >= 15) { res.status(429).json({ error: 'Muitas tentativas. Tente de novo em alguns minutos.' }); return null; }
   tries.set(req.ip, [...hits, Date.now()]);
   if (!mpToken()) { noMp(res); return null; }
+  // só o e-mail é obrigatório: o nome da família é escolhido depois do pagamento
   const email = String(req.body.email || '').toLowerCase().trim(), name = String(req.body.name || '').trim().slice(0, 80);
-  if (!name) { res.status(400).json({ error: 'Escreva o nome da família' }); return null; }
   if (!/^\S+@\S+\.\S+$/.test(email)) { res.status(400).json({ error: 'Digite um e-mail válido' }); return null; }
   const exists = () => res.status(409).json({ error: 'Este e-mail já tem conta. Entre e escolha o plano em "Ver planos".', code: 'exists' });
   const [[old]] = await pool.query('SELECT id,setup_pending FROM families WHERE email=?', [email]);
@@ -197,13 +197,13 @@ async function guestFamily(req, res) {
     if (!old.setup_pending) { exists(); return null; }
     const [[paid]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND status='approved' LIMIT 1", [old.id]);
     if (paid) { res.status(409).json({ error: 'O pagamento deste e-mail já foi confirmado. Toque em "Esqueci a senha" na tela de entrada para criar o acesso.', code: 'exists' }); return null; }
-    await pool.query('UPDATE families SET name=? WHERE id=?', [name, old.id]);
+    if (name) await pool.query('UPDATE families SET name=? WHERE id=?', [name, old.id]);
     fid = old.id; mid = await members.principalId(fid);
   } else {
     if (await members.emailTaken(email)) { exists(); return null; }
     const trial = +(await settings()).trial_days;
     const junk = () => bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 4);
-    const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name, email, junk(), junk(), trial]);
+    const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name || 'Minha família', email, junk(), junk(), trial]);
     const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,'Responsável','Responsável',1,1,?)", [f.insertId, junk()]);
     fid = f.insertId; mid = m.insertId;
   }

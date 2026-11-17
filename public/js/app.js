@@ -1393,8 +1393,7 @@ async function viewBuy(planIn) {
     <form class="card" id="f" novalidate>
       <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal'], ['plus', 'Plus']], plan)}</div>
       <div id="cart" class="cart"></div>
-      <div class="field"><label for="n">Nome da família</label><input id="n" name="name" placeholder="Família Silva" autocomplete="organization" required></div>
-      <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" autocomplete="email" required><p class="hint">Enviamos a confirmação para ele. A senha você cria logo depois do pagamento.</p></div>
+      <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" inputmode="email" autocomplete="email" required><p class="hint">Só isso por agora. Nome, senha e PIN você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>
       <div class="actions pay-actions"><button class="btn green big" name="via" value="pix">Pagar com Pix</button><button class="btn ghost" name="via" value="mp">Cartão ou boleto</button></div>
       <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago.</p>
@@ -1409,12 +1408,12 @@ async function viewBuy(planIn) {
     e.preventDefault();
     const via = e.submitter?.value || 'pix', btns = $$('.actions .btn', e.target), label = e.submitter?.textContent;
     btns.forEach(b => { b.disabled = true; }); if (e.submitter) e.submitter.textContent = via === 'pix' ? 'Gerando o Pix…' : 'Abrindo o Mercado Pago…';
-    const body = { plan, name: e.target.name.value, email: e.target.email.value };
+    const body = { plan, email: e.target.email.value };
     try {
       $('#err').textContent = '';
       if (via === 'mp') { const r = await api('POST', '/billing/guest-checkout', body); location.href = r.url; return; }
       const r = await api('POST', '/billing/guest-pix', body);
-      showPix(r, async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só criar a sua senha e o PIN dos pais.', 'Continuar'); });
+      showPix(r, async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); });
     } catch (er) {
       $('#err').innerHTML = esc(er.message) + (er.code === 'exists' ? ' <a href="#/login">Entrar</a>' : '');
       e.target.classList.remove('shake'); void e.target.offsetWidth; e.target.classList.add('shake'); sfx.bad();
@@ -1430,6 +1429,7 @@ async function viewFinalize(token) {
     <div class="logo">${im(ok ? 'trophy' : 'lock')}<h1 class="d stroke" style="font-size:40px">${ok ? (paid || token ? 'Pagamento confirmado!' : 'Quase lá!') : 'Link vencido'}</h1></div>
     ${ok ? `<form class="card" id="f" novalidate><h2 class="d">Crie seu acesso</h2>
       <p class="lead" style="margin-top:6px;color:var(--ink-soft)">Falta só a senha para entrar e o PIN que protege o painel dos pais.</p>
+      <div class="field"><label for="fn">Nome da família</label><input id="fn" name="family_name" placeholder="Família Silva" autocomplete="organization"></div>
       <div class="field"><label for="mn">Seu nome</label><input id="mn" name="my_name" placeholder="Bruno" autocomplete="given-name"></div>
       <div class="field"><label for="p">Senha</label><div class="pw"><input id="p" name="password" type="password" autocomplete="new-password" required><button type="button" class="eye" aria-label="Mostrar senha" aria-pressed="false">${SVG.eye}</button></div><p class="hint">Mínimo de 6 caracteres. Você entra com o e-mail da compra e esta senha.</p></div>
       <div class="field"><label for="pin">PIN dos pais</label><div class="pw"><input id="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required><button type="button" class="eye" aria-label="Mostrar PIN" aria-pressed="false">${SVG.eye}</button></div><p class="hint">4 a 8 números. Protege o painel dos pais.</p></div>

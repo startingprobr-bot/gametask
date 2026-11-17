@@ -83,6 +83,8 @@ auth.post('/complete', wrap(async (req, res) => {
   await pool.query('UPDATE families SET password_hash=?, parent_pin_hash=?, setup_pending=0 WHERE id=?', [bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10), f.id]);
   const mid = await principalId(f.id);
   await pool.query("UPDATE members SET pin_hash=?, name=COALESCE(NULLIF(?,''),name) WHERE id=?", [bcrypt.hashSync(String(pin), 10), cleanName(req.body.my_name), mid]);
+  const fam = String(req.body.family_name || '').trim().slice(0, 80);
+  if (fam) await pool.query('UPDATE families SET name=? WHERE id=?', [fam, f.id]);
   await pool.query('DELETE FROM password_resets WHERE family_id=?', [f.id]);
   req.session = { fid: f.id, mid, actor: mid, parentUntil: Date.now() + PARENT_MIN * 60000 };
   res.json({ ok: true });

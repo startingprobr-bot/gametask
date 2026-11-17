@@ -360,8 +360,8 @@ const step = (m) => console.log('✔', m);
     g = await ok('GET', '/api/auth/me'); assert.equal(g.access.status, 'paid'); assert.equal(g.pending, true);
     assert.equal((await api('POST', '/api/auth/complete', { password: 'abc', pin: '1234' })).status, 400);
     assert.equal((await api('POST', '/api/auth/complete', { password: 'segredo1', pin: '12' })).status, 400);
-    await ok('POST', '/api/auth/complete', { password: 'segredo1', pin: '4321', my_name: 'Marta' });
-    g = await ok('GET', '/api/auth/me'); assert.equal(g.pending, false); assert.equal(g.actor.name, 'Marta'); assert.equal(g.access.status, 'paid');
+    await ok('POST', '/api/auth/complete', { password: 'segredo1', pin: '4321', my_name: 'Marta', family_name: 'Família Marta' });
+    g = await ok('GET', '/api/auth/me'); assert.equal(g.pending, false); assert.equal(g.actor.name, 'Marta'); assert.equal(g.access.status, 'paid'); assert.equal(g.family, 'Família Marta');
     assert.equal((await api('POST', '/api/auth/complete', { password: 'segredo1', pin: '4321' })).status, 400); // já finalizado
     cookie = '';
     await ok('POST', '/api/auth/login', { email: 'novo@x.co', password: 'segredo1' });
@@ -377,6 +377,7 @@ const step = (m) => console.log('✔', m);
 
     // Pix dentro do app: QR no carrinho, consulta até cair, e quem volta a tentar reaproveita o cadastro
     cookie = '';
+    await ok('POST', '/api/billing/guest-checkout', { plan: 'monthly', email: 'soemail@x.co' }); // só e-mail basta
     const px = await ok('POST', '/api/billing/guest-pix', { plan: 'annual', name: 'Família Pix', email: 'pix@x.co' });
     assert.ok(px.code.startsWith('0002') && px.qr && px.ref);
     assert.equal((await ok('GET', '/api/auth/me')).pending, true);
