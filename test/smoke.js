@@ -26,6 +26,7 @@ const step = (m) => console.log('✔', m);
 
   // Mercado Pago de mentira: cria a preferência e devolve o pagamento 777 como aprovado
   let lastPref = null;
+  const cards = {};
   const mpFake = http.createServer((req, res) => {
     let b = ''; req.on('data', d => { b += d; }); req.on('end', () => {
       res.setHeader('content-type', 'application/json');
@@ -35,17 +36,23 @@ const step = (m) => console.log('✔', m);
       }
       if (req.method === 'POST' && req.url === '/v1/payments') {
         const j = JSON.parse(b);
+        if (j.token) { // cartão: 'bad' é recusado
+          const id = 900 + Object.keys(cards).length, ok = j.token !== 'bad';
+          cards[id] = { id, status: ok ? 'approved' : 'rejected', status_detail: ok ? 'accredited' : 'cc_rejected_insufficient_amount', transaction_amount: j.transaction_amount, currency_id: 'BRL', external_reference: j.external_reference, payment_method_id: j.payment_method_id };
+          return res.end(JSON.stringify(cards[id]));
+        }
         if (j.payer.email === 'semapi@x.co') { res.statusCode = 401; return res.end(JSON.stringify({ message: 'Unauthorized use of live credentials' })); }
         lastPref = { ref: j.external_reference, amount: j.transaction_amount };
         return res.end(JSON.stringify({ id: 777, status: 'pending', point_of_interaction: { transaction_data: { qr_code: '00020126PIXTESTE', qr_code_base64: 'iVBORw0KGgo=' } } }));
       }
+      if (req.url.startsWith('/v1/payments/') && cards[req.url.split('/').pop()]) return res.end(JSON.stringify(cards[req.url.split('/').pop()]));
       if (req.url.startsWith('/v1/payments/') && lastPref)
         return res.end(JSON.stringify({ id: 777, status: 'approved', transaction_amount: lastPref.amount, currency_id: 'BRL', external_reference: lastPref.ref, payment_method_id: 'pix' }));
       res.statusCode = 404; res.end('{}');
     });
   });
   await new Promise(r => mpFake.listen(3198, '127.0.0.1', r));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 120; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
 
@@ -380,6 +387,18 @@ const step = (m) => console.log('✔', m);
     // Pix dentro do app: QR no carrinho, consulta até cair, e quem volta a tentar reaproveita o cadastro
     cookie = '';
     await ok('POST', '/api/billing/guest-checkout', { plan: 'monthly', email: 'soemail@x.co' }); // só e-mail basta
+    cookie = '';
+    // cartão dentro do app
+    assert.equal((await ok('GET', '/api/public/pricing')).card, 'APP_USR-pub');
+    const card = { payment_method_id: 'visa', installments: 1, payer: { email: 'cartao@x.co', identification: { type: 'CPF', number: '12345678909' } } };
+    const cr = await ok('POST', '/api/billing/guest-card', { plan: 'monthly', email: 'cartao@x.co', token: 'bad', ...card });
+    assert.equal(cr.status, 'rejected'); assert.ok(/limite/.test(cr.message));
+    assert.equal((await ok('GET', '/api/auth/me')).access.status, 'trial');
+    const ca = await ok('POST', '/api/billing/guest-card', { plan: 'monthly', email: 'cartao@x.co', token: 'tk1', amount: 0.01, ...card });
+    assert.equal(ca.status, 'approved');
+    const gm = await ok('GET', '/api/auth/me'); assert.equal(gm.access.status, 'paid'); assert.equal(gm.pending, true);
+    assert.equal((await api('POST', '/api/billing/guest-card', { plan: 'monthly', email: 'cartao@x.co', token: 'tk2', ...card })).status, 409); // já pago
+    step('cartão dentro do app: recusado explica o motivo, aprovado libera na hora');
     cookie = '';
     const fb = await ok('POST', '/api/billing/guest-pix', { plan: 'monthly', email: 'semapi@x.co' }); // Pix pela API recusado: vai para a página do MP
     assert.ok(fb.url && fb.url.startsWith('https://mp.test/pay/') && !fb.code);

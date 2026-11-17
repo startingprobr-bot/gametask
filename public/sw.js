@@ -1,11 +1,11 @@
-// Service worker: rede primeiro, cache só do shell do app para abrir offline, e avisos (Web Push).
-const C = 'gametask-v22', SHELL = ['/app', '/css/game.css', '/js/app.js', '/icons/icon.svg', '/fonts/lilita-one.woff2', '/fonts/nunito.woff2'];
+﻿// Service worker: rede primeiro, cache sÃ³ do shell do app para abrir offline, e avisos (Web Push).
+const C = 'gametask-v23', SHELL = ['/app', '/css/game.css', '/js/app.js', '/icons/icon.svg', '/fonts/lilita-one.woff2', '/fonts/nunito.woff2'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(k => Promise.all(k.filter(x => x !== C).map(x => caches.delete(x)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/api/')) return;
-  // "/" muda conforme o login (página de vendas x app): nunca guardar
+  // "/" muda conforme o login (pÃ¡gina de vendas x app): nunca guardar
   const keep = u.pathname !== '/';
   e.respondWith(fetch(e.request).then(r => { if (keep && r.ok) { const cp = r.clone(); caches.open(C).then(c => c.put(e.request, cp)); } return r; })
     .catch(() => caches.match(e.request).then(m => m || caches.match('/app'))));
@@ -25,7 +25,7 @@ self.addEventListener('notificationclick', e => {
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
     const w = list.find(c => new URL(c.url).origin === location.origin);
     if (!w) return clients.openWindow(url);
-    // janela já aberta: traz para a frente e manda o app ir para a tela certa (navigate() falha em páginas não controladas)
+    // janela jÃ¡ aberta: traz para a frente e manda o app ir para a tela certa (navigate() falha em pÃ¡ginas nÃ£o controladas)
     await w.focus().catch(() => {});
     w.postMessage({ type: 'go', url });
     await w.navigate(url).catch(() => {});

@@ -12,6 +12,8 @@ const crypto = require('crypto');
 const members = require('./members');
 const mail = require('./mail');
 const mpToken = () => process.env.MP_ACCESS_TOKEN || '';
+// Public Key (não é segredo): liga o cartão dentro do app (Card Payment Brick)
+const cardKey = () => (mpToken() && process.env.MP_PUBLIC_KEY) || null;
 const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '');
 
 // datas 'YYYY-MM-DD' em UTC puro (sem fuso)
@@ -119,7 +121,7 @@ router.get('/status', needSession, wrap(async (req, res) => {
   const [[f]] = await pool.query('SELECT id,email,plan,paid_until,trial_ends FROM families WHERE id=?', [req.fid]);
   if (!f) return res.status(401).json({ error: 'Faça login da família' });
   const [hist] = await pool.query("SELECT id,plan,amount,status,method,period_end,created_at,paid_at FROM payments WHERE family_id=? AND status<>'pending' ORDER BY id DESC LIMIT 12", [f.id]);
-  res.json({ access: access(f), prices: await prices(), enabled: !!mpToken(), payments: hist });
+  res.json({ access: access(f), prices: await prices(), enabled: !!mpToken(), card: cardKey(), email: f.email, payments: hist });
 }));
 
 async function startCheckout(req, fid, planIn) {
@@ -189,6 +191,54 @@ router.get('/pix/:ref', needSession, wrap(async (req, res) => {
   res.json({ status });
 }));
 
+// Cartão dentro do app: o formulário do Mercado Pago (Brick) gera um token do cartão no navegador;
+// aqui só cobramos com esse token. O valor vem sempre do nosso preço, nunca do navegador.
+const CARD_MSG = {
+  cc_rejected_insufficient_amount: 'Saldo ou limite insuficiente. Tente outro cartão ou o Pix.',
+  cc_rejected_bad_filled_security_code: 'O código de segurança (CVV) está errado.',
+  cc_rejected_bad_filled_date: 'A data de validade está errada.',
+  cc_rejected_bad_filled_card_number: 'O número do cartão está errado.',
+  cc_rejected_bad_filled_other: 'Confira os dados do cartão.',
+  cc_rejected_call_for_authorize: 'O banco pediu para autorizar este pagamento. Ligue para o banco e tente de novo.',
+  cc_rejected_card_disabled: 'Este cartão está bloqueado. Ligue para o banco para ativá-lo.',
+  cc_rejected_duplicated_payment: 'Este pagamento já foi feito. Se o valor saiu, o acesso já está liberado.',
+  cc_rejected_high_risk: 'O pagamento foi recusado por segurança. Tente outro cartão ou o Pix.',
+  cc_rejected_max_attempts: 'Muitas tentativas com este cartão. Use outro cartão ou o Pix.',
+};
+async function startCard(req, fid, planIn) {
+  const b = req.body, plan = PLANS.includes(planIn) ? planIn : 'annual';
+  if (!b.token || !b.payment_method_id) throw Object.assign(new Error('cartão'), { mp: { message: 'Faltam os dados do cartão.' }, mpStatus: 400 });
+  const amount = (await prices())[plan];
+  const [[f]] = await pool.query('SELECT email FROM families WHERE id=?', [fid]);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [fid, plan, amount]);
+  const base = appUrl() || `${req.protocol}://${req.get('host')}`;
+  const id = b.payer?.identification;
+  const pay = await mp('POST', '/v1/payments', {
+    transaction_amount: amount, token: String(b.token), description: `GameTask: plano ${PLAN_TITLE[plan]}`,
+    installments: Math.max(1, Math.min(12, +b.installments || 1)), payment_method_id: String(b.payment_method_id),
+    ...(b.issuer_id ? { issuer_id: String(b.issuer_id) } : {}),
+    payer: { email: String(b.payer?.email || f.email), ...(id?.number ? { identification: { type: String(id.type || 'CPF'), number: String(id.number) } } : {}) },
+    external_reference: String(r.insertId), statement_descriptor: 'GAMETASK',
+    ...(base.startsWith('https://') ? { notification_url: `${base}/api/billing/webhook` } : {}),
+  }, { 'X-Idempotency-Key': `gt-card-${r.insertId}` });
+  await pool.query('UPDATE payments SET mp_payment_id=?, method=? WHERE id=?', [String(pay.id), pay.payment_method_id || null, r.insertId]);
+  const row = await syncPayment(pay.id).catch(e => (console.error(e.mp || e), null));
+  const status = row?.status === 'approved' ? 'approved' : pay.status;
+  const message = status === 'approved' ? null
+    : ['in_process', 'pending'].includes(status) ? 'O pagamento está em análise. Avisamos por e-mail assim que for aprovado (costuma levar poucos minutos).'
+    : CARD_MSG[pay.status_detail] || 'O cartão foi recusado. Tente outro cartão ou o Pix.';
+  return { ref: r.insertId, status, message };
+}
+router.post('/card', needSession, wrap(async (req, res) => {
+  if (!cardKey()) return noMp(res);
+  res.json(await startCard(req, req.fid, req.body.plan));
+}));
+router.post('/guest-card', wrap(async (req, res) => {
+  if (!cardKey()) return noMp(res);
+  const fid = await guestFamily(req, res); if (!fid) return;
+  res.json(await startCard(req, fid, req.body.plan));
+}));
+
 // Carrinho da página de vendas: quem ainda não tem conta paga primeiro e cria a senha e o PIN depois.
 // A família nasce "pendente" (senha aleatória) e a sessão deste aparelho fica ligada a ela para finalizar depois de pagar.
 // Quem volta a tentar com o mesmo e-mail (QR vencido, trocou de forma de pagar) reaproveita o cadastro ainda sem pagamento.
@@ -246,4 +296,4 @@ router.post('/webhook', (req, res) => {
   if (type === 'payment' && id && mpToken()) syncPayment(id).catch(e => console.error('webhook', e.mp || e.message));
 });
 
-module.exports = { router, access, isOwner, needActive, prices, addPeriod };
+module.exports = { router, access, isOwner, needActive, prices, addPeriod, cardKey };

@@ -730,3 +730,8 @@ a.btn{text-decoration:none}
 .chip-btn:active{background:var(--mist)}
 @media (prefers-reduced-motion:reduce){.msg-ic,.msg-badge{animation:none}}
 textarea{width:100%;padding:12px 14px;border-radius:14px;border:2px solid var(--mist-2);background:var(--mist);font:inherit;font-weight:800;font-size:17px;outline:none;resize:vertical}textarea:focus{border-color:var(--sky-2);background:#fff}
+
+/* ---------- v13: cartão dentro do app ---------- */
+.card-brick{min-height:120px;margin:10px 0 4px}
+.card-brick .pix-wait{justify-content:center}
+.pay-actions .switch,.pay-opts .switch{align-self:center}

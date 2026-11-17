@@ -1073,7 +1073,7 @@ async function viewPaywall() {
     if (!ME.parent) return viewPin(); // só um responsável assina (volta para os planos depois do PIN)
     if (!s.enabled) throw new Error('O pagamento on-line ainda está sendo ativado. Tente mais tarde.');
     const plan = b.dataset.plan;
-    const ch = sheet('Como você quer pagar?', '<div class="pay-opts"><button type="button" class="btn green" data-via="pix">Pix, rápido e aqui mesmo</button><button type="button" class="btn ghost" data-via="mp">Cartão ou boleto</button></div>', async () => {});
+    const ch = sheet('Como você quer pagar?', `<div class="pay-opts"><button type="button" class="btn green" data-via="pix">Pix, rápido e aqui mesmo</button>${s.card ? '<button type="button" class="btn" data-via="card">Cartão de crédito</button><button type="button" class="switch" data-via="mp">Boleto ou outras formas</button>' : '<button type="button" class="btn ghost" data-via="mp">Cartão ou boleto</button>'}</div>`, async () => {});
     ch.querySelector('.actions').remove();
     ch.querySelector('[data-via=pix]').onclick = guard(async () => {
       const r = await api('POST', '/billing/pix', { plan }); ch.remove();
@@ -1081,6 +1081,9 @@ async function viewPaywall() {
       showPix(r, async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); });
     });
     ch.querySelector('[data-via=mp]').onclick = guard(async () => { const r = await api('POST', '/billing/checkout', { plan }); location.href = r.url; });
+    const cb = ch.querySelector('[data-via=card]');
+    if (cb) cb.onclick = () => { ch.remove(); showCard({ key: s.card, amount: s.prices[plan], email: s.email, pay: (d) => api('POST', '/billing/card', { plan, ...d }),
+      onPaid: async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); } }); };
   }));
   const back = $('#back'); if (back) back.onclick = () => { location.hash = ME.parent ? '#/admin' : '#/'; };
   const keep = $('#keepFree'); if (keep) keep.onclick = () => { sfx.tap(); location.hash = '#/'; };
@@ -1348,6 +1351,55 @@ async function adminAlarms(pane, refresh) {
   });
 }
 
+// ---------- Cartão dentro do app (formulário oficial do Mercado Pago: os dados do cartão não passam pelo nosso servidor) ----------
+let mpSdk;
+const loadMp = () => mpSdk || (mpSdk = new Promise((ok, no) => {
+  const s = document.createElement('script'); s.src = 'https://sdk.mercadopago.com/js/v2';
+  s.onload = ok; s.onerror = () => { mpSdk = null; s.remove(); no(new Error('Não foi possível abrir o pagamento com cartão. Confira a internet e tente de novo.')); };
+  document.head.append(s);
+}));
+// o = { key, amount, email, pay(formData) -> {ref,status,message}, onPaid }
+async function showCard(o) {
+  const bg = sheet('Pague com cartão', `<div class="card-brick" id="cardBrick"><p class="pix-wait"><i class="spin"></i><span>Abrindo o pagamento seguro…</span></p></div>
+    <p class="pw-note">${im('shield')}Os dados do cartão vão direto para o Mercado Pago.</p>`, async () => {});
+  bg.querySelector('.actions .btn').remove();
+  const err = (t) => { bg.querySelector('.err').textContent = t || ''; };
+  let ctl, wait;
+  const close = () => { clearTimeout(wait); try { ctl?.unmount?.(); } catch {} bg.remove(); };
+  bg.querySelector('[data-x]').onclick = close;
+  const paid = () => { close(); sfx.win(); o.onPaid(); };
+  // em análise: consulta até cair (mesma rota do Pix)
+  const poll = (ref) => { wait = setTimeout(async () => {
+    if (!document.body.contains(bg)) return;
+    const st = (await api('GET', '/billing/pix/' + ref).catch(() => ({}))).status;
+    if (st === 'approved') return paid();
+    if (['rejected', 'cancelled', 'invalid'].includes(st)) return err('O pagamento não foi aprovado. Tente outro cartão ou o Pix.');
+    poll(ref);
+  }, 5000); };
+  try {
+    await loadMp();
+    const mp = new window.MercadoPago(o.key, { locale: 'pt-BR' });
+    $('#cardBrick', bg).innerHTML = '';
+    ctl = await mp.bricks().create('cardPayment', 'cardBrick', {
+      initialization: { amount: o.amount, payer: { email: o.email } },
+      customization: { paymentMethods: { maxInstallments: 12 }, visual: { style: { theme: 'default', customVariables: { baseColor: '#2bb24c', borderRadiusLarge: '16px' } } } },
+      callbacks: {
+        onReady: () => {},
+        onError: (e) => { console.error(e); if (e?.type === 'critical') err('O formulário do cartão falhou. Feche e tente de novo, ou use o Pix.'); },
+        onSubmit: async (d) => {
+          err('');
+          try {
+            const r = await o.pay(d);
+            if (r.status === 'approved') return paid();
+            err(r.message);
+            if (['in_process', 'pending'].includes(r.status)) poll(r.ref); else sfx.bad();
+          } catch (e) { err(e.message); sfx.bad(); }
+        },
+      },
+    });
+  } catch (e) { err(e.message); $('#cardBrick', bg).innerHTML = ''; }
+}
+
 // ---------- Pix dentro do app ----------
 // r = { ref, amount, plan, code, qr }. Consulta a cada 4 s até o pagamento cair; onPaid roda uma vez.
 function showPix(r, onPaid) {
@@ -1396,7 +1448,7 @@ async function viewBuy(planIn) {
       <div id="cart" class="cart"></div>
       <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" inputmode="email" autocomplete="email" required><p class="hint">Só isso por agora. Nome, senha e PIN você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>
-      <div class="actions pay-actions"><button class="btn green big" name="via" value="pix">Pagar com Pix</button><button class="btn ghost" name="via" value="mp">Cartão ou boleto</button></div>
+      <div class="actions pay-actions"><button class="btn green big" name="via" value="pix">Pagar com Pix</button>${p.card ? '<button class="btn" name="via" value="card">Pagar com cartão</button><button class="switch" name="via" value="mp">Boleto ou outras formas</button>' : '<button class="btn ghost" name="via" value="mp">Cartão ou boleto</button>'}</div>
       <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago.</p>
     </form>
     <button class="switch" id="free">Prefiro testar de graça primeiro</button>
@@ -1410,6 +1462,13 @@ async function viewBuy(planIn) {
     const via = e.submitter?.value || 'pix', btns = $$('.actions .btn', e.target), label = e.submitter?.textContent;
     btns.forEach(b => { b.disabled = true; }); if (e.submitter) e.submitter.textContent = via === 'pix' ? 'Gerando o Pix…' : 'Abrindo o Mercado Pago…';
     const body = { plan, email: e.target.email.value };
+    if (via === 'card') {
+      btns.forEach(b => { b.disabled = false; }); e.submitter.textContent = label;
+      if (!/^\S+@\S+\.\S+$/.test(body.email.trim())) { $('#err').textContent = 'Digite um e-mail válido'; e.target.email.focus(); sfx.bad(); return; }
+      $('#err').textContent = '';
+      return showCard({ key: p.card, amount: p[plan], email: body.email.trim(), pay: (d) => api('POST', '/billing/guest-card', { ...body, ...d }),
+        onPaid: async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); } });
+    }
     try {
       $('#err').textContent = '';
       if (via === 'mp') { const r = await api('POST', '/billing/guest-checkout', body); location.href = r.url; return; }
