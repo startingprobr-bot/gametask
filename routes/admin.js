@@ -32,7 +32,7 @@ router.delete('/kids/:id', wrap(async (req, res) => {
   const [[k]] = await pool.query('SELECT id,adult FROM kids WHERE id=? AND family_id=?', [req.params.id, req.fid]);
   if (!k) return res.status(404).json({ error: 'Jogador não encontrado' });
   if (k.adult) { await pool.query('UPDATE kids SET active=0 WHERE id=?', [k.id]); return res.json({ ok: true, left: true }); }
-  for (const t of ['completions', 'ledger', 'payouts', 'task_kids', 'task_order', 'wheel_spins', 'alarms']) await pool.query(`DELETE FROM ${t} WHERE kid_id=?`, [k.id]);
+  for (const t of ['completions', 'ledger', 'payouts', 'task_kids', 'task_order', 'wheel_spins', 'fix_spins', 'alarms']) await pool.query(`DELETE FROM ${t} WHERE kid_id=?`, [k.id]);
   await pool.query('DELETE FROM kids WHERE id=? AND family_id=?', [k.id, req.fid]);
   res.json({ ok: true });
 }));
@@ -150,14 +150,100 @@ router.get('/wheel', wrap(async (req, res) => {
   const [mine] = await pool.query('SELECT id FROM wheel_prizes WHERE family_id=?', [req.fid]);
   const prizes = await require('./kid').wheelPrizes(req.fid);
   const [spins] = await pool.query(
-    `SELECT s.label,s.emoji,DATE_FORMAT(s.day,'%Y-%m-%d') day,k.name kid FROM wheel_spins s JOIN kids k ON k.id=s.kid_id
+    `SELECT s.label,s.emoji,s.coins,DATE_FORMAT(s.day,'%Y-%m-%d') day,k.name kid FROM wheel_spins s JOIN kids k ON k.id=s.kid_id
      WHERE s.family_id=? ORDER BY s.id DESC LIMIT 10`, [req.fid]);
   res.json({ prizes, spins, sample: mine.length < 2 });
 }));
 router.put('/wheel', wrap(async (req, res) => {
-  const list = (Array.isArray(req.body.prizes) ? req.body.prizes : []).map(p => ({ label: String(p.label || '').trim().slice(0, 40), emoji: String(p.emoji || '').trim().slice(0, 8) || null })).filter(p => p.label).slice(0, 12);
+  const list = cleanItems(req.body.prizes);
   await pool.query('DELETE FROM wheel_prizes WHERE family_id=?', [req.fid]);
-  if (list.length) await pool.query('INSERT INTO wheel_prizes (family_id,label,emoji,sort) VALUES ?', [list.map((p, i) => [req.fid, p.label, p.emoji, i])]);
+  if (list.length) await pool.query('INSERT INTO wheel_prizes (family_id,label,emoji,coins,sort) VALUES ?', [list.map((p, i) => [req.fid, p.label, p.emoji, p.coins, i])]);
+  res.json({ ok: true });
+}));
+
+// itens de roleta vindos do formulário: nome, emoji e moedas (0 a 1000)
+function cleanItems(arr) {
+  return (Array.isArray(arr) ? arr : []).map(p => {
+    const coins = Math.max(0, Math.min(1000, Math.round(+p.coins || 0)));
+    return { label: String(p.label || '').trim().slice(0, 40) || (coins ? `${coins} moedas` : ''), emoji: String(p.emoji || '').trim().slice(0, 8) || (coins ? '💰' : null), coins };
+  }).filter(p => p.label).slice(0, 12);
+}
+
+// ---------- Roletas de correção ----------
+const FIX_SAMPLES = [
+  ['Desobediência', [['⏰', '10 min pensando'], ['📵', 'Sem tela por 30 min'], ['🧹', 'Ajudar a arrumar a casa'], ['🛏️', 'Dormir 15 min mais cedo'], ['🙏', 'Pedir desculpas'], ['💰', 'Perde 10 moedas', 10]]],
+  ['Implicância', [['🤝', 'Pedir desculpas e abraçar'], ['🎁', 'Fazer algo legal pro irmão'], ['🧹', 'Fazer uma tarefa do irmão'], ['💌', 'Desenhar um cartão pro irmão'], ['📵', 'Sem tela por 20 min'], ['💰', 'Perde 5 moedas', 5]]],
+  ['Gritaria', [['🤫', '5 min em silêncio'], ['🗣️', 'Repetir falando baixinho'], ['🧘', 'Respirar fundo 10 vezes'], ['🙏', 'Pedir desculpas'], ['📵', 'Sem tela por 15 min']]],
+];
+async function saveFixItems(fid, wheelId, items) {
+  await pool.query('DELETE FROM fix_items WHERE wheel_id=? AND family_id=?', [wheelId, fid]);
+  if (items.length) await pool.query('INSERT INTO fix_items (family_id,wheel_id,label,emoji,coins,sort) VALUES ?', [items.map((p, i) => [fid, wheelId, p.label, p.emoji, p.coins, i])]);
+}
+const ownFix = async (req) => (await pool.query('SELECT id,name FROM fix_wheels WHERE id=? AND family_id=?', [req.params.id, req.fid]))[0][0];
+function fixBody(req, res) {
+  const name = String(req.body.name || '').trim().slice(0, 40), items = cleanItems(req.body.items);
+  if (!name) { res.status(400).json({ error: 'Dê um nome para a roleta' }); return null; }
+  if (items.length < 2) { res.status(400).json({ error: 'Coloque pelo menos 2 itens' }); return null; }
+  return { name, items };
+}
+router.get('/fix', wrap(async (req, res) => {
+  const [wheels] = await pool.query('SELECT id,name FROM fix_wheels WHERE family_id=? ORDER BY sort,id', [req.fid]);
+  const { fixItems } = require('./kid');
+  for (const w of wheels) w.items = await fixItems(w.id);
+  const [spins] = await pool.query(
+    `SELECT s.id,s.wheel_name,s.label,s.emoji,s.coins,s.created_at,s.spun_at,k.name kid FROM fix_spins s JOIN kids k ON k.id=s.kid_id
+     WHERE s.family_id=? ORDER BY s.id DESC LIMIT 10`, [req.fid]);
+  res.json({ wheels, spins });
+}));
+router.post('/fix/samples', wrap(async (req, res) => {
+  const [[n]] = await pool.query('SELECT COUNT(*) n FROM fix_wheels WHERE family_id=?', [req.fid]);
+  if (n.n) return res.status(400).json({ error: 'Você já tem roletas de correção' });
+  for (const [i, [name, items]] of FIX_SAMPLES.entries()) {
+    const [r] = await pool.query('INSERT INTO fix_wheels (family_id,name,sort) VALUES (?,?,?)', [req.fid, name, i]);
+    await saveFixItems(req.fid, r.insertId, items.map(([emoji, label, coins = 0]) => ({ emoji, label, coins })));
+  }
+  res.json({ ok: true });
+}));
+router.post('/fix', wrap(async (req, res) => {
+  const b = fixBody(req, res); if (!b) return;
+  const [[n]] = await pool.query('SELECT COUNT(*) n FROM fix_wheels WHERE family_id=?', [req.fid]);
+  if (n.n >= 12) return res.status(400).json({ error: 'No máximo 12 roletas' });
+  const [r] = await pool.query('INSERT INTO fix_wheels (family_id,name,sort) VALUES (?,?,?)', [req.fid, b.name, n.n]);
+  await saveFixItems(req.fid, r.insertId, b.items);
+  res.json({ id: r.insertId });
+}));
+router.put('/fix/:id', wrap(async (req, res) => {
+  const w = await ownFix(req); if (!w) return res.status(404).json({ error: 'Roleta não encontrada' });
+  const b = fixBody(req, res); if (!b) return;
+  await pool.query('UPDATE fix_wheels SET name=? WHERE id=?', [b.name, w.id]);
+  await saveFixItems(req.fid, w.id, b.items);
+  res.json({ ok: true });
+}));
+router.delete('/fix/:id', wrap(async (req, res) => {
+  const w = await ownFix(req); if (!w) return res.status(404).json({ error: 'Roleta não encontrada' });
+  await pool.query('DELETE FROM fix_items WHERE wheel_id=?', [w.id]);
+  await pool.query('DELETE FROM fix_spins WHERE wheel_id=? AND spun_at IS NULL', [w.id]); // quem estava esperando para girar não fica preso
+  await pool.query('DELETE FROM fix_wheels WHERE id=?', [w.id]);
+  res.json({ ok: true });
+}));
+// Usar a roleta com um jogador: cria o giro; os pais giram na hora (fix-spins/:id/spin) ou ele gira na tela dele
+router.post('/fix/:id/apply', wrap(async (req, res) => {
+  const w = await ownFix(req); if (!w) return res.status(404).json({ error: 'Roleta não encontrada' });
+  const [[k]] = await pool.query('SELECT id FROM kids WHERE id=? AND family_id=? AND active=1', [req.body.kid_id, req.fid]);
+  if (!k) return res.status(404).json({ error: 'Escolha quem vai girar' });
+  const { fixItems } = require('./kid');
+  const items = await fixItems(w.id);
+  if (items.length < 2) return res.status(400).json({ error: 'Essa roleta precisa de pelo menos 2 itens' });
+  const [r] = await pool.query('INSERT INTO fix_spins (family_id,kid_id,wheel_id,wheel_name) VALUES (?,?,?,?)', [req.fid, k.id, w.id, w.name]);
+  res.json({ id: r.insertId, name: w.name, prizes: items });
+}));
+router.post('/fix-spins/:id/spin', wrap(async (req, res) => {
+  try { res.json(await require('./kid').spinFix(req.fid, +req.params.id)); }
+  catch (e) { if (!e.status) throw e; res.status(e.status).json({ error: e.message }); }
+}));
+// Desistir de uma correção que ainda não foi girada
+router.delete('/fix-spins/:id', wrap(async (req, res) => {
+  await pool.query('DELETE FROM fix_spins WHERE id=? AND family_id=? AND spun_at IS NULL', [req.params.id, req.fid]);
   res.json({ ok: true });
 }));
 

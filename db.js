@@ -94,6 +94,16 @@ const SCHEMA = [
 `CREATE TABLE IF NOT EXISTS wheel_spins (
   id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, kid_id INT NOT NULL, day DATE NOT NULL, label VARCHAR(60) NOT NULL, emoji VARCHAR(16) NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY one_a_day (kid_id, day), INDEX(family_id))`,
+// Roletas de correção: os pais montam várias (implicância, desobediência…); cada uso fica registrado
+`CREATE TABLE IF NOT EXISTS fix_wheels (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, name VARCHAR(40) NOT NULL, sort INT NOT NULL DEFAULT 0, INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS fix_items (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, wheel_id INT NOT NULL, label VARCHAR(60) NOT NULL, emoji VARCHAR(16) NULL,
+  coins INT NOT NULL DEFAULT 0, sort INT NOT NULL DEFAULT 0, INDEX(wheel_id))`,
+`CREATE TABLE IF NOT EXISTS fix_spins (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, kid_id INT NOT NULL, wheel_id INT NOT NULL, wheel_name VARCHAR(40) NOT NULL,
+  label VARCHAR(60) NULL, emoji VARCHAR(16) NULL, coins INT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, spun_at TIMESTAMP NULL,
+  INDEX(kid_id), INDEX(family_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
@@ -109,7 +119,9 @@ const COLUMNS = [
   ['families', 'setup_pending', 'TINYINT NOT NULL DEFAULT 0'], // comprou pela página de vendas e ainda não criou senha e PIN
   ['tasks', 'carry', 'TINYINT NOT NULL DEFAULT 0'],        // dia marcado: se não fizer, passa para o dia seguinte
   ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],         // perfil de jogador de um adulto (sem moedas)
-  ['password_resets', 'member_id', 'INT NULL'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
+  ['password_resets', 'member_id', 'INT NULL'],
+  ['wheel_prizes', 'coins', 'INT NOT NULL DEFAULT 0'],          // prêmio da roleta que já cai como moedas na conta
+  ['wheel_spins', 'coins', 'INT NOT NULL DEFAULT 0'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 

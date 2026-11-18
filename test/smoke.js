@@ -227,6 +227,48 @@ const step = (m) => console.log('✔', m);
     assert.equal((await api('POST', `/api/kids/${anaKid.id}/spin`, {})).status, 400);
     assert.equal((await ok('GET', '/api/admin/wheel')).spins[0].kid, 'Ana'); step('roleta: prêmios, libera ao terminar o dia, um giro por dia');
 
+    // prêmio em moedas: cai direto na conta, sem tarefa
+    const zeId = (await ok('POST', '/api/admin/kids', { name: 'Zé', auto_approve: 1 })).id;
+    await ok('PUT', '/api/admin/wheel', { prizes: [{ emoji: '🪙', label: '', coins: 50 }, { label: 'Moedão', coins: '50' }] });
+    assert.deepEqual((await ok('GET', '/api/admin/wheel')).prizes.map(p => p.coins), [50, 50]);
+    for (const tk of (await ok('GET', `/api/kids/${zeId}/home`)).tasks) if (tk.status === 'todo') await ok('POST', `/api/kids/${zeId}/complete`, { task_id: tk.id });
+    const zh0 = await ok('GET', `/api/kids/${zeId}/home`); assert.equal(zh0.wheel.ready, true);
+    const zsp = await ok('POST', `/api/kids/${zeId}/spin`, {});
+    assert.equal(zsp.prize.coins, 50);
+    const zh = await ok('GET', `/api/kids/${zeId}/home`); assert.equal(zh.balance, zh0.balance + 50); assert.equal(zh.wheel.spun.coins, 50);
+    step('roleta: prêmio em moedas cai direto na conta');
+
+    // roletas de correção
+    assert.equal((await ok('GET', '/api/admin/fix')).wheels.length, 0);
+    await ok('POST', '/api/admin/fix/samples');
+    assert.equal((await api('POST', '/api/admin/fix/samples')).status, 400);
+    let fx = await ok('GET', '/api/admin/fix'); assert.equal(fx.wheels.length, 3);
+    assert.equal((await api('POST', '/api/admin/fix', { name: 'Só um', items: [{ label: 'A' }] })).status, 400);
+    const fid1 = (await ok('POST', '/api/admin/fix', { name: 'Teste', items: [{ label: 'Perde tudo', coins: 999 }, { label: '', coins: 999 }] })).id;
+    // girar aqui: desconta, mas nunca deixa o saldo negativo
+    const ap = await ok('POST', `/api/admin/fix/${fid1}/apply`, { kid_id: zeId });
+    assert.equal(ap.prizes.length, 2);
+    const fsp = await ok('POST', `/api/admin/fix-spins/${ap.id}/spin`, {});
+    assert.equal(fsp.prize.coins, zh.balance);
+    assert.equal((await ok('GET', `/api/kids/${zeId}/home`)).balance, 0);
+    assert.equal((await api('POST', `/api/admin/fix-spins/${ap.id}/spin`, {})).status, 400); // um giro só
+    // na tela dele: fica esperando até ele girar
+    const ap2 = await ok('POST', `/api/admin/fix/${fx.wheels[1].id}/apply`, { kid_id: zeId });
+    let zf = (await ok('GET', `/api/kids/${zeId}/home`)).fix; assert.equal(zf.length, 1); assert.equal(zf[0].name, 'Implicância');
+    const ksp = await ok('POST', `/api/kids/${zeId}/fix/${ap2.id}/spin`, {}); assert.ok(ksp.prize.label);
+    assert.equal((await ok('GET', `/api/kids/${zeId}/home`)).fix.length, 0);
+    // cancelar uma que ainda não girou; apagar a roleta libera quem estava esperando
+    const ap3 = await ok('POST', `/api/admin/fix/${fid1}/apply`, { kid_id: zeId });
+    await ok('DELETE', `/api/admin/fix-spins/${ap3.id}`);
+    await ok('POST', `/api/admin/fix/${fid1}/apply`, { kid_id: zeId });
+    await ok('DELETE', `/api/admin/fix/${fid1}`);
+    assert.equal((await ok('GET', `/api/kids/${zeId}/home`)).fix.length, 0);
+    fx = await ok('GET', '/api/admin/fix'); assert.equal(fx.wheels.length, 3); assert.ok(fx.spins.some(s => s.spun_at && s.kid === 'Zé'));
+    await ok('PUT', `/api/admin/fix/${fx.wheels[2].id}`, { name: 'Gritos', items: [{ label: 'X' }, { label: 'Y', coins: 3 }] });
+    assert.equal((await ok('GET', '/api/admin/fix')).wheels[2].name, 'Gritos');
+    await ok('DELETE', `/api/admin/kids/${zeId}`);
+    step('roletas de correção: sugestões, girar aqui ou na tela dele, desconta moedas sem negativar');
+
     // tarefa que passa para o dia seguinte: aparece desde a data até ser feita; quem fez num dia anterior não vê mais
     const ago = (n) => { const d = new Date(Date.now() - n * 864e5); return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d); };
     const fan = (await ok('POST', '/api/admin/tasks', { title: 'Limpar o ventilador', type: 'one_off', date: ago(2), carry: true, all_kids: 1 })).id;

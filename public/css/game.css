@@ -739,3 +739,25 @@ textarea{width:100%;padding:12px 14px;border-radius:14px;border:2px solid var(--
 /* ---------- v14: legibilidade dentro de cartões claros ---------- */
 :is(.card,.sheet,.cart) :is(.pw-note,.switch){color:var(--navy);text-shadow:none}
 :is(.card,.sheet) .pw-note{font-size:14px;margin-top:14px}
+
+/* ---------- v15: moedas na roleta e roletas de correção ---------- */
+.fx.rain{z-index:400}
+.coin-won,.coin-lost{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:6px 14px;border-radius:999px;border:2px solid var(--navy);font-weight:900;font-size:17px;animation:zoom .6s var(--spring) both .25s}
+.coin-won{background:var(--yellow-hi);color:var(--navy);box-shadow:0 3px 0 var(--navy)}
+.coin-lost{background:#fff;color:var(--navy);box-shadow:0 3px 0 var(--navy)}
+.coin-won img,.coin-lost img{width:26px;height:26px}
+.wheel-bg.fix .wheel-card{background:linear-gradient(180deg,#4b3a8c,#24195e)}
+.wheel-bg.fix .wheel-rays{background:repeating-conic-gradient(rgba(255,255,255,.06) 0 10deg,transparent 10deg 20deg);animation-duration:60s}
+.wheel-bg.fix .wheel-res b{color:#fff}
+.wheel-tag{display:inline-flex;align-items:center;gap:6px;margin:0 0 4px;padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.14);color:#fff;font-weight:900;font-size:13px;letter-spacing:.02em;text-transform:uppercase}
+.wheel-tag img{width:20px;height:20px}
+.pcoin{display:flex;align-items:center;gap:2px;flex:0 0 86px;padding:0 6px;border:2px solid var(--mist);border-radius:12px;background:#fff}
+.pcoin img{width:22px;height:22px;flex:0 0 auto}
+.pcoin .pc{width:100%;min-width:0;border:0;padding:8px 2px;background:transparent;font-weight:800;box-shadow:none}
+.pcoin:focus-within{border-color:var(--navy)}
+.ptag{font-weight:900;color:var(--navy);opacity:.75}
+.fix-ic{font-size:30px;display:grid;place-items:center}
+.fix-empty .actions{margin-top:6px}
+.danger-link{margin-top:14px;color:var(--red)}
+.prow .pe{flex:0 0 48px}
+.pcoin{flex:0 0 74px;padding:0 4px}

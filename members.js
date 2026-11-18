@@ -228,8 +228,8 @@ admin.delete('/me/passkeys/:id', wrap(async (req, res) => {
 
 // Quem só tem o dia a dia: ler tudo e as ações do dia
 const DAILY = [
-  ['POST', /^\/(approve|reject|use-time|push|push\/test|messages)$/], ['PUT', /^\/(push\/\d+|me\/pin|members\/\d+)$/],
-  ['DELETE', /^\/(push\/\d+|me\/passkeys\/.+)$/],
+  ['POST', /^\/(approve|reject|use-time|push|push\/test|messages|fix\/\d+\/apply|fix-spins\/\d+\/spin)$/], ['PUT', /^\/(push\/\d+|me\/pin|members\/\d+)$/],
+  ['DELETE', /^\/(push\/\d+|me\/passkeys\/.+|fix-spins\/\d+)$/],
 ];
 const limitDaily = (req, res, next) => {
   if (req.actor.full_access || req.method === 'GET' || DAILY.some(([m, r]) => m === req.method && r.test(req.path))) return next();

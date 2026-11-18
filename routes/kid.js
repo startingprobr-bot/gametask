@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { pool } = require('../db');
 const { today, r2, taskOnDay } = require('../util');
 const { kidTasks, dayTasks, shares, balance, approve, ordered } = require('../lib');
+const crypto = require('crypto');
 const { access } = require('../billing');
 const push = require('../push');
 
@@ -43,12 +44,12 @@ async function ownKid(req, res) {
 const WHEEL_SAMPLE = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme'], ['🌙', 'Dormir mais tarde']]
   .map(([emoji, label]) => ({ emoji, label }));
 async function wheelPrizes(fid) {
-  const [prizes] = await pool.query('SELECT label,emoji FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [fid]);
+  const [prizes] = await pool.query('SELECT label,emoji,coins FROM wheel_prizes WHERE family_id=? ORDER BY sort,id', [fid]);
   return prizes.length >= 2 ? prizes : WHEEL_SAMPLE;
 }
 async function wheelState(fid, kidId, day, list) {
   const prizes = await wheelPrizes(fid);
-  const [[s]] = await pool.query('SELECT label,emoji FROM wheel_spins WHERE kid_id=? AND day=?', [kidId, day]);
+  const [[s]] = await pool.query('SELECT label,emoji,coins FROM wheel_spins WHERE kid_id=? AND day=?', [kidId, day]);
   const finished = list.length > 0 && list.every(t => t.status === 'approved' || t.status === 'pending');
   return { prizes, spun: s || null, ready: finished && !s };
 }
@@ -62,9 +63,11 @@ router.post('/kids/:id/spin', async (req, res) => {
   if (!w) return res.status(400).json({ error: 'A roleta ainda não tem prêmios' });
   if (w.spun) return res.status(400).json({ error: 'Você já girou hoje. Volte amanhã!' });
   if (!w.ready) return res.status(400).json({ error: 'Termine todas as missões de hoje para girar' });
-  const index = require('crypto').randomInt(w.prizes.length), p = w.prizes[index];
-  const [r] = await pool.query('INSERT IGNORE INTO wheel_spins (family_id,kid_id,day,label,emoji) VALUES (?,?,?,?,?)', [req.fid, kid.id, day, p.label, p.emoji]);
+  const index = crypto.randomInt(w.prizes.length), p = w.prizes[index], coins = kid.adult ? 0 : +p.coins || 0;
+  const [r] = await pool.query('INSERT IGNORE INTO wheel_spins (family_id,kid_id,day,label,emoji,coins) VALUES (?,?,?,?,?,?)', [req.fid, kid.id, day, p.label, p.emoji, coins]);
   if (!r.affectedRows) return res.status(400).json({ error: 'Você já girou hoje. Volte amanhã!' });
+  // moedas da roleta entram direto na conta, sem precisar de tarefa nem aprovação
+  if (coins > 0) await pool.query("INSERT INTO ledger (family_id,kid_id,kind,amount,day,note) VALUES (?,?,'coin',?,?,?)", [req.fid, kid.id, coins, day, ('Roleta do dia: ' + p.label).slice(0, 160)]);
   res.json({ index, prize: p, prizes: w.prizes });
 });
 
@@ -106,8 +109,9 @@ router.get('/kids/:id/home', async (req, res) => {
   }));
   const wheel = await wheelState(req.fid, kid.id, day, list);
   const [messages] = await pool.query('SELECT id,from_name,text,created_at FROM messages WHERE kid_id=? AND read_at IS NULL ORDER BY id', [kid.id]);
+  const fix = await pendingFix(fid, kid.id);
   res.json({
-    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel, messages,
+    kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel, messages, fix,
     done: list.filter(t => t.status === 'approved').length,
     pending: list.filter(t => t.status === 'pending').length, total: list.length,
   });
@@ -145,6 +149,41 @@ router.post('/kids/:id/messages/:mid', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Roletas de correção ----------
+// Os pais escolhem quem e qual roleta; ela gira no aparelho dos pais ou fica esperando na tela do jogador.
+async function fixItems(wheelId) {
+  const [items] = await pool.query('SELECT label,emoji,coins FROM fix_items WHERE wheel_id=? ORDER BY sort,id', [wheelId]);
+  return items;
+}
+async function pendingFix(fid, kidId) {
+  const [rows] = await pool.query('SELECT id,wheel_id,wheel_name FROM fix_spins WHERE family_id=? AND kid_id=? AND spun_at IS NULL ORDER BY id', [fid, kidId]);
+  const out = [];
+  for (const r of rows) { const prizes = await fixItems(r.wheel_id); if (prizes.length >= 2) out.push({ id: r.id, name: r.wheel_name, prizes }); }
+  return out;
+}
+const fail = (status, error) => Object.assign(new Error(error), { status });
+// Sorteia o item; se ele tira moedas, desconta (sem deixar o saldo negativo)
+async function spinFix(fid, spinId, kidId) {
+  const [[s]] = await pool.query('SELECT * FROM fix_spins WHERE id=? AND family_id=?' + (kidId ? ' AND kid_id=?' : ''), kidId ? [spinId, fid, kidId] : [spinId, fid]);
+  if (!s) throw fail(404, 'Roleta não encontrada');
+  if (s.spun_at) throw fail(400, 'Essa roleta já foi girada');
+  const items = await fixItems(s.wheel_id);
+  if (items.length < 2) throw fail(400, 'Essa roleta precisa de pelo menos 2 itens');
+  const index = crypto.randomInt(items.length), p = items[index];
+  const [[k]] = await pool.query('SELECT adult FROM kids WHERE id=?', [s.kid_id]);
+  let coins = k?.adult ? 0 : +p.coins || 0;
+  if (coins > 0) coins = Math.min(coins, Math.max(0, Math.floor(await balance(fid, s.kid_id))));
+  const [r] = await pool.query('UPDATE fix_spins SET label=?,emoji=?,coins=?,spun_at=NOW() WHERE id=? AND spun_at IS NULL', [p.label, p.emoji, coins, s.id]);
+  if (!r.affectedRows) throw fail(400, 'Essa roleta já foi girada');
+  if (coins > 0) await pool.query("INSERT INTO ledger (family_id,kid_id,kind,amount,day,note) VALUES (?,?,'coin',?,?,?)", [fid, s.kid_id, -coins, today(), `Correção (${s.wheel_name}): ${p.label}`.slice(0, 160)]);
+  return { index, prize: { ...p, coins }, prizes: items };
+}
+router.post('/kids/:id/fix/:sid/spin', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  try { res.json(await spinFix(req.fid, +req.params.sid, kid.id)); }
+  catch (e) { if (!e.status) console.error(e); res.status(e.status || 500).json({ error: e.status ? e.message : 'Erro interno' }); }
+});
+
 // Desfazer enquanto ainda pendente
 router.delete('/kids/:id/complete/:taskId', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
@@ -155,3 +194,5 @@ router.delete('/kids/:id/complete/:taskId', async (req, res) => {
 
 module.exports = router;
 module.exports.wheelPrizes = wheelPrizes;
+module.exports.spinFix = spinFix;
+module.exports.fixItems = fixItems;

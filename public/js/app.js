@@ -72,6 +72,7 @@ const sfx = {
   win: () => tone([[523, .14], [659, .14], [784, .14], [1047, .14], [1318, .4]]),
   bad: () => tone([[220, .18], [180, .25]], 'sawtooth', .04),
   ring: () => tone([[988, .12], [784, .12], [988, .12], [784, .12], [1175, .3]], 'triangle', .09),
+  fix: () => tone([[392, .2], [330, .2], [262, .45]], 'triangle', .09),
 };
 function soundBtn() {
   return `<button class="btn ghost round" id="snd" aria-label="${muted ? 'Ligar som' : 'Desligar som'}">${muted ? SVG.off : SVG.on}</button>`;
@@ -117,9 +118,10 @@ function countUp(el, from, to) {
   requestAnimationFrame(step);
   el.closest('.pill')?.classList.remove('bump'); void el.offsetWidth; el.closest('.pill')?.classList.add('bump');
 }
-// ---------- Roleta do dia ----------
-function wheelSvg(prizes) {
-  const n = prizes.length, cols = ['#ff4fae', '#ffd21f', '#3bd15f', '#4aa8ff', '#8b5bff', '#ff8a1f'];
+// ---------- Roletas (do dia e de correção) ----------
+const WHEEL_COLS = { bonus: ['#ff4fae', '#ffd21f', '#3bd15f', '#4aa8ff', '#8b5bff', '#ff8a1f'], fix: ['#ff8a1f', '#6a3cf0', '#2bb5a8', '#ff4d5e', '#4aa8ff', '#f2b705'] };
+function wheelSvg(prizes, kind = 'bonus') {
+  const n = prizes.length, cols = WHEEL_COLS[kind];
   const pt = (a, r) => { const t = (a - 90) * Math.PI / 180; return [(150 + r * Math.cos(t)).toFixed(2), (150 + r * Math.sin(t)).toFixed(2)]; };
   const fs = n > 8 ? 12 : 15;
   return `<svg viewBox="0 0 300 300" aria-hidden="true">${prizes.map((p, i) => {
@@ -131,33 +133,66 @@ function wheelSvg(prizes) {
       ${p.emoji ? `<text x="292" y="150" text-anchor="end" dominant-baseline="central" font-size="${fs + 7}">${esc(p.emoji)}</text>` : ''}</g>`;
   }).join('')}</svg>`;
 }
-// Abre a roleta com festa: fundo de raios, roleta caindo na tela, luzes piscando. celebrate = veio de "terminei o dia".
-function openWheel(kidId, w, done, celebrate) {
-  const bg = document.createElement('div'); bg.className = 'sheet-bg wheel-bg';
+// Chuva de moedas com o tilintar sem parar: para prêmio grande (ex.: 50 moedas)
+function coinRain(n) {
+  const dur = reduced ? 900 : Math.min(6000, 2600 + n * 40);
+  const ding = setInterval(() => sfx.coin(), 95); setTimeout(() => clearInterval(ding), dur);
+  navigator.vibrate?.([60, 60, 60, 60, 60]);
+  if (reduced) return;
+  const total = Math.min(70, Math.max(16, Math.round(n * 1.2)));
+  for (let k = 0; k < total; k++) setTimeout(() => {
+    const c = document.createElement('img'); c.src = '/img/3d/coin.png'; c.className = 'fx rain'; c.alt = '';
+    const size = 34 + Math.random() * 26; c.style.width = c.style.height = size + 'px';
+    c.style.left = Math.random() * (innerWidth - size) + 'px'; c.style.top = -size - 10 + 'px'; document.body.append(c);
+    const drift = (Math.random() - .5) * 140, rot = (Math.random() - .5) * 900;
+    c.animate([{ transform: 'translate(0,0) rotate(0)' }, { transform: `translate(${drift}px,${innerHeight + size + 40}px) rotate(${rot}deg)` }],
+      { duration: 1300 + Math.random() * 1100, easing: 'cubic-bezier(.45,0,.85,.6)', fill: 'both' }).onfinish = () => c.remove();
+  }, k * (dur - 1200) / total);
+}
+// Roleta do dia (bonificação) de um jogador
+const bonusWheel = (kidId, w) => ({ kind: 'bonus', prizes: w.prizes, spin: () => api('POST', `/kids/${kidId}/spin`, {}) });
+// Roleta de correção: f = { name, prizes }
+const fixWheel = (f, spin, who) => ({ kind: 'fix', prizes: f.prizes, spin, title: f.name, sub: who ? `Vez de ${who} girar a roleta da correção.` : 'Gire a roleta e cumpra o que cair.' });
+// Abre a roleta. o = { kind:'bonus'|'fix', prizes, spin() -> {index,prize,prizes}, done, celebrate, title, sub }
+function openWheel(o) {
+  const fix = o.kind === 'fix';
+  const bg = document.createElement('div'); bg.className = 'sheet-bg wheel-bg' + (fix ? ' fix' : '');
   const bulbs = Array.from({ length: 16 }, (_, i) => `<i class="bulb" style="--a:${i * 22.5}deg"></i>`).join('');
-  bg.innerHTML = `<div class="wheel-rays" aria-hidden="true"></div><div class="wheel-card" role="dialog" aria-label="Roleta do dia">
-    <h2 class="d stroke">${celebrate ? 'Dia completo!' : 'Roleta do dia'}</h2><p class="wheel-sub">${celebrate ? 'Você fez todas as missões. Gire a roleta e ganhe uma surpresa!' : 'Toque em girar e descubra a sua surpresa!'}</p>
-    <div class="wheel">${bulbs}<i class="pin"></i><div class="disc">${wheelSvg(w.prizes)}</div><b class="hub"></b></div>
-    <div class="wheel-res" aria-live="polite"></div><button class="btn green big" id="spin">Girar!</button></div>`;
+  const title = fix ? esc(o.title || 'Correção') : o.celebrate ? 'Dia completo!' : 'Roleta do dia';
+  const sub = fix ? esc(o.sub || '') : o.celebrate ? 'Você fez todas as missões. Gire a roleta e ganhe uma surpresa!' : 'Toque em girar e descubra a sua surpresa!';
+  bg.innerHTML = `<div class="wheel-rays" aria-hidden="true"></div><div class="wheel-card" role="dialog" aria-label="${fix ? 'Roleta da correção' : 'Roleta do dia'}">
+    ${fix ? `<p class="wheel-tag">${im('shield')}Roleta da correção</p>` : ''}<h2 class="d stroke">${title}</h2><p class="wheel-sub">${sub}</p>
+    <div class="wheel">${bulbs}<i class="pin"></i><div class="disc">${wheelSvg(o.prizes, o.kind)}</div><b class="hub"></b></div>
+    <div class="wheel-res" aria-live="polite"></div><button class="btn ${fix ? '' : 'green'} big" id="spin">Girar!</button></div>`;
   document.body.append(bg);
   const btn = $('#spin', bg), disc = $('.disc', bg), res = $('.wheel-res', bg), wheel = $('.wheel', bg);
-  const close = () => { bg.remove(); done?.(); };
-  if (celebrate) { sfx.win(); setTimeout(() => { const b = wheel.getBoundingClientRect(); sparks(b.left + b.width / 2, b.top + 20); }, 700); }
+  const close = () => { bg.remove(); o.done?.(); };
+  if (o.celebrate) { sfx.win(); setTimeout(() => { const b = wheel.getBoundingClientRect(); sparks(b.left + b.width / 2, b.top + 20); }, 700); }
+  if (fix) sfx.fix();
   btn.focus();
   btn.onclick = async () => {
     btn.disabled = true; sfx.tap(); wheel.classList.add('go');
-    let r; try { r = await api('POST', `/kids/${kidId}/spin`, {}); } catch (e) { toast(e.message, true); sfx.bad(); return close(); }
+    let r; try { r = await o.spin(); } catch (e) { toast(e.message, true); sfx.bad(); return close(); }
     const n = r.prizes.length, seg = 360 / n, c = (r.index + .5) * seg;
     // gira bastante e vai freando devagar; o "tic" da setinha também desacelera
-    const ms = reduced ? 50 : 9500, final = 360 * 12 - c + (Math.random() - .5) * seg * .6, t0 = performance.now();
+    const ms = reduced ? 50 : fix ? 7000 : 9500, final = 360 * (fix ? 9 : 12) - c + (Math.random() - .5) * seg * .6, t0 = performance.now();
     let ticks = 0; const tick = () => { const p = (performance.now() - t0) / ms; if (reduced || p >= .97) return; sfx.tap(); ticks = setTimeout(tick, 90 + 520 * p * p); };
     tick();
     disc.style.transition = `transform ${ms}ms cubic-bezier(.15,.55,.1,1)`; void disc.offsetWidth; disc.style.transform = `rotate(${final}deg)`;
     setTimeout(() => {
-      clearTimeout(ticks); sfx.win(); wheel.classList.replace('go', 'won');
-      res.innerHTML = `<div>Você ganhou<b>${esc(r.prize.emoji || '')} ${esc(r.prize.label)}</b></div>`;
+      clearTimeout(ticks); wheel.classList.replace('go', 'won');
+      const p = r.prize, coins = +p.coins || 0;
+      if (fix) {
+        sfx.fix();
+        res.innerHTML = `<div>Sua correção é<b>${esc(p.emoji || '')} ${esc(p.label)}</b>${coins ? `<span class="coin-lost">${im('coin')}−${num(coins)} moedas</span>` : ''}</div>`;
+        btn.textContent = 'Combinado'; btn.disabled = false; btn.onclick = close; btn.focus();
+        return;
+      }
+      sfx.win();
+      res.innerHTML = `<div>Você ganhou<b>${esc(p.emoji || '')} ${esc(p.label)}</b>${coins ? `<span class="coin-won">${im('coin')}+${num(coins)} moedas na sua conta!</span>` : ''}</div>`;
       const b = disc.getBoundingClientRect();
       [0, 350, 700].forEach((t, i) => setTimeout(() => sparks(b.left + b.width * [.5, .2, .8][i], b.top + b.height * [.1, .4, .4][i]), t));
+      if (coins) setTimeout(() => coinRain(coins), 500);
       btn.textContent = 'Oba!'; btn.disabled = false; btn.onclick = close; btn.focus();
     }, ms + 150);
   };
@@ -412,8 +447,9 @@ async function viewKid(id) {
     wireSound();
     $('.done-list')?.addEventListener('toggle', (e) => { showDone = e.target.open; sfx.tap(); });
     $('#back').onclick = () => { sfx.tap(); location.hash = '#/'; };
-    const spinIt = (w) => openWheel(id, w, () => load().catch(() => {}));
+    const spinIt = (w, celebrate) => openWheel({ ...bonusWheel(id, w), celebrate, done: () => load().catch(() => {}) });
     if (d.messages?.length && !$('.sheet-bg,.burst')) showMessage(id, d.messages[0], () => load().catch(() => {}));
+    else if (d.fix?.length && !$('.sheet-bg,.burst')) openWheel({ ...fixWheel(d.fix[0], () => api('POST', `/kids/${id}/fix/${d.fix[0].id}/spin`, {})), done: () => load().catch(() => {}) });
     if ($('#wheelGo')) $('#wheelGo').onclick = () => { sfx.tap(); spinIt(d.wheel); };
     $$('[data-do]').forEach(b => b.onclick = guard(async () => {
       b.disabled = true;
@@ -429,7 +465,7 @@ async function viewKid(id) {
       if (!d.kid.adult) $('#coinNum').textContent = num(coins);
       if (tile && !d.kid.adult) flyTo({ x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 }, $('#coinPill'), t.coins > 0 ? 'coin' : 'glow', t.coins > 0 ? Math.min(8, 3 + Math.round(t.coins)) : 3);
       if (!d.kid.adult) setTimeout(() => countUp($('#coinNum'), coins, newCoins), reduced ? 0 : 950);
-      if (last && (nd.wheel?.ready || !store.get(`gt-all-${id}-${d.day}`))) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => nd.wheel?.ready ? openWheel(id, nd.wheel, () => load().catch(() => {}), true) : burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
+      if (last && (nd.wheel?.ready || !store.get(`gt-all-${id}-${d.day}`))) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => nd.wheel?.ready ? spinIt(nd.wheel, true) : burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
     }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
   };
@@ -633,7 +669,9 @@ async function adminPending(pane, refresh) {
       <div class="s">${esc(r.kid)} · ${dmy(r.day)}${r.coins > 0 ? ` · ${num(r.coins)} moedas` : ''}</div></div>
       <div class="btns"><button class="btn green sm" data-ok="${r.id}">Aprovar</button><button class="btn ghost sm" data-no="${r.id}">Rejeitar</button></div></div>`).join('')}</div>`
     : zero('party', 'Nada para aprovar agora.')}</section>
+    <section class="box" id="fixBox"></section>
     <section class="box" id="msgBox"></section>`;
+  adminFix($('#fixBox')).catch(e => toast(e.message, true));
   adminMessages($('#msgBox')).catch(e => toast(e.message, true));
   const act = (url, ids, msg) => guard(async () => { await api('POST', url, { ids }); sfx.done(); toast(msg); refresh(); });
   $$('[data-ok]').forEach(b => b.onclick = act('/admin/approve', [+b.dataset.ok], 'Aprovada'));
@@ -835,35 +873,105 @@ async function adminTasks(pane, refresh) {
   $$('[data-e]').forEach(b => b.onclick = () => { const t = tasks.find(x => x.id == b.dataset.e); wire(sheet('Editar tarefa', form(t), async (f) => { await api('PUT', '/admin/tasks/' + t.id, read(f)); refresh(); })); });
 }
 
+// Editor de itens de roleta (usado pela roleta do dia e pelas de correção): emoji, nome e moedas
+const WHEEL_EMOJIS = ['🤗','😘','🎮','📺','🎬','🍦','🍫','🍕','🍔','🍿','🎂','🧁','🎁','🎈','🎉','⭐','🏆','🎯','🎲','🧩','🎨','📚','⚽','🚲','🏊','🛝','🎡','🎢','🐶','🐱','🦄','🚗','✈️','🌙','🛏️','🛁','🧸','🎵','💰','🪙','❤️','👏','🎤','🏖️',
+  '⏰','📵','🧹','🧺','🍽️','🙏','🤝','💌','🤫','🗣️','🧘','🚫','🪑','📝','🧽','🌱'];
+const prizeRow = (p = {}, coinHint) => `<div class="prow"><button type="button" class="btn ghost sm pe" aria-label="Escolher ícone" data-v="${esc(p.emoji || '')}">${esc(p.emoji || '') || '🎁'}</button>
+  <input class="pl" aria-label="Nome" maxlength="40" value="${esc(p.label || '')}" placeholder="${coinHint === 'lose' ? 'Sem tela por 20 min' : 'Abraço do pai'}">
+  <label class="pcoin" title="${coinHint === 'lose' ? 'Moedas que perde' : 'Moedas que ganha'}">${im('coin')}<input class="pc" type="number" min="0" max="1000" step="1" inputmode="numeric" value="${+p.coins || ''}" placeholder="0" aria-label="${coinHint === 'lose' ? 'Moedas que perde' : 'Moedas que ganha'}"></label>
+  <button type="button" class="btn ghost sm px" aria-label="Tirar este item">✕</button></div>`;
+function prizeEditor(list, coinHint) {
+  return `<div id="prows">${list.map(p => prizeRow(p, coinHint)).join('')}</div>
+    <button type="button" class="btn ghost sm" id="padd">Adicionar item</button>
+    <div class="emo-pick" id="emo" hidden><p class="hint">Toque no ícone:</p><div class="emo-grid">${WHEEL_EMOJIS.map(e => `<button type="button" class="emo" data-e="${e}">${e}</button>`).join('')}</div></div>`;
+}
+function wirePrizeEditor(bg, coinHint) {
+  $('#padd', bg).onclick = () => { if ($$('.prow', bg).length >= 12) return toast('No máximo 12 itens', true); $('#prows', bg).insertAdjacentHTML('beforeend', prizeRow({}, coinHint)); $$('.pl', bg).at(-1).focus(); };
+  let cur = null; const emo = $('#emo', bg);
+  bg.addEventListener('click', (e) => {
+    const x = e.target.closest('.px'); if (x) { if (cur && x.parentElement.contains(cur)) { cur = null; emo.hidden = true; } x.parentElement.remove(); return; }
+    const pe = e.target.closest('.pe'); if (pe) { cur = pe; $$('.pe', bg).forEach(b => b.classList.toggle('sel', b === pe)); emo.hidden = false; emo.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
+    const em = e.target.closest('.emo'); if (em && cur) { cur.dataset.v = em.dataset.e; cur.textContent = em.dataset.e; cur.classList.remove('sel'); cur = null; emo.hidden = true; sfx.tap(); }
+  });
+}
+// lê as linhas; item só com moedas vira "50 moedas"
+const readPrizes = (f, coinHint) => $$('.prow', f).map(r => {
+  const coins = Math.max(0, Math.round(+$('.pc', r).value || 0)), label = $('.pl', r).value.trim();
+  return { emoji: $('.pe', r).dataset.v || (coins && !label ? '💰' : ''), label: label || (coins ? (coinHint === 'lose' ? `Perde ${coins} moedas` : `${coins} moedas`) : ''), coins };
+}).filter(p => p.label);
+const coinTag = (p, lose) => +p.coins ? ` <small class="ptag">${lose ? '−' : '+'}${num(p.coins)} 🪙</small>` : '';
+
 // Roleta do dia: o pai escolhe o que pode cair; quem termina todas as missões gira uma vez por dia
 async function adminWheel(box) {
   const { prizes, spins, sample: isSample } = await api('GET', '/admin/wheel');
   box.innerHTML = `<div class="box-h"><h2 class="d">Roleta do dia</h2><button class="btn green sm" id="wedit">${isSample ? 'Montar roleta' : 'Editar prêmios'}</button></div>
-    <p class="lead">Quando um filho termina todas as missões do dia, ganha um giro. Você escolhe o que pode cair: abraço, 20 minutos de jogo, escolher o filme…</p>
+    <p class="lead">Quando um filho termina todas as missões do dia, ganha um giro. Você escolhe o que pode cair: abraço, 20 minutos de jogo, 50 moedas…</p>
     ${isSample ? '<p class="hint">Por enquanto a roleta usa estes prêmios de exemplo. Toque em <b>Montar roleta</b> para escolher os seus.</p>' : ''}
-    <div class="prizes">${prizes.map(p => `<span class="prize">${esc(p.emoji || '🎁')} ${esc(p.label)}</span>`).join('')}</div>
-    ${spins.length ? `<h3 class="sub-h">Últimos giros</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} ganhou ${esc(s.emoji || '')} ${esc(s.label)}</div><div class="s">${dayName(s.day)}</div></div></div>`).join('')}</div>` : ''}`;
-  const sample = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme']];
-  const EMOJIS = ['🤗','😘','🎮','📺','🎬','🍦','🍫','🍕','🍔','🍿','🎂','🧁','🎁','🎈','🎉','⭐','🏆','🎯','🎲','🧩','🎨','📚','⚽','🚲','🏊','🛝','🎡','🎢','🐶','🐱','🦄','🚗','✈️','🌙','🛏️','🛁','🧸','🎵','💰','🪙','❤️','👏','🎤','🏖️'];
-  const row = (e, l) => `<div class="prow"><button type="button" class="btn ghost sm pe" aria-label="Escolher ícone" data-v="${esc(e)}">${esc(e) || '🎁'}</button><input class="pl" aria-label="Prêmio" maxlength="40" value="${esc(l)}" placeholder="Abraço do pai"><button type="button" class="btn ghost sm px" aria-label="Tirar este prêmio">✕</button></div>`;
+    <div class="prizes">${prizes.map(p => `<span class="prize">${esc(p.emoji || '🎁')} ${esc(p.label)}${coinTag(p)}</span>`).join('')}</div>
+    ${spins.length ? `<h3 class="sub-h">Últimos giros</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} ganhou ${esc(s.emoji || '')} ${esc(s.label)}${coinTag(s)}</div><div class="s">${dayName(s.day)}</div></div></div>`).join('')}</div>` : ''}`;
+  const sample = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme'], ['💰', '50 moedas', 50]].map(([emoji, label, coins = 0]) => ({ emoji, label, coins }));
   $('#wedit').onclick = () => {
-    const bg = sheet('Prêmios da roleta', `<p class="lead" style="margin-top:6px">Um emoji e o nome de cada prêmio (até 12). Todos têm a mesma chance de sair.</p>
-      <div id="prows">${(prizes.length ? prizes.map(p => [p.emoji || '', p.label]) : sample).map(([e, l]) => row(e, l)).join('')}</div>
-      <button type="button" class="btn ghost sm" id="padd">Adicionar prêmio</button>
-      <div class="emo-pick" id="emo" hidden><p class="hint">Toque no ícone do prêmio:</p><div class="emo-grid">${EMOJIS.map(e => `<button type="button" class="emo" data-e="${e}">${e}</button>`).join('')}</div></div>`,
+    const bg = sheet('Prêmios da roleta', `<p class="lead" style="margin-top:6px">Até 12 prêmios, todos com a mesma chance. No campo da moedinha coloque moedas para o prêmio cair direto na conta (ex.: 50). Deixe vazio se não valer moedas.</p>
+      ${prizeEditor(isSample ? sample : prizes)}`,
       async (f) => {
-        const list = $$('.prow', f).map(r => ({ emoji: $('.pe', r).dataset.v, label: $('.pl', r).value })).filter(p => p.label.trim());
+        const list = readPrizes(f);
         if (list.length === 1) throw new Error('Coloque pelo menos 2 prêmios');
         await api('PUT', '/admin/wheel', { prizes: list }); toast('Roleta salva'); adminWheel(box);
       });
-    $('#padd', bg).onclick = () => { if ($$('.prow', bg).length >= 12) return toast('No máximo 12 prêmios', true); $('#prows', bg).insertAdjacentHTML('beforeend', row('', '')); $$('.pl', bg).at(-1).focus(); };
-    let cur = null; const emo = $('#emo', bg);
-    bg.addEventListener('click', (e) => {
-      const x = e.target.closest('.px'); if (x) { if (cur && x.parentElement.contains(cur)) { cur = null; emo.hidden = true; } x.parentElement.remove(); return; }
-      const pe = e.target.closest('.pe'); if (pe) { cur = pe; $$('.pe', bg).forEach(b => b.classList.toggle('sel', b === pe)); emo.hidden = false; emo.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); return; }
-      const em = e.target.closest('.emo'); if (em && cur) { cur.dataset.v = em.dataset.e; cur.textContent = em.dataset.e; cur.classList.remove('sel'); cur = null; emo.hidden = true; sfx.tap(); }
-    });
+    wirePrizeEditor(bg);
   };
+}
+
+// Roletas de correção: para implicância, desobediência, gritaria… Os pais escolhem quem gira.
+async function adminFix(box) {
+  const [{ wheels, spins }, kids] = await Promise.all([api('GET', '/admin/fix'), api('GET', '/admin/kids')]);
+  const on = kids.filter(k => k.active);
+  const when = (t) => new Date(t.replace(' ', 'T') + (t.endsWith('Z') ? '' : 'Z')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  box.innerHTML = `<div class="box-h"><h2 class="d">Roletas de correção</h2>${wheels.length ? '<button class="btn ghost sm" id="fixNew">Nova roleta</button>' : ''}</div>
+    <p class="lead">Para os momentos de confusão: implicância com o irmão, desobediência, gritaria. Escolha quem e qual roleta; gira aqui no seu aparelho ou na tela dele.</p>
+    ${wheels.length ? `<div class="list">${wheels.map(w => `<div class="item"><div class="ic fix-ic">${esc(w.items[0]?.emoji || '⚖️')}</div><div class="grow"><div class="t">${esc(w.name)}</div>
+      <div class="s">${w.items.map(i => esc(i.label)).join(' · ')}</div></div>
+      <div class="btns"><button class="btn sm" data-use="${w.id}">Usar</button><button class="btn ghost sm" data-fe="${w.id}">Editar</button></div></div>`).join('')}</div>`
+    : `<div class="fix-empty">${zero('shield', 'Nenhuma roleta de correção ainda.')}<div class="actions"><button class="btn green" id="fixSample">Começar com sugestões</button><button class="btn ghost" id="fixNew">Criar do zero</button></div>
+      <p class="hint">As sugestões trazem Desobediência, Implicância e Gritaria. Você pode mudar tudo depois.</p></div>`}
+    ${spins.length ? `<h3 class="sub-h">Últimas correções</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} · ${esc(s.wheel_name)}</div>
+      <div class="s">${when(s.created_at)} · ${s.spun_at ? `<b>${esc(s.emoji || '')} ${esc(s.label)}</b>${s.coins ? ` (−${num(s.coins)} moedas)` : ''}` : 'esperando girar na tela dele'}</div></div>
+      ${s.spun_at ? '' : `<div class="btns"><button class="btn ghost sm" data-fx="${s.id}">Cancelar</button></div>`}</div>`).join('')}</div>` : ''}`;
+  const reload = () => adminFix(box).catch(e => toast(e.message, true));
+  const edit = (w) => {
+    const bg = sheet(w ? 'Editar roleta' : 'Nova roleta de correção', `<div class="field"><label for="fxn">Nome da roleta</label><input id="fxn" name="name" maxlength="40" value="${esc(w?.name || '')}" placeholder="Implicância" required></div>
+      <p class="lead" style="margin-top:4px">O que pode cair (até 12, todos com a mesma chance). No campo da moedinha coloque quantas moedas a criança perde, se quiser.</p>
+      ${prizeEditor(w ? w.items : [{}, {}, {}], 'lose')}
+      ${w ? '<button type="button" class="btn ghost sm danger-link" id="fxDel">Apagar esta roleta</button>' : ''}`,
+      async (f) => {
+        const body = { name: f.name.value, items: readPrizes(f, 'lose') };
+        if (body.items.length < 2) throw new Error('Coloque pelo menos 2 itens');
+        if (w) await api('PUT', '/admin/fix/' + w.id, body); else await api('POST', '/admin/fix', body);
+        toast('Roleta salva'); reload();
+      });
+    wirePrizeEditor(bg, 'lose');
+    const del = $('#fxDel', bg);
+    if (del) del.onclick = () => sheet(`Apagar "${w.name}"?`, '<p class="lead" style="margin-top:6px">O histórico das correções já feitas continua.</p>',
+      async () => { await api('DELETE', '/admin/fix/' + w.id); bg.remove(); toast('Roleta apagada'); reload(); }, { saveLabel: 'Apagar', danger: true });
+  };
+  $$('#fixNew', box).forEach(b => b.onclick = () => edit(null));
+  const smp = $('#fixSample', box); if (smp) smp.onclick = guard(async () => { await api('POST', '/admin/fix/samples'); sfx.done(); toast('Roletas criadas'); reload(); });
+  $$('[data-fe]', box).forEach(b => b.onclick = () => edit(wheels.find(w => w.id === +b.dataset.fe)));
+  $$('[data-fx]', box).forEach(b => b.onclick = guard(async () => { await api('DELETE', '/admin/fix-spins/' + b.dataset.fx); toast('Correção cancelada'); reload(); }));
+  $$('[data-use]', box).forEach(b => b.onclick = () => {
+    const w = wheels.find(x => x.id === +b.dataset.use);
+    if (!on.length) return toast('Cadastre um jogador primeiro', true);
+    const bg = sheet(`Roleta: ${w.name}`, `<div class="field"><span class="lab">Quem vai girar?</span><div class="kid-pick">${on.map((k, i) => `<label class="kp-check"><input type="radio" name="kid" value="${k.id}" ${on.length === 1 && !i ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
+      <div class="field"><span class="lab">Onde girar</span>${seg('where', [['here', 'Aqui, agora'], ['kid', 'Na tela dele']], 'here')}</div>`,
+      async (f) => {
+        const kid = on.find(k => k.id === +(f.kid.value || 0));
+        if (!kid) throw new Error('Escolha quem vai girar');
+        const r = await api('POST', `/admin/fix/${w.id}/apply`, { kid_id: kid.id });
+        if (f.where.value === 'kid') { toast(`Pronto: a roleta aparece na tela de ${kid.name}`); reload(); return; }
+        setTimeout(() => openWheel({ ...fixWheel(r, () => api('POST', `/admin/fix-spins/${r.id}/spin`, {}), kid.name), done: reload }), 50);
+      }, { saveLabel: 'Continuar' });
+    bg.querySelector('.kid-pick').addEventListener('change', () => sfx.tap());
+  });
 }
 
 async function adminRewards(pane, refresh) {
