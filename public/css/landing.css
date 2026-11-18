@@ -34,7 +34,7 @@ a{color:inherit}
   box-shadow:0 4px 0 var(--navy),inset 0 -4px 0 rgba(0,0,0,.1),inset 0 2px 0 rgba(255,255,255,.5);transition:transform .12s var(--out),box-shadow .12s var(--out),filter .2s}
 .btn:hover{filter:brightness(1.06);transform:translateY(-1px)}
 .btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--navy),inset 0 -3px 0 rgba(0,0,0,.12)}
-.btn.green{--bg:var(--green);--hi:var(--green-hi);--lo:var(--green-lo);--fg:#fff;text-shadow:0 2px 0 rgba(13,27,76,.55)}
+.btn.green{--bg:var(--green);--hi:var(--green-hi);--lo:var(--green-lo);--fg:var(--navy);text-shadow:none}
 .btn.ghost{--bg:#fff;--hi:#fff;--lo:#dfe8ff}
 .btn.sm{min-height:42px;padding:0 16px;font-size:17px;border-radius:13px;box-shadow:0 3px 0 var(--navy),inset 0 -3px 0 rgba(0,0,0,.1)}
 .btn.big{min-height:64px;padding:0 32px;font-size:24px;border-radius:18px}
@@ -184,7 +184,7 @@ a{color:inherit}
 .plans .price b{font-size:clamp(46px,4.4vw,60px)}
 .plans .plan{padding:30px 22px 24px}
 .ribbon.violet{background:#8b5bff}
-.btn.violet{--bg:#8b5bff;--hi:#c3a8ff;--lo:#6234d6;--fg:#fff;text-shadow:0 2px 0 rgba(13,27,76,.55)}
+.btn.violet{--bg:#6a3cf0;--hi:#a98bff;--lo:#4a22b8;--fg:#fff;text-shadow:0 1px 0 rgba(13,27,76,.6)}
 @media (max-width:1180px){.plans{grid-template-columns:repeat(2,minmax(0,380px))}.plan.best{transform:none}}
 .plan.free{background:linear-gradient(180deg,#eef6ff,#fff 45%)}
 .plan.free .price b{font-size:58px}
