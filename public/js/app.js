@@ -290,6 +290,9 @@ function burst(icon, title, text, btn = 'Continuar', onClose) {
   d.querySelector('button').onclick = () => { d.remove(); onClose?.(); }; d.querySelector('button').focus();
 }
 
+// Sem zoom de pinça (o iPhone/iPad ignora o user-scalable=no; assim ele também não amplia)
+['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+
 // ---------- Roteador ----------
 let timer, ME = {};
 async function route() {
