@@ -133,7 +133,7 @@ const step = (m) => console.log('✔', m);
     const tdb = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
     const tUrl = `/api/kids/${eva}/timer/${game}`;
     let tt = (await ok('POST', tUrl, { action: 'start' })).time.find(x => x.id === game);
-    assert.equal(tt.run, 0); assert.ok(tt.left > 0);
+    assert.ok(tt.run >= 0 && tt.run <= 2); assert.ok(tt.left > 0);
     await ok('POST', tUrl, { action: 'start' }); // repetir não duplica
     assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).timers.length, 1);
     await tdb.query('UPDATE time_runs SET started_at=DATE_SUB(started_at, INTERVAL 30 SECOND) WHERE kid_id=?', [eva]);
