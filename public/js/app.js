@@ -82,6 +82,19 @@ function wireSound() {
   b.onclick = () => { muted = !muted; store.set('gt-mute', muted ? '1' : '0'); b.innerHTML = muted ? SVG.off : SVG.on; b.setAttribute('aria-label', muted ? 'Ligar som' : 'Desligar som'); sfx.tap(); };
 }
 
+// ---------- Voz: lê em voz alta para quem ainda não sabe ler ----------
+let ptVoice;
+const pickVoice = () => { const v = speechSynthesis.getVoices(); ptVoice = v.find(x => /pt[-_]BR/i.test(x.lang)) || v.find(x => /^pt/i.test(x.lang)) || null; };
+if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
+function say(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'pt-BR'; u.rate = .92; u.pitch = 1.1; if (ptVoice) u.voice = ptVoice;
+    speechSynthesis.speak(u);
+  } catch {}
+}
+
 // ---------- Efeitos ----------
 function sparks(x, y, colors = ['#ffd21f', '#ff4fae', '#3bd15f', '#4aa8ff', '#fff']) {
   if (reduced) return;
@@ -185,6 +198,7 @@ function openWheel(o) {
       if (fix) {
         sfx.fix();
         res.innerHTML = `<div>Sua correção é<b>${esc(p.emoji || '')} ${esc(p.label)}</b>${coins ? `<span class="coin-lost">${im('coin')}−${num(coins)} moedas</span>` : ''}</div>`;
+        say(`Sua correção é: ${p.label}${coins ? `. Você perde ${coins} moedas` : ''}`);
         btn.textContent = 'Combinado'; btn.disabled = false; btn.onclick = close; btn.focus();
         return;
       }
@@ -193,6 +207,7 @@ function openWheel(o) {
       const b = disc.getBoundingClientRect();
       [0, 350, 700].forEach((t, i) => setTimeout(() => sparks(b.left + b.width * [.5, .2, .8][i], b.top + b.height * [.1, .4, .4][i]), t));
       if (coins) setTimeout(() => coinRain(coins), 500);
+      setTimeout(() => say(`Você ganhou ${p.label}!`), coins ? 300 : 900);
       btn.textContent = 'Oba!'; btn.disabled = false; btn.onclick = close; btn.focus();
     }, ms + 150);
   };
@@ -207,9 +222,13 @@ function showMessage(kidId, m, done) {
     <div class="msg-replies">${['Ok!', 'Já vou!', 'Preciso de ajuda'].map((r, i) => `<button class="btn ${i ? 'ghost' : 'green'}" data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>`;
   document.body.append(bg);
   sfx.ring(); const again = setInterval(() => sfx.ring(), 4000); setTimeout(() => clearInterval(again), 12500);
+  const read = () => say(`Recado de ${m.from_name}: ${m.text}`);
+  setTimeout(read, 1300);
+  bg.querySelector('.msg-text').insertAdjacentHTML('afterend', `<button type="button" class="btn ghost sm say-msg">${SVG.on}Ouvir de novo</button>`);
+  bg.querySelector('.say-msg').onclick = read;
   navigator.vibrate?.([300, 120, 300]);
   $$('[data-r]', bg).forEach(b => b.onclick = guard(async () => {
-    clearInterval(again); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
+    clearInterval(again); speechSynthesis?.cancel?.(); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
     await api('POST', `/kids/${kidId}/messages/${m.id}`, { reply: b.dataset.r });
     sfx.done(); bg.remove(); done?.();
   }));
@@ -418,7 +437,7 @@ async function viewKid(id) {
         : `<span class="status no">${im('cross')}Refazer</span>`;
       return `<article class="mission ${doneLike(t.status) ? 'done' : t.status === 'rejected' ? 'rejected' : ''}" data-m="${t.id}" style="animation-delay:${i * 45}ms">
         <div class="tile" data-tile="${t.id}">${im(t.icon)}</div>
-        <div class="info"><div class="ttl">${esc(t.title)}</div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
+        <div class="info"><div class="ttl" data-say="${t.id}">${esc(t.title)}<button type="button" class="say" data-say="${t.id}" aria-label="Ouvir a missão">${SVG.on}</button></div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
         <div class="act">${act}</div></article>`;
     };
     const head = todo.length ? (todo.length === 1 ? 'Falta 1!' : `Faltam ${todo.length}!`) : d.total ? 'Tudo feito!' : 'Dia livre!';
@@ -468,6 +487,15 @@ async function viewKid(id) {
       if (last && (nd.wheel?.ready || !store.get(`gt-all-${id}-${d.day}`))) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => nd.wheel?.ready ? spinIt(nd.wheel, true) : burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
     }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
+    // ouvir a missão: botão do alto-falante, o nome ou o ícone
+    const hora = (h) => { const [a, m] = h.split(':').map(Number); return m ? `${a} e ${m}` : `${a} ${a === 1 ? 'hora' : 'horas'}`; };
+    const speak = (tid) => {
+      const t = d.tasks.find(x => x.id === +tid); if (!t) return;
+      const art = $(`[data-m="${t.id}"]`); art?.classList.remove('talk'); void art?.offsetWidth; art?.classList.add('talk');
+      say([t.title, t.description, t.time ? `às ${hora(t.time)}` : t.until ? `até ${hora(t.until)}` : '',
+        doneLike(t.status) ? 'Já está feita!' : t.coins > 0 ? `Vale ${num(t.coins)} ${+t.coins === 1 ? 'moeda' : 'moedas'}.` : ''].filter(Boolean).join('. '));
+    };
+    $$('[data-say],[data-tile]').forEach(el => el.onclick = (e) => { e.stopPropagation(); speak(el.dataset.say || el.dataset.tile); });
   };
   await load();
   timer = setInterval(() => load().catch(() => {}), 20000);
@@ -975,11 +1003,12 @@ async function adminFix(box) {
 }
 
 async function adminRewards(pane, refresh) {
-  const rewards = await api('GET', '/admin/rewards');
+  const [rewards, allKids] = await Promise.all([api('GET', '/admin/rewards'), api('GET', '/admin/kids')]);
+  const kidsOnly = allKids.filter(k => k.active && !k.adult);
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Recompensas e metas</h2><button class="btn green sm" id="new">Nova recompensa</button></div>
     <p class="lead">Tempo de tela: o total do dia é dividido igualmente entre as tarefas ligadas a ele (20 min com 10 tarefas = 2 min cada). Metas contam missões ou moedas até serem alcançadas.</p>
     ${rewards.length ? `<div class="list">${rewards.map(r => `<div class="item ${r.active ? '' : 'off'}"><div class="ic">${im(r.icon, '', 'game')}</div><div class="grow"><div class="t">${esc(r.title)}</div>
-      <div class="s">${r.kind === 'time' ? `${num(r.total_value)} ${esc(r.unit)} por dia · ${r.task_count} tarefa(s)${r.task_count ? ` · ${num(r.total_value / r.task_count)} ${esc(r.unit)} cada` : ''}` : `Meta: ${num(r.total_value)} ${r.goal_mode === 'coins' ? 'moedas' : 'missões'}`}</div></div>
+      <div class="s">${r.kind === 'time' ? `${num(r.total_value)} ${esc(r.unit)} por dia · ${r.task_count} tarefa(s)${r.task_count ? ` · ${num(r.total_value / r.task_count)} ${esc(r.unit)} cada` : ''}` : `Meta: ${num(r.total_value)} ${r.goal_mode === 'coins' ? 'moedas' : 'missões'}`}${r.kid_id ? ` · <b>só para ${esc(r.kid_name || '?')}</b>` : ''}</div></div>
       <div class="btns"><button class="btn ghost sm" data-e="${r.id}">Editar</button></div></div>`).join('')}</div>` : zero('gift', 'Crie tempo de videogame, YouTube ou uma meta como ir ao parque.')}</section>
     <section class="box" id="wheelBox"></section>`;
   adminWheel($('#wheelBox')).catch(e => toast(e.message, true));
@@ -988,8 +1017,10 @@ async function adminRewards(pane, refresh) {
     <div class="field"><span class="lab">Tipo</span>${seg('kind', [['time', 'Tempo por dia'], ['goal', 'Meta']], r.kind)}</div>
     <div class="field" data-show="goal"><span class="lab">A meta conta</span>${seg('goal_mode', [['tasks', 'Missões feitas'], ['coins', 'Moedas']], r.goal_mode || 'tasks')}</div>
     <div class="field"><label for="rv" data-lbl>Minutos por dia</label><input id="rv" type="number" step="any" min="1" name="total_value" value="${r.total_value}" inputmode="decimal" required></div>
+    ${kidsOnly.length > 1 || r.kid_id ? `<div class="field"><label for="rk">Para quem</label><select id="rk" name="kid_id"><option value="">Todos os filhos</option>${kidsOnly.map(k => `<option value="${k.id}" ${k.id === r.kid_id ? 'selected' : ''}>Só ${esc(k.name)}</option>`).join('')}</select>
+      <p class="hint">Só aquele filho vê e ganha esta recompensa, mesmo que as tarefas sejam de todos.</p></div>` : ''}
     <label class="check"><input type="checkbox" name="active" ${r.active ? 'checked' : ''}>Ativa</label>`;
-  const read = (f) => ({ title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked });
+  const read = (f) => ({ title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked, kid_id: f.kid_id ? +f.kid_id.value || null : null });
   const wire = (bg) => { const f = bg.querySelector('form'); const u = () => { $('[data-show]', f).hidden = f.kind.value !== 'goal'; $('[data-lbl]', f).textContent = f.kind.value === 'goal' ? (f.goal_mode.value === 'coins' ? 'Quantas moedas custa' : 'Quantas missões para alcançar') : 'Minutos por dia'; }; f.addEventListener('change', u); u(); };
   $('#new').onclick = () => wire(sheet('Nova recompensa', form(), async (f) => { await api('POST', '/admin/rewards', read(f)); toast('Recompensa criada'); refresh(); }, { saveLabel: 'Criar' }));
   $$('[data-e]').forEach(b => b.onclick = () => { const r = rewards.find(x => x.id == b.dataset.e); wire(sheet('Editar recompensa', form(r), async (f) => { await api('PUT', '/admin/rewards/' + r.id, read(f)); refresh(); })); });

@@ -121,7 +121,8 @@ const COLUMNS = [
   ['kids', 'adult', 'TINYINT NOT NULL DEFAULT 0'],         // perfil de jogador de um adulto (sem moedas)
   ['password_resets', 'member_id', 'INT NULL'],
   ['wheel_prizes', 'coins', 'INT NOT NULL DEFAULT 0'],          // prêmio da roleta que já cai como moedas na conta
-  ['wheel_spins', 'coins', 'INT NOT NULL DEFAULT 0'],            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
+  ['wheel_spins', 'coins', 'INT NOT NULL DEFAULT 0'],
+  ['rewards', 'kid_id', 'INT NULL'],                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 

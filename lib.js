@@ -31,7 +31,7 @@ async function shares(fid, kidId) {
   if (!ids.length) return out;
   const [links] = await pool.query(
     `SELECT tr.task_id, r.* FROM task_rewards tr JOIN rewards r ON r.id=tr.reward_id
-     WHERE r.family_id=? AND r.active=1 AND tr.task_id IN (?)`, [fid, ids]);
+     WHERE r.family_id=? AND r.active=1 AND (r.kid_id IS NULL OR r.kid_id=?) AND tr.task_id IN (?)`, [fid, kidId, ids]);
   const count = {};
   links.forEach(l => { count[l.id] = (count[l.id] || 0) + 1; });
   for (const l of links) {

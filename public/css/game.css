@@ -761,3 +761,15 @@ textarea{width:100%;padding:12px 14px;border-radius:14px;border:2px solid var(--
 .danger-link{margin-top:14px;color:var(--red)}
 .prow .pe{flex:0 0 48px}
 .pcoin{flex:0 0 74px;padding:0 4px}
+
+/* ---------- v16: ouvir a missão ---------- */
+.mission .ttl[data-say]{cursor:pointer}
+.mission .tile{cursor:pointer}
+.say{display:inline-grid;place-items:center;vertical-align:middle;width:34px;height:34px;margin:-4px 0 -4px 6px;padding:0;border-radius:50%;border:2px solid var(--navy);background:var(--yellow);color:var(--navy);box-shadow:0 2px 0 var(--navy);cursor:pointer}
+.say svg{width:18px;height:18px}
+.say:active{transform:translateY(2px);box-shadow:none}
+.mission.talk .tile{animation:talk .5s ease-in-out 3}
+@keyframes talk{0%,100%{transform:scale(1)}50%{transform:scale(1.12) rotate(-4deg)}}
+.say-msg{display:inline-flex;align-items:center;gap:6px;margin:-8px auto 14px}
+.say-msg svg{width:18px;height:18px}
+@media (prefers-reduced-motion:reduce){.mission.talk .tile{animation:none}}

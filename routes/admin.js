@@ -32,7 +32,9 @@ router.delete('/kids/:id', wrap(async (req, res) => {
   const [[k]] = await pool.query('SELECT id,adult FROM kids WHERE id=? AND family_id=?', [req.params.id, req.fid]);
   if (!k) return res.status(404).json({ error: 'Jogador não encontrado' });
   if (k.adult) { await pool.query('UPDATE kids SET active=0 WHERE id=?', [k.id]); return res.json({ ok: true, left: true }); }
-  for (const t of ['completions', 'ledger', 'payouts', 'task_kids', 'task_order', 'wheel_spins', 'fix_spins', 'alarms']) await pool.query(`DELETE FROM ${t} WHERE kid_id=?`, [k.id]);
+  const [own] = await pool.query('SELECT id FROM rewards WHERE kid_id=? AND family_id=?', [k.id, req.fid]);
+    if (own.length) { await pool.query('DELETE FROM task_rewards WHERE reward_id IN (?)', [own.map(r => r.id)]); await pool.query('DELETE FROM rewards WHERE id IN (?)', [own.map(r => r.id)]); }
+    for (const t of ['completions', 'ledger', 'payouts', 'task_kids', 'task_order', 'wheel_spins', 'fix_spins', 'alarms']) await pool.query(`DELETE FROM ${t} WHERE kid_id=?`, [k.id]);
   await pool.query('DELETE FROM kids WHERE id=? AND family_id=?', [k.id, req.fid]);
   res.json({ ok: true });
 }));
@@ -250,8 +252,8 @@ router.delete('/fix-spins/:id', wrap(async (req, res) => {
 // ---------- Recompensas ----------
 router.get('/rewards', wrap(async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT r.*, (SELECT COUNT(*) FROM task_rewards tr JOIN tasks t ON t.id=tr.task_id WHERE tr.reward_id=r.id AND t.active=1) task_count
-     FROM rewards r WHERE r.family_id=? ORDER BY r.active DESC,r.kind,r.id`, [req.fid]);
+    `SELECT r.*, k.name kid_name, (SELECT COUNT(*) FROM task_rewards tr JOIN tasks t ON t.id=tr.task_id WHERE tr.reward_id=r.id AND t.active=1) task_count
+     FROM rewards r LEFT JOIN kids k ON k.id=r.kid_id WHERE r.family_id=? ORDER BY r.active DESC,r.kind,r.id`, [req.fid]);
   res.json(rows);
 }));
 async function saveReward(req, id) {
@@ -260,9 +262,12 @@ async function saveReward(req, id) {
   const mode = kind === 'goal' ? (b.goal_mode === 'coins' ? 'coins' : 'tasks') : null;
   const v = [b.title.trim(), b.icon || 'game', kind, kind === 'time' ? (b.unit || 'min') : (mode === 'coins' ? 'moedas' : 'tarefas'),
     +b.total_value, mode, bool(b.active ?? 1)];
-  if (id) await pool.query('UPDATE rewards SET title=?,icon=?,kind=?,unit=?,total_value=?,goal_mode=?,active=? WHERE id=? AND family_id=?', [...v, id, req.fid]);
+  // só um filho (ou todos): o filho precisa ser desta família
+  const [[k]] = b.kid_id ? await pool.query('SELECT id FROM kids WHERE id=? AND family_id=?', [b.kid_id, req.fid]) : [[]];
+  v.push(k?.id || null);
+  if (id) await pool.query('UPDATE rewards SET title=?,icon=?,kind=?,unit=?,total_value=?,goal_mode=?,active=?,kid_id=? WHERE id=? AND family_id=?', [...v, id, req.fid]);
   else {
-    const [r] = await pool.query('INSERT INTO rewards (title,icon,kind,unit,total_value,goal_mode,active,family_id) VALUES (?,?,?,?,?,?,?,?)', [...v, req.fid]);
+    const [r] = await pool.query('INSERT INTO rewards (title,icon,kind,unit,total_value,goal_mode,active,kid_id,family_id) VALUES (?,?,?,?,?,?,?,?,?)', [...v, req.fid]);
     id = r.insertId;
   }
   return id;
@@ -310,7 +315,7 @@ router.get('/wallet', wrap(async (req, res) => {
     const [[t]] = await pool.query("SELECT COALESCE(SUM(amount),0) a FROM ledger WHERE kid_id=? AND kind='time' AND day=?", [k.id, day]);
     k.time_today = r2(t.a);
     const [gp] = await pool.query("SELECT reward_id,SUM(amount) p FROM ledger WHERE kid_id=? AND kind='goal' GROUP BY reward_id", [k.id]);
-    k.goals = goals.map(g => {
+    k.goals = goals.filter(g => !g.kid_id || g.kid_id === k.id).map(g => {
       const p = g.goal_mode === 'coins' ? k.balance : (gp.find(x => x.reward_id === g.id)?.p || 0);
       return { id: g.id, title: g.title, icon: g.icon, mode: g.goal_mode, target: g.total_value, progress: r2(p), ready: p >= g.total_value };
     });
@@ -359,7 +364,7 @@ router.post('/use-time', wrap(async (req, res) => {
 router.post('/redeem', wrap(async (req, res) => {
   const kid = await ownKidId(req); if (!kid) return res.status(404).json({ error: 'Filho não encontrado' });
   const [[g]] = await pool.query("SELECT * FROM rewards WHERE id=? AND family_id=? AND kind='goal'", [req.body.reward_id, req.fid]);
-  if (!g) return res.status(404).json({ error: 'Meta não encontrada' });
+  if (!g || (g.kid_id && g.kid_id !== kid)) return res.status(404).json({ error: 'Meta não encontrada' });
   if (g.goal_mode === 'coins') {
     if (await balance(req.fid, kid) < g.total_value) return res.status(400).json({ error: 'Moedas insuficientes' });
     await pool.query("INSERT INTO ledger (family_id,kid_id,kind,reward_id,amount,day,note) VALUES (?,?,'coin',?,?,?,?)",

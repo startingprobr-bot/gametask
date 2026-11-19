@@ -238,6 +238,19 @@ const step = (m) => console.log('✔', m);
     const zh = await ok('GET', `/api/kids/${zeId}/home`); assert.equal(zh.balance, zh0.balance + 50); assert.equal(zh.wheel.spun.coins, 50);
     step('roleta: prêmio em moedas cai direto na conta');
 
+    // recompensa só para um filho: os outros não veem nem ganham
+    const solo = (await ok('POST', '/api/admin/rewards', { title: 'Meta do Zé', kind: 'goal', goal_mode: 'coins', total_value: 100, kid_id: zeId })).id;
+    assert.equal((await ok('GET', '/api/admin/rewards')).find(r => r.id === solo).kid_name, 'Zé');
+    assert.ok((await ok('GET', `/api/kids/${zeId}/home`)).goals.some(g => g.id === solo));
+    const others = (await ok('GET', '/api/kids')).filter(k => !k.adult && k.id !== zeId);
+    for (const o of others) assert.ok(!(await ok('GET', `/api/kids/${o.id}/home`)).goals.some(g => g.id === solo));
+    const wl = await ok('GET', '/api/admin/wallet');
+    assert.ok(wl.kids.find(k => k.id === zeId).goals.some(g => g.id === solo));
+    for (const o of wl.kids.filter(k => k.id !== zeId)) assert.ok(!o.goals.some(g => g.id === solo));
+    if (others[0]) assert.equal((await api('POST', '/api/admin/redeem', { kid_id: others[0].id, reward_id: solo })).status, 404);
+    await ok('PUT', `/api/admin/rewards/${solo}`, { title: 'Meta do Zé', kind: 'goal', goal_mode: 'coins', total_value: 100, active: 0, kid_id: zeId });
+    step('recompensa só para um filho');
+
     // roletas de correção
     assert.equal((await ok('GET', '/api/admin/fix')).wheels.length, 0);
     await ok('POST', '/api/admin/fix/samples');

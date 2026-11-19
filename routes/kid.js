@@ -84,7 +84,7 @@ router.get('/kids/:id/home', async (req, res) => {
   }));
 
   // Tempo de tela de hoje (não acumula)
-  const [rewards] = await pool.query('SELECT * FROM rewards WHERE family_id=? AND active=1', [fid]);
+  const [rewards] = await pool.query('SELECT * FROM rewards WHERE family_id=? AND active=1 AND (kid_id IS NULL OR kid_id=?)', [fid, kid.id]);
   const [tl] = await pool.query(
     `SELECT reward_id, SUM(CASE WHEN amount>0 THEN amount ELSE 0 END) earned, -SUM(CASE WHEN amount<0 THEN amount ELSE 0 END) used
      FROM ledger WHERE kid_id=? AND kind='time' AND day=? GROUP BY reward_id`, [kid.id, day]);
