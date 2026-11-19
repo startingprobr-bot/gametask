@@ -27,6 +27,8 @@ const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" cl
 const SVG = {
   finger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v3a8 8 0 01-1.3 4.4"/><path d="M8.6 13a14 14 0 01-.7 4.5"/><path d="M15.5 12.5c0 2.5-.3 4.8-1 7"/><path d="M5.4 8.6A7.5 7.5 0 0119.5 12c0 2 0 4-.4 6"/><path d="M4.5 13.5c.3-1 .5-2 .5-3"/><path d="M8.5 9.6A4 4 0 0112 8a4 4 0 014 4"/><path d="M7.8 4.8A10 10 0 0121 9.5"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.9"/><circle cx="15" cy="6" r="1.9"/><circle cx="9" cy="12" r="1.9"/><circle cx="15" cy="12" r="1.9"/><circle cx="9" cy="18" r="1.9"/><circle cx="15" cy="18" r="1.9"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 001.5.86l10.5-6.5a1 1 0 000-1.72L9.5 4.64A1 1 0 008 5.5z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.5"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.5"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
   on: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 010 6M18 6.5a8 8 0 010 11"/></svg>',
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z" fill="currentColor"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>',
@@ -52,10 +54,11 @@ const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (
 
 // ---------- Som ----------
 let actx; let muted = store.get('gt-mute') === '1';
-function tone(notes, type = 'triangle', vol = .09) {
-  if (muted) return;
+function tone(notes, type = 'triangle', vol = .09, force) {
+  if (muted && !force) return;
   try {
     actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
     let t = actx.currentTime;
     for (const [f, d] of notes) {
       const o = actx.createOscillator(), g = actx.createGain();
@@ -93,6 +96,47 @@ function say(text) {
     const u = new SpeechSynthesisUtterance(text); u.lang = 'pt-BR'; u.rate = .92; u.pitch = 1.1; if (ptVoice) u.voice = ptVoice;
     speechSynthesis.speak(u);
   } catch {}
+}
+
+// ---------- Cronômetro do tempo de tela ----------
+// clocks: cronômetros ligados de qualquer jogador. Quando um zera, para no servidor e o alarme toca até alguém desligar.
+const clocks = new Map(), rang = new Map();
+let refreshView = null, wakeLock = null;
+const mmss = (s) => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const running = (t) => t.run !== null && t.run !== undefined;
+function syncClocks(kid, list) {
+  for (const [k, c] of clocks) if (c.kid === kid.id) clocks.delete(k);
+  for (const x of list || []) {
+    if (x.ended) alarm(kid, x);
+    if (running(x)) clocks.set(`${kid.id}:${x.id}`, { kid: kid.id, name: kid.name, id: x.id, title: x.title, ends: Date.now() + (x.left * 60 - x.run) * 1000 });
+  }
+}
+const clockLeft = (kidId, x) => { const c = clocks.get(`${kidId}:${x.id}`); return c ? (c.ends - Date.now()) / 1000 : x.left * 60; };
+setInterval(() => {
+  for (const [k, c] of clocks) {
+    const s = (c.ends - Date.now()) / 1000;
+    $$(`[data-clock="${k}"]`).forEach(e => { e.textContent = mmss(s); });
+    if (s > 0) continue;
+    clocks.delete(k);
+    api('POST', `/kids/${c.kid}/timer/${c.id}`, { action: 'pause' }).catch(() => {}).finally(() => refreshView?.());
+    alarm({ id: c.kid, name: c.name }, c);
+  }
+  // tela acesa enquanto algum cronômetro corre (senão o tablet dorme e o alarme não toca)
+  if (clocks.size && !wakeLock && document.visibilityState === 'visible' && navigator.wakeLock) { wakeLock = 'wait'; navigator.wakeLock.request('screen').then(l => { wakeLock = l; l.onrelease = () => { wakeLock = null; }; }).catch(() => { wakeLock = null; }); }
+  if (!clocks.size && wakeLock && wakeLock !== 'wait') { wakeLock.release().catch(() => {}); wakeLock = null; }
+}, 250);
+function alarm(kid, x) {
+  const key = `${kid.id}:${x.id}`;
+  if (Date.now() - (rang.get(key) || 0) < 120000) return;
+  rang.set(key, Date.now());
+  const text = `O tempo de ${x.title} de ${kid.name} acabou!`;
+  const bg = document.createElement('div'); bg.className = 'alarm-bg'; bg.setAttribute('role', 'alertdialog'); bg.setAttribute('aria-label', text);
+  bg.innerHTML = `<div class="alarm-card">${im('alarm', 'alarm-ic')}<h2 class="d stroke">Acabou o tempo!</h2><p>${esc(text)}</p><button class="btn big" id="alarmOff">Desligar</button></div>`;
+  document.body.append(bg);
+  const ring = () => { tone([[880, .28], [660, .28], [880, .28], [660, .28], [880, .28], [660, .45]], 'square', .3, true); navigator.vibrate?.([400, 200, 400, 200, 400]); setTimeout(() => bg.isConnected && say(text), 1500); };
+  ring(); const iv = setInterval(ring, 6000);
+  const off = $('#alarmOff', bg); off.focus();
+  off.onclick = () => { clearInterval(iv); try { speechSynthesis.cancel(); } catch {} bg.remove(); };
 }
 
 // ---------- Efeitos ----------
@@ -247,7 +291,7 @@ function burst(icon, title, text, btn = 'Continuar', onClose) {
 // ---------- Roteador ----------
 let timer, ME = {};
 async function route() {
-  clearInterval(timer);
+  clearInterval(timer); refreshView = null;
   $$('.sheet-bg,.burst').forEach(e => e.remove());
   const paid = await paymentReturn();
   const me = ME = await api('GET', '/auth/me');
@@ -295,7 +339,7 @@ async function checkUpdate() {
     const { v } = await (await fetch('/api/version', { cache: 'no-store' })).json();
     if (!v || v === APP_V) return;
     swReg?.update().catch(() => {});
-    const go = () => { if ($('.sheet-bg,.burst')) return setTimeout(go, 5000); location.reload(); };
+    const go = () => { if ($('.sheet-bg,.burst,.alarm-bg')) return setTimeout(go, 5000); location.reload(); };
     go();
   } catch {}
 }
@@ -376,6 +420,7 @@ function viewLogin(mode = 'login') {
 // ---------- Seleção de herói ----------
 async function viewPlayers(me = ME) {
   const kids = await api('GET', '/kids');
+  kids.forEach(k => syncClocks(k, k.timers));
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
     <div style="position:absolute;right:16px;top:14px;z-index:5">${soundBtn()}</div>
@@ -398,12 +443,41 @@ async function viewPlayers(me = ME) {
 // ---------- Lobby da criança ----------
 // A criança vê o ganho na hora (moedas, minutos, meta). O pai confere depois; se rejeitar, o ganho sai.
 async function viewKid(id) {
-  let first = true, showDone = false;
+  let first = true, showDone = false, latest = null, iv = 0;
   const doneLike = (s) => s === 'approved' || s === 'pending';
+  const here = () => { const [, a, b] = location.hash.split('/'); return a === 'kid' && +b === id; };
   const load = async () => {
     const d = await api('GET', `/kids/${id}/home`);
+    syncClocks(d.kid, d.time);
+    if (!here()) { clearInterval(iv); return d; }
+    latest = d; $('.timer-bg')?.paint?.();
     if ($('.sheet-bg,.burst')) return d;
     render(d); first = false; return d;
+  };
+  refreshView = () => { if (here()) load().catch(() => {}); };
+
+  const openTimer = (tid) => {
+    const key = `${id}:${tid}`;
+    const bg = document.createElement('div'); bg.className = 'sheet-bg timer-bg';
+    const close = () => { bg.remove(); load().catch(() => {}); };
+    bg.paint = () => {
+      const x = latest.time.find(y => y.id === tid); if (!x) return close();
+      const run = clocks.has(key), s = run ? clockLeft(id, x) : x.left * 60;
+      bg.innerHTML = `<div class="timer-card" role="dialog" aria-label="Cronômetro de ${esc(x.title)}">
+        <button type="button" class="btn ghost round timer-x" data-x aria-label="Fechar">${SVG.back}</button>
+        ${im(x.icon, 'timer-ic', 'game')}<h2 class="d stroke">${esc(x.title)}</h2>
+        <div class="timer-face ${run ? 'on' : ''}"><b class="num" ${run ? `data-clock="${key}"` : ''}>${mmss(s)}</b><span>${run ? 'Valendo!' : s > 0 ? 'Pausado' : 'Sem tempo'}</span></div>
+        <p class="timer-hint">${s > 0 ? 'Fez mais missões? O tempo novo soma aqui.' : 'Faça mais missões para ganhar tempo.'}</p>
+        <button type="button" class="btn big ${run ? '' : 'green'}" data-go ${!run && s <= 0 ? 'disabled' : ''}>${run ? SVG.pause + 'Pausar' : SVG.play + 'Começar'}</button></div>`;
+      $('[data-x]', bg).onclick = close;
+      $('[data-go]', bg).onclick = guard(async () => {
+        sfx.tap();
+        const r = await api('POST', `/kids/${id}/timer/${tid}`, { action: run ? 'pause' : 'start' });
+        latest.time = r.time; syncClocks(latest.kid, r.time); bg.paint();
+      });
+    };
+    bg.onclick = (e) => { if (e.target === bg) close(); };
+    bg.paint(); document.body.append(bg); $('[data-go]', bg)?.focus();
   };
 
   const render = (d) => {
@@ -421,9 +495,9 @@ async function viewKid(id) {
         <div class="track"><div class="rail"></div><div class="fill" style="width:${pct}%"></div>${nodes}<img src="/img/3d/${slug(d.kid.avatar, 'fox')}.png" alt="" class="me" style="left:${pct}%">${im(g.icon, 'prize' + (ready ? ' ready' : ''), 'trophy')}</div></div>`;
     };
     const timeMeter = (t) => {
-      const left = Math.max(0, t.earned + t.pending - t.used);
-      return `<div class="meter">${im(t.icon, '', 'game')}<div class="lbl"><b>${esc(t.title)}</b><span class="num">${num(left)} de ${num(t.cap)} ${esc(t.unit)}</span></div>
-        <div class="bar"><i style="width:${t.cap ? Math.min(100, left / t.cap * 100) : 0}%"></i></div></div>`;
+      const run = running(t), key = `${d.kid.id}:${t.id}`;
+      return `<button type="button" class="meter ${run ? 'running' : ''}" data-timer="${t.id}" aria-label="Cronômetro de ${esc(t.title)}">${im(t.icon, '', 'game')}<div class="lbl"><b>${esc(t.title)}</b><span class="num">${run ? `<i class="live"></i><span data-clock="${key}">${mmss(clockLeft(d.kid.id, t))}</span>` : `${Number.isInteger(t.left) ? num(t.left) : mmss(t.left * 60)} de ${num(t.cap)} ${esc(t.unit)}`}</span></div>
+        <div class="bar"><i style="width:${t.cap ? Math.min(100, t.left / t.cap * 100) : 0}%"></i></div><span class="meter-go" aria-hidden="true">${run ? SVG.pause : SVG.play}</span></button>`;
     };
     const mission = (t, i) => {
       const chips = [
@@ -486,6 +560,7 @@ async function viewKid(id) {
       if (!d.kid.adult) setTimeout(() => countUp($('#coinNum'), coins, newCoins), reduced ? 0 : 950);
       if (last && (nd.wheel?.ready || !store.get(`gt-all-${id}-${d.day}`))) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => nd.wheel?.ready ? spinIt(nd.wheel, true) : burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
     }));
+    $$('[data-timer]').forEach(b => b.onclick = () => { sfx.tap(); openTimer(+b.dataset.timer); });
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
     // ouvir a missão: botão do alto-falante, o nome ou o ícone
     const speak = (tid) => {
@@ -496,7 +571,8 @@ async function viewKid(id) {
     $$('[data-say],[data-tile]').forEach(el => el.onclick = (e) => { e.stopPropagation(); speak(el.dataset.say || el.dataset.tile); });
   };
   await load();
-  timer = setInterval(() => load().catch(() => {}), 20000);
+  if (!here()) return;
+  iv = timer = setInterval(() => load().catch(() => {}), 20000);
 }
 
 // ---------- Folha (formulário) ----------

@@ -773,3 +773,35 @@ textarea{width:100%;padding:12px 14px;border-radius:14px;border:2px solid var(--
 .say-msg{display:inline-flex;align-items:center;gap:6px;margin:-8px auto 14px}
 .say-msg svg{width:18px;height:18px}
 @media (prefers-reduced-motion:reduce){.mission.talk .tile{animation:none}}
+
+/* ---------- v17: cronômetro do tempo de tela ---------- */
+button.meter{width:100%;grid-template-columns:52px 1fr 46px;font:inherit;color:inherit;text-align:left;background:none;border:0;padding:6px;margin:-6px;width:calc(100% + 12px);border-radius:16px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:background .2s}
+button.meter:hover,button.meter:focus-visible{background:rgba(255,255,255,.08)}
+button.meter:active{transform:scale(.98)}
+.meter .meter-go{grid-column:3;grid-row:1/3;width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--green,#3bd15f);color:var(--navy);border:2px solid var(--navy);box-shadow:0 3px 0 var(--navy)}
+.meter .meter-go svg{width:22px;height:22px}
+.meter.running .meter-go{background:var(--yellow-hi,#ffe14d)}
+.meter.running .lbl .num{color:var(--yellow-hi,#ffe14d);font-size:20px;font-variant-numeric:tabular-nums}
+.meter .live{display:inline-block;width:10px;height:10px;border-radius:50%;background:#ff4d5e;margin-right:6px;vertical-align:1px;animation:livepulse 1s ease-in-out infinite}
+@keyframes livepulse{50%{opacity:.25}}
+.timer-bg{display:grid;place-items:center;padding:16px}
+.timer-card{position:relative;width:min(420px,100%);text-align:center;padding:26px 20px 22px;border-radius:28px;border:3px solid var(--navy);background:linear-gradient(180deg,#2d6cf0,#163a9e);box-shadow:0 8px 0 var(--navy),0 24px 60px rgba(0,0,0,.4);color:#fff;animation:zoom .35s var(--spring) both}
+.timer-card h2{font-size:26px;margin:4px 0 12px}
+.timer-ic{display:block;margin:0 auto;width:84px;height:84px}
+.timer-x{position:absolute;left:12px;top:12px}
+.timer-face{margin:0 auto 12px;width:220px;height:220px;max-width:70vw;max-height:70vw;border-radius:50%;display:grid;place-content:center;gap:4px;background:rgba(8,18,58,.55);border:4px solid var(--navy);box-shadow:inset 0 0 0 8px rgba(255,255,255,.08)}
+.timer-face b{font-size:clamp(44px,14vw,62px);font-weight:900;font-variant-numeric:tabular-nums;line-height:1}
+.timer-face span{font-weight:800;opacity:.85;text-transform:uppercase;letter-spacing:.06em;font-size:14px}
+.timer-face.on{border-color:var(--yellow-hi,#ffe14d);animation:tick 2s ease-in-out infinite}
+@keyframes tick{50%{box-shadow:inset 0 0 0 8px rgba(255,225,77,.25),0 0 30px rgba(255,225,77,.35)}}
+.timer-hint{margin:0 0 14px;font-weight:700;opacity:.9}
+.timer-card .btn svg{width:22px;height:22px;margin-right:8px;vertical-align:-4px}
+.alarm-bg{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:16px;background:rgba(160,10,30,.82);animation:alarmflash .8s steps(2) infinite}
+@keyframes alarmflash{50%{background:rgba(255,77,94,.9)}}
+.alarm-card{width:min(440px,100%);text-align:center;padding:26px 20px;border-radius:28px;background:#fff;color:var(--navy);border:3px solid var(--navy);box-shadow:0 8px 0 var(--navy)}
+.alarm-card h2{font-size:30px;color:#fff;margin:6px 0}
+.alarm-card p{font-size:20px;font-weight:800;margin:0 0 18px}
+.alarm-ic{display:block;margin:0 auto;width:110px;height:110px;animation:shake .25s linear infinite}
+@keyframes shake{25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+.alarm-card .btn{min-width:200px}
+@media (prefers-reduced-motion:reduce){.alarm-bg,.alarm-ic,.timer-face.on,.meter .live{animation:none}}

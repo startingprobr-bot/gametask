@@ -104,6 +104,9 @@ const SCHEMA = [
   id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, kid_id INT NOT NULL, wheel_id INT NOT NULL, wheel_name VARCHAR(40) NOT NULL,
   label VARCHAR(60) NULL, emoji VARCHAR(16) NULL, coins INT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, spun_at TIMESTAMP NULL,
   INDEX(kid_id), INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS time_runs (
+  family_id INT NOT NULL, kid_id INT NOT NULL, reward_id INT NOT NULL, day DATE NOT NULL,
+  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (kid_id, reward_id), INDEX(family_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)

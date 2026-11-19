@@ -129,6 +129,25 @@ const step = (m) => console.log('✔', m);
     const t = (await ok('GET', `/api/kids/${eva}/home`)).time[0];
     assert.equal(t.used, 1); step('tempo usado descontado');
 
+    // cronômetro: começar, pausar (vira tempo usado), acabar sozinho
+    const tdb = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+    const tUrl = `/api/kids/${eva}/timer/${game}`;
+    let tt = (await ok('POST', tUrl, { action: 'start' })).time.find(x => x.id === game);
+    assert.equal(tt.run, 0); assert.ok(tt.left > 0);
+    await ok('POST', tUrl, { action: 'start' }); // repetir não duplica
+    assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).timers.length, 1);
+    await tdb.query('UPDATE time_runs SET started_at=DATE_SUB(started_at, INTERVAL 30 SECOND) WHERE kid_id=?', [eva]);
+    tt = (await ok('POST', tUrl, { action: 'pause' })).time.find(x => x.id === game);
+    assert.equal(tt.run, null); assert.ok(Math.abs(tt.used - 1.5) < 0.05, 'usou ~30s: ' + tt.used);
+    await ok('POST', tUrl, { action: 'start' });
+    await tdb.query('UPDATE time_runs SET started_at=DATE_SUB(started_at, INTERVAL 5 HOUR) WHERE kid_id=?', [eva]);
+    tt = (await ok('GET', `/api/kids/${eva}/home`)).time.find(x => x.id === game);
+    assert.equal(tt.ended, true); assert.equal(tt.left, 0); assert.equal(tt.run, null);
+    assert.equal((await api('POST', tUrl, { action: 'start' })).status, 400);
+    assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).timers.length, 0);
+    await tdb.end();
+    step('cronômetro: começa, pausa vira tempo usado, acaba sozinho e não passa do ganho');
+
     // aprovação automática por filho: Bernardo ligado, Eva continua pendente
     await ok('PUT', `/api/admin/kids/${ber}`, { name: 'Bernardo', avatar: 'robot', color: '#4aa8ff', active: true, auto_approve: true });
     await ok('POST', `/api/kids/${ber}/complete`, { task_id: ids[0] });

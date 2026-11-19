@@ -30,6 +30,8 @@ router.get('/kids', async (req, res) => {
     const [[m]] = await pool.query('SELECT COUNT(*) n FROM messages WHERE kid_id=? AND read_at IS NULL', [k.id]);
     k.msgs = m.n;
   }
+  const [runs] = await pool.query('SELECT DISTINCT kid_id FROM time_runs WHERE family_id=?', [req.fid]);
+  for (const k of kids) k.timers = runs.some(r => r.kid_id === k.id) ? (await kidTime(req.fid, k)).filter(t => t.run !== null || t.ended) : [];
   res.json(kids);
 });
 
@@ -85,10 +87,6 @@ router.get('/kids/:id/home', async (req, res) => {
 
   // Tempo de tela de hoje (não acumula)
   const [rewards] = await pool.query('SELECT * FROM rewards WHERE family_id=? AND active=1 AND (kid_id IS NULL OR kid_id=?)', [fid, kid.id]);
-  const [tl] = await pool.query(
-    `SELECT reward_id, SUM(CASE WHEN amount>0 THEN amount ELSE 0 END) earned, -SUM(CASE WHEN amount<0 THEN amount ELSE 0 END) used
-     FROM ledger WHERE kid_id=? AND kind='time' AND day=? GROUP BY reward_id`, [kid.id, day]);
-  const tm = Object.fromEntries(tl.map(x => [x.reward_id, x]));
   const [gl] = await pool.query(`SELECT reward_id, SUM(amount) p FROM ledger WHERE kid_id=? AND kind='goal' GROUP BY reward_id`, [kid.id]);
   const gp = Object.fromEntries(gl.map(x => [x.reward_id, x.p]));
   const bal = await balance(fid, kid.id);
@@ -98,10 +96,7 @@ router.get('/kids/:id/home', async (req, res) => {
 
   const relevant = new Set(Object.values(sh).flat().map(s => s.reward_id));
   if (kid.adult) rewards.length = 0;
-  const time = rewards.filter(r => r.kind === 'time' && relevant.has(r.id)).map(r => ({
-    id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value,
-    earned: r2(tm[r.id]?.earned || 0), used: r2(tm[r.id]?.used || 0), pending: r2(pTime[r.id] || 0),
-  }));
+  const time = await timeState(fid, kid, day, rewards.filter(r => r.kind === 'time' && relevant.has(r.id)), pTime);
   const goals = rewards.filter(r => r.kind === 'goal' && (r.goal_mode === 'coins' || relevant.has(r.id))).map(r => ({
     id: r.id, title: r.title, icon: r.icon, mode: r.goal_mode, target: r.total_value,
     progress: r2(r.goal_mode === 'coins' ? bal : (gp[r.id] || 0)),
@@ -115,6 +110,62 @@ router.get('/kids/:id/home', async (req, res) => {
     done: list.filter(t => t.status === 'approved').length,
     pending: list.filter(t => t.status === 'pending').length, total: list.length,
   });
+});
+
+// ---------- Cronômetro do tempo de tela ----------
+// Um cronômetro por recompensa de tempo. Ao pausar (ou acabar), o tempo corrido vira "Tempo usado" no extrato.
+// left = minutos que ainda restam (sem contar o que está correndo); run = segundos corridos desde o play.
+async function timeState(fid, kid, day, rewards, pTime) {
+  if (kid.adult || !rewards.length) return [];
+  await pool.query('DELETE FROM time_runs WHERE kid_id=? AND day<>?', [kid.id, day]); // tempo não passa para o dia seguinte
+  const [tl] = await pool.query(
+    `SELECT reward_id, SUM(CASE WHEN amount>0 THEN amount ELSE 0 END) earned, -SUM(CASE WHEN amount<0 THEN amount ELSE 0 END) used
+     FROM ledger WHERE kid_id=? AND kind='time' AND day=? GROUP BY reward_id`, [kid.id, day]);
+  const tm = Object.fromEntries(tl.map(x => [x.reward_id, x]));
+  const [runs] = await pool.query('SELECT reward_id, TIMESTAMPDIFF(SECOND, started_at, NOW()) sec FROM time_runs WHERE kid_id=?', [kid.id]);
+  const rn = Object.fromEntries(runs.map(x => [x.reward_id, x]));
+  const out = [];
+  for (const r of rewards) {
+    const earned = r2(tm[r.id]?.earned || 0), pending = r2(pTime[r.id] || 0);
+    let used = r2(tm[r.id]?.used || 0), run = rn[r.id] ? Math.max(0, +rn[r.id].sec) : null, ended = false;
+    const left = Math.max(0, r2(earned + pending - used));
+    if (run !== null && run >= left * 60) { used = r2(used + await stopRun(fid, kid.id, r.id, left)); run = null; ended = true; }
+    out.push({ id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value, earned, used, pending,
+      left: Math.max(0, r2(earned + pending - used)), run, ended });
+  }
+  return out;
+}
+// Para o cronômetro e lança o tempo corrido (no máximo o que restava). Devolve os minutos lançados.
+async function stopRun(fid, kidId, rid, leftMin) {
+  const [[x]] = await pool.query('SELECT UNIX_TIMESTAMP(started_at) ts, TIMESTAMPDIFF(SECOND, started_at, NOW()) sec FROM time_runs WHERE kid_id=? AND reward_id=?', [kidId, rid]);
+  if (!x) return 0;
+  const [d] = await pool.query('DELETE FROM time_runs WHERE kid_id=? AND reward_id=? AND UNIX_TIMESTAMP(started_at)=?', [kidId, rid, x.ts]);
+  if (!d.affectedRows) return 0; // outro aparelho já parou
+  const m = r2(Math.min(leftMin, Math.max(0, +x.sec) / 60));
+  if (m > 0) await pool.query("INSERT INTO ledger (family_id,kid_id,kind,reward_id,amount,day,note) VALUES (?,?,'time',?,?,?,'Tempo usado (cronômetro)')", [fid, kidId, rid, -m, today()]);
+  return m;
+}
+async function kidTime(fid, kid) {
+  const day = today(), sh = await shares(fid, kid.id);
+  const relevant = new Set(Object.values(sh).flat().map(s => s.reward_id));
+  const [rewards] = await pool.query("SELECT * FROM rewards WHERE family_id=? AND active=1 AND kind='time' AND (kid_id IS NULL OR kid_id=?)", [fid, kid.id]);
+  const { pTime } = await pendingGains(kid.id, sh, day);
+  return timeState(fid, kid, day, rewards.filter(r => relevant.has(r.id)), pTime);
+}
+router.post('/kids/:id/timer/:rid', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const rid = +req.params.rid, day = today();
+  const t = (await kidTime(req.fid, kid)).find(x => x.id === rid);
+  if (!t) return res.status(404).json({ error: 'Recompensa não encontrada' });
+  if (req.body.action === 'start') {
+    if (t.run === null) {
+      if (!(t.left > 0)) return res.status(400).json({ error: 'Acabou o tempo de hoje. Faça mais missões para ganhar mais!' });
+      await pool.query('INSERT IGNORE INTO time_runs (family_id,kid_id,reward_id,day) VALUES (?,?,?,?)', [req.fid, kid.id, rid, day]);
+    }
+  } else if (t.run !== null) {
+    await stopRun(req.fid, kid.id, rid, t.left);
+  }
+  res.json({ time: await kidTime(req.fid, kid) });
 });
 
 router.post('/kids/:id/complete', async (req, res) => {
