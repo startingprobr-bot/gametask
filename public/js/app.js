@@ -488,12 +488,10 @@ async function viewKid(id) {
     }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
     // ouvir a missão: botão do alto-falante, o nome ou o ícone
-    const hora = (h) => { const [a, m] = h.split(':').map(Number); return m ? `${a} e ${m}` : `${a} ${a === 1 ? 'hora' : 'horas'}`; };
     const speak = (tid) => {
       const t = d.tasks.find(x => x.id === +tid); if (!t) return;
       const art = $(`[data-m="${t.id}"]`); art?.classList.remove('talk'); void art?.offsetWidth; art?.classList.add('talk');
-      say([t.title, t.description, t.time ? `às ${hora(t.time)}` : t.until ? `até ${hora(t.until)}` : '',
-        doneLike(t.status) ? 'Já está feita!' : t.coins > 0 ? `Vale ${num(t.coins)} ${+t.coins === 1 ? 'moeda' : 'moedas'}.` : ''].filter(Boolean).join('. '));
+      say(t.title);
     };
     $$('[data-say],[data-tile]').forEach(el => el.onclick = (e) => { e.stopPropagation(); speak(el.dataset.say || el.dataset.tile); });
   };
