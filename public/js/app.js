@@ -814,7 +814,7 @@ async function adminTasks(pane, refresh) {
   const line = (t, until) => [
     esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
     t.coins > 0 ? `${num(t.coins)} moedas` : '',
-    !kid ? t.reward_ids.map(r => esc(rewards.find(x => x.id === r)?.title || '?')).join(', ') : '', !kid ? esc(who(t)) : '',
+    !kid ? t.reward_ids.map(r => rewards.find(x => x.id === r)).filter(r => r && !(r.kind === 'goal' && r.goal_mode === 'coins')).map(r => esc(r.title)).join(', ') : '', !kid ? esc(who(t)) : '',
   ].filter(Boolean).join(' · ');
   const untils = (ids) => { const m = {}; let next = null; for (let i = ids.length - 1; i >= 0; i--) { const t = byId[ids[i]]; if (t.time) next = t.time; else m[t.id] = next; } return m; };
   const plain = (t) => `<div class="item off"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
@@ -866,7 +866,7 @@ async function adminTasks(pane, refresh) {
       <p class="hint" data-hint></p>
       <div data-kids>${kidsOn.map(k => `<label class="check"><input type="checkbox" name="kid" value="${k.id}" ${t.kid_ids.includes(k.id) ? 'checked' : ''}>${im(k.avatar, '', 'fox')}${esc(k.name)}${k.adult ? ' <span class="muted">adulto</span>' : ''}</label>`).join('')}</div></div>
     <div class="field"><span class="lab">Recompensas que esta tarefa alimenta</span>
-      ${rewards.filter(r => r.active).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div>
+      ${rewards.filter(r => r.active && !(r.kind === 'goal' && r.goal_mode === 'coins')).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div>
     <label class="check"><input type="checkbox" name="active" ${t.active ? 'checked' : ''}>Tarefa ativa</label>`;
   const read = (f) => ({
     title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value === 'carry' ? 'one_off' : f.type.value,
