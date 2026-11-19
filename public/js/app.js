@@ -497,7 +497,7 @@ async function viewKid(id) {
     const timeMeter = (t) => {
       const run = running(t), key = `${d.kid.id}:${t.id}`;
       return `<button type="button" class="meter ${run ? 'running' : ''}" data-timer="${t.id}" aria-label="Cronômetro de ${esc(t.title)}">${im(t.icon, '', 'game')}<div class="lbl"><b>${esc(t.title)}</b><span class="num">${run ? `<i class="live"></i><span data-clock="${key}">${mmss(clockLeft(d.kid.id, t))}</span>` : `${Number.isInteger(t.left) ? num(t.left) : mmss(t.left * 60)} de ${num(t.cap)} ${esc(t.unit)}`}</span></div>
-        <div class="bar"><i style="width:${t.cap ? Math.min(100, t.left / t.cap * 100) : 0}%"></i></div><span class="meter-go" aria-hidden="true">${run ? SVG.pause : SVG.play}</span></button>`;
+        <div class="bar"><i style="width:${t.cap ? Math.min(100, t.left / t.cap * 100) : 0}%"></i></div></button>`;
     };
     const mission = (t, i) => {
       const chips = [
