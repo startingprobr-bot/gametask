@@ -802,3 +802,11 @@ button.meter:active{transform:scale(.98)}
 @keyframes shake{25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
 .alarm-card .btn{min-width:200px}
 @media (prefers-reduced-motion:reduce){.alarm-bg,.alarm-ic,.timer-face.on,.meter .live{animation:none}}
+
+/* ---------- v18: missão com cronômetro ---------- */
+.btn.tgo{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.btn.tgo svg{width:20px;height:20px;flex:0 0 auto}
+.btn.tgo b{font-variant-numeric:tabular-nums;font-weight:900}
+.btn.tgo.on{background:var(--yellow-hi,#ffe14d);color:var(--navy)}
+.alarm-bg.good{background:rgba(20,130,60,.85);animation-name:alarmgood}
+@keyframes alarmgood{50%{background:rgba(59,209,95,.9)}}

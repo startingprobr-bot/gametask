@@ -104,34 +104,36 @@ const clocks = new Map(), rang = new Map();
 let refreshView = null, wakeLock = null;
 const mmss = (s) => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
 const running = (t) => t.run !== null && t.run !== undefined;
-function syncClocks(kid, list) {
-  for (const [k, c] of clocks) if (c.kid === kid.id) clocks.delete(k);
+function syncClocks(kid, list, kind = '') {
+  for (const [k, c] of clocks) if (c.kid === kid.id && c.kind === kind) clocks.delete(k);
   for (const x of list || []) {
-    if (x.ended) alarm(kid, x);
-    if (running(x)) clocks.set(`${kid.id}:${x.id}`, { kid: kid.id, name: kid.name, id: x.id, title: x.title, ends: Date.now() + (x.left * 60 - x.run) * 1000 });
+    if (x.ended) alarm(kid, x, kind);
+    if (running(x)) clocks.set(`${kid.id}:${kind}${x.id}`, { kid: kid.id, name: kid.name, id: x.id, kind, title: x.title, ends: Date.now() + (x.left * 60 - x.run) * 1000,
+      url: kind ? `/kids/${kid.id}/task-timer/${x.id}` : `/kids/${kid.id}/timer/${x.id}` });
   }
 }
-const clockLeft = (kidId, x) => { const c = clocks.get(`${kidId}:${x.id}`); return c ? (c.ends - Date.now()) / 1000 : x.left * 60; };
+const clockLeft = (kidId, x, kind = '') => { const c = clocks.get(`${kidId}:${kind}${x.id}`); return c ? (c.ends - Date.now()) / 1000 : x.left * 60; };
+const taskClocks = (tasks) => tasks.filter(x => x.timer).map(x => ({ id: x.id, title: x.title, ...x.timer }));
 setInterval(() => {
   for (const [k, c] of clocks) {
     const s = (c.ends - Date.now()) / 1000;
     $$(`[data-clock="${k}"]`).forEach(e => { e.textContent = mmss(s); });
     if (s > 0) continue;
     clocks.delete(k);
-    api('POST', `/kids/${c.kid}/timer/${c.id}`, { action: 'pause' }).catch(() => {}).finally(() => refreshView?.());
-    alarm({ id: c.kid, name: c.name }, c);
+    api('POST', c.url, { action: 'pause' }).catch(() => {}).finally(() => refreshView?.());
+    alarm({ id: c.kid, name: c.name }, c, c.kind);
   }
   // tela acesa enquanto algum cronômetro corre (senão o tablet dorme e o alarme não toca)
   if (clocks.size && !wakeLock && document.visibilityState === 'visible' && navigator.wakeLock) { wakeLock = 'wait'; navigator.wakeLock.request('screen').then(l => { wakeLock = l; l.onrelease = () => { wakeLock = null; }; }).catch(() => { wakeLock = null; }); }
   if (!clocks.size && wakeLock && wakeLock !== 'wait') { wakeLock.release().catch(() => {}); wakeLock = null; }
 }, 250);
-function alarm(kid, x) {
-  const key = `${kid.id}:${x.id}`;
+function alarm(kid, x, kind = '') {
+  const key = `${kid.id}:${kind}${x.id}`;
   if (Date.now() - (rang.get(key) || 0) < 120000) return;
   rang.set(key, Date.now());
   const text = `O tempo de ${x.title} de ${kid.name} acabou!`;
-  const bg = document.createElement('div'); bg.className = 'alarm-bg'; bg.setAttribute('role', 'alertdialog'); bg.setAttribute('aria-label', text);
-  bg.innerHTML = `<div class="alarm-card">${im('alarm', 'alarm-ic')}<h2 class="d stroke">Acabou o tempo!</h2><p>${esc(text)}</p><button class="btn big" id="alarmOff">Desligar</button></div>`;
+  const bg = document.createElement('div'); bg.className = 'alarm-bg' + (kind ? ' good' : ''); bg.setAttribute('role', 'alertdialog'); bg.setAttribute('aria-label', text);
+  bg.innerHTML = `<div class="alarm-card">${im('alarm', 'alarm-ic')}<h2 class="d stroke">${kind ? 'Missão cumprida!' : 'Acabou o tempo!'}</h2><p>${esc(text)}</p><button class="btn big" id="alarmOff">Desligar</button></div>`;
   document.body.append(bg);
   const ring = () => { tone([[880, .28], [660, .28], [880, .28], [660, .28], [880, .28], [660, .45]], 'square', .3, true); navigator.vibrate?.([400, 200, 400, 200, 400]); setTimeout(() => bg.isConnected && say(text), 1500); };
   ring(); const iv = setInterval(ring, 6000);
@@ -420,7 +422,7 @@ function viewLogin(mode = 'login') {
 // ---------- Seleção de herói ----------
 async function viewPlayers(me = ME) {
   const kids = await api('GET', '/kids');
-  kids.forEach(k => syncClocks(k, k.timers));
+  kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); });
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
     <div style="position:absolute;right:16px;top:14px;z-index:5">${soundBtn()}</div>
@@ -448,7 +450,7 @@ async function viewKid(id) {
   const here = () => { const [, a, b] = location.hash.split('/'); return a === 'kid' && +b === id; };
   const load = async () => {
     const d = await api('GET', `/kids/${id}/home`);
-    syncClocks(d.kid, d.time);
+    syncClocks(d.kid, d.time); syncClocks(d.kid, taskClocks(d.tasks), 't');
     if (!here()) { clearInterval(iv); return d; }
     latest = d; $('.timer-bg')?.paint?.();
     if ($('.sheet-bg,.burst')) return d;
@@ -503,10 +505,13 @@ async function viewKid(id) {
       const chips = [
         t.late && !doneLike(t.status) ? `<span class="chip late">Ficou de ontem</span>` : '',
         t.time ? `<span class="chip hour">${esc(t.time)}</span>` : t.until && !doneLike(t.status) ? `<span class="chip until">até ${esc(t.until)}</span>` : '',
+        t.timer ? `<span class="chip time">${im('stopwatch')}${num(t.timer.minutes)} min</span>` : '',
         t.coins > 0 ? `<span class="chip">${im('coin')}+${num(t.coins)}</span>` : '',
         ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}+${num(r.value)} ${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}+1</span>`),
       ].join('');
-      const act = t.status === 'todo' ? `<button class="btn green go" data-do="${t.id}">Concluí!</button>`
+      const tm = t.timer, trun = tm && running(tm), tkey = `${d.kid.id}:t${t.id}`;
+      const act = t.status === 'todo' && tm ? `<button class="btn ${trun ? '' : 'green'} go tgo ${trun ? 'on' : ''}" data-tt="${t.id}" aria-label="${trun ? 'Pausar' : 'Começar'} o cronômetro">${trun ? SVG.pause : SVG.play}<span>${trun ? 'Pausar' : tm.left * 60 < tm.minutes * 60 - 1 ? 'Continuar' : 'Começar'}</span><b class="num" ${trun ? `data-clock="${tkey}"` : ''}>${mmss(trun ? clockLeft(d.kid.id, { id: t.id, ...tm }, 't') : tm.left * 60)}</b></button>`
+        : t.status === 'todo' ? `<button class="btn green go" data-do="${t.id}">Concluí!</button>`
         : doneLike(t.status) ? `<span class="status ok">${im('check')}Feito!</span>${t.status === 'pending' || d.kid.adult ? `<button class="link" data-undo="${t.id}">Desfazer</button>` : ''}`
         : `<span class="status no">${im('cross')}Refazer</span>`;
       return `<article class="mission ${doneLike(t.status) ? 'done' : t.status === 'rejected' ? 'rejected' : ''}" data-m="${t.id}" style="animation-delay:${i * 45}ms">
@@ -561,6 +566,12 @@ async function viewKid(id) {
       if (last && (nd.wheel?.ready || !store.get(`gt-all-${id}-${d.day}`))) { store.set(`gt-all-${id}-${d.day}`, '1'); setTimeout(() => nd.wheel?.ready ? spinIt(nd.wheel, true) : burst('trophy', 'Dia completo!', `${d.kid.name}, você fez todas as missões de hoje!`, 'Oba!'), 1500); }
     }));
     $$('[data-timer]').forEach(b => b.onclick = () => { sfx.tap(); openTimer(+b.dataset.timer); });
+    $$('[data-tt]').forEach(b => b.onclick = guard(async () => {
+      b.disabled = true; sfx.tap();
+      const tid = +b.dataset.tt, on = clocks.has(`${id}:t${tid}`);
+      await api('POST', `/kids/${id}/task-timer/${tid}`, { action: on ? 'pause' : 'start' });
+      await load();
+    }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
     // ouvir a missão: botão do alto-falante, o nome ou o ícone
     const speak = (tid) => {
@@ -927,7 +938,7 @@ async function adminTasks(pane, refresh) {
     else sheet('Apagar a tarefa?', `<p class="lead" style="margin-top:6px"><b>${esc(t.title)}</b> sai da lista de todos os filhos.</p>`,
       async () => { const r = await api('DELETE', `/admin/tasks/${id}`); toast(r.archived ? 'Tarefa desativada (já tinha histórico)' : 'Tarefa apagada'); refresh(); }, { saveLabel: 'Apagar', danger: true });
   });
-  const blank = () => ({ title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, carry: 0, coins: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 });
+  const blank = () => ({ title: '', icon: 'star', description: '', type: 'daily', weekdays: '0123456', date: '', time: '', repeat_weekly: 0, carry: 0, coins: 0, minutes: 0, all_kids: 1, kid_ids: [], reward_ids: [], active: 1 });
   const form = (t = blank()) => `
     ${iconName('tt', 'Nome da tarefa', `<input id="tt" name="title" value="${esc(t.title)}" placeholder="Arrumar a cama" required>`, TASK_ICONS, slug(t.icon))}
     <div class="field"><label for="td">Detalhe (opcional)</label><input id="td" name="description" value="${esc(t.description)}" placeholder="Antes do café"></div>
@@ -937,6 +948,7 @@ async function adminTasks(pane, refresh) {
     <div data-show="one_off carry"><div class="field"><label for="tdt" data-dl>Data</label><input id="tdt" type="date" name="date" value="${esc(t.date || ymd(new Date()))}"></div>
       <label class="check" data-show="one_off"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label></div>
     <div class="field"><label for="th">Horário (opcional)</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
+    <div class="field"><label for="tmin">Cronômetro (minutos, opcional)</label><input id="tmin" type="number" min="0" max="600" step="1" name="minutes" value="${+t.minutes || ''}" placeholder="Ex.: 45" inputmode="numeric"><p class="hint">Para tarefas com tempo, como ler um livro. A criança dá play, pode pausar e continuar, e a missão se conclui sozinha quando o tempo acaba.</p></div>
     <div class="field"><label for="tc">Moedas por conclusão</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"><p class="hint">0 = não vale moeda.</p></div>
     <div class="field"><span class="lab">Quem faz</span>${seg('all_kids', [['1', 'Os filhos'], ...(kidsOn.some(k => k.adult) ? [['2', 'Toda a família']] : []), ['0', 'Escolher']], String(t.all_kids === 2 && !kidsOn.some(k => k.adult) ? 1 : t.all_kids))}
       <p class="hint" data-hint></p>
@@ -947,7 +959,7 @@ async function adminTasks(pane, refresh) {
   const read = (f) => ({
     title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value === 'carry' ? 'one_off' : f.type.value,
     weekdays: $$('[name=wd]:checked', f).map(x => x.value).join('') || '0123456', date: f.date.value, time: f.time.value,
-    repeat_weekly: f.type.value === 'one_off' && f.repeat_weekly.checked, carry: f.type.value === 'carry', coins: f.coins.value, all_kids: +f.all_kids.value,
+    repeat_weekly: f.type.value === 'one_off' && f.repeat_weekly.checked, carry: f.type.value === 'carry', coins: f.coins.value, minutes: f.minutes.value, all_kids: +f.all_kids.value,
     kid_ids: $$('[name=kid]:checked', f).map(x => +x.value), reward_ids: $$('[name=rw]:checked', f).map(x => +x.value), active: f.active.checked,
   });
   const wire = (bg) => {

@@ -106,7 +106,10 @@ const SCHEMA = [
   INDEX(kid_id), INDEX(family_id))`,
 `CREATE TABLE IF NOT EXISTS time_runs (
   family_id INT NOT NULL, kid_id INT NOT NULL, reward_id INT NOT NULL, day DATE NOT NULL,
-  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (kid_id, reward_id), INDEX(family_id))`,
+  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  PRIMARY KEY (kid_id, reward_id), INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS task_runs (
+  family_id INT NOT NULL, kid_id INT NOT NULL, task_id INT NOT NULL, day DATE NOT NULL,
+  spent INT NOT NULL DEFAULT 0, started_at TIMESTAMP NULL, PRIMARY KEY (kid_id, task_id, day), INDEX(family_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
@@ -125,7 +128,8 @@ const COLUMNS = [
   ['password_resets', 'member_id', 'INT NULL'],
   ['wheel_prizes', 'coins', 'INT NOT NULL DEFAULT 0'],          // prêmio da roleta que já cai como moedas na conta
   ['wheel_spins', 'coins', 'INT NOT NULL DEFAULT 0'],
-  ['rewards', 'kid_id', 'INT NULL'],                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
+  ['rewards', 'kid_id', 'INT NULL'],
+  ['tasks', 'minutes', 'INT NOT NULL DEFAULT 0'],           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
 

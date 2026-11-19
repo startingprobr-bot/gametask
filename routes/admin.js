@@ -69,11 +69,11 @@ async function saveTask(req, id) {
   const b = req.body, fid = req.fid;
   const v = [b.title.trim(), b.icon || 'star', b.description || null, b.type === 'one_off' ? 'one_off' : 'daily',
     b.weekdays || '0123456', b.type === 'one_off' ? b.date : null, b.time || null, bool(b.repeat_weekly),
-    +b.coins || 0, Math.max(0, Math.min(2, +b.all_kids || 0)), bool(b.active ?? 1), bool(b.type === 'one_off' && !b.repeat_weekly && b.carry)];
+    +b.coins || 0, Math.max(0, Math.min(2, +b.all_kids || 0)), bool(b.active ?? 1), bool(b.type === 'one_off' && !b.repeat_weekly && b.carry), Math.max(0, Math.min(600, Math.round(+b.minutes || 0)))];
   if (id) {
-    await pool.query('UPDATE tasks SET title=?,icon=?,description=?,type=?,weekdays=?,date=?,time=?,repeat_weekly=?,coins=?,all_kids=?,active=?,carry=? WHERE id=? AND family_id=?', [...v, id, fid]);
+    await pool.query('UPDATE tasks SET title=?,icon=?,description=?,type=?,weekdays=?,date=?,time=?,repeat_weekly=?,coins=?,all_kids=?,active=?,carry=?,minutes=? WHERE id=? AND family_id=?', [...v, id, fid]);
   } else {
-    const [r] = await pool.query('INSERT INTO tasks (title,icon,description,type,weekdays,date,time,repeat_weekly,coins,all_kids,active,carry,family_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', [...v, fid]);
+    const [r] = await pool.query('INSERT INTO tasks (title,icon,description,type,weekdays,date,time,repeat_weekly,coins,all_kids,active,carry,minutes,family_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [...v, fid]);
     id = r.insertId;
   }
   await pool.query('DELETE FROM task_kids WHERE task_id=?', [id]);

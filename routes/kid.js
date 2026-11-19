@@ -32,6 +32,13 @@ router.get('/kids', async (req, res) => {
   }
   const [runs] = await pool.query('SELECT DISTINCT kid_id FROM time_runs WHERE family_id=?', [req.fid]);
   for (const k of kids) k.timers = runs.some(r => r.kid_id === k.id) ? (await kidTime(req.fid, k)).filter(t => t.run !== null || t.ended) : [];
+  const [truns] = await pool.query('SELECT DISTINCT kid_id FROM task_runs WHERE family_id=? AND day=? AND started_at IS NOT NULL', [req.fid, today()]);
+  for (const k of kids) {
+    k.taskTimers = [];
+    if (!truns.some(r => r.kid_id === k.id)) continue;
+    const tasks = await dayTasks(req.fid, k.id, today()), tm = await taskTimers(req, k, today(), tasks);
+    k.taskTimers = tasks.filter(t => tm[t.id] && (tm[t.id].run !== null || tm[t.id].ended)).map(t => ({ id: t.id, title: t.title, ...tm[t.id] }));
+  }
   res.json(kids);
 });
 
@@ -78,11 +85,12 @@ router.get('/kids/:id/home', async (req, res) => {
   const day = today(), fid = req.fid;
   const tasks = await ordered(kid.id, await dayTasks(fid, kid.id, day));
   const sh = kid.adult ? {} : await shares(fid, kid.id);
+  const tmr = await taskTimers(req, kid, day, tasks);
   const [comps] = await pool.query('SELECT task_id,status FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
   const st = Object.fromEntries(comps.map(c => [c.task_id, c.status]));
   const list = tasks.map(t => ({
     id: t.id, title: t.title, icon: t.icon, description: t.description, type: t.type,
-    time: t.time, until: t.until || null, late: t.type === 'one_off' && !t.repeat_weekly && t.date < day, coins: kid.adult ? 0 : t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [],
+    time: t.time, until: t.until || null, late: t.type === 'one_off' && !t.repeat_weekly && t.date < day, coins: kid.adult ? 0 : t.coins, status: st[t.id] || 'todo', rewards: sh[t.id] || [], timer: tmr[t.id] || null,
   }));
 
   // Tempo de tela de hoje (não acumula)
@@ -168,15 +176,12 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
   res.json({ time: await kidTime(req.fid, kid) });
 });
 
-router.post('/kids/:id/complete', async (req, res) => {
-  const kid = await ownKid(req, res); if (!kid) return;
-  const day = today();
-  const task = (await dayTasks(req.fid, kid.id, day)).find(t => t.id === +req.body.task_id);
-  if (!task) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
+// Marca a missão como feita. Devolve true se acabou de ser marcada.
+async function completeTask(req, kid, task, day) {
   // adulto: fica feito na hora, sem ganhos e sem pedir aprovação
   if (kid.adult) {
-    await pool.query("INSERT IGNORE INTO completions (family_id,task_id,kid_id,day,status,decided_at) VALUES (?,?,?,?,'approved',NOW())", [req.fid, task.id, kid.id, day]);
-    return res.json({ ok: true });
+    const [r] = await pool.query("INSERT IGNORE INTO completions (family_id,task_id,kid_id,day,status,decided_at) VALUES (?,?,?,?,'approved',NOW())", [req.fid, task.id, kid.id, day]);
+    return !!r.affectedRows;
   }
   const [r] = await pool.query('INSERT IGNORE INTO completions (family_id,task_id,kid_id,day) VALUES (?,?,?,?)', [req.fid, task.id, kid.id, day]);
   if (r.affectedRows) {
@@ -184,8 +189,55 @@ router.post('/kids/:id/complete', async (req, res) => {
     if (k.auto_approve) await approve(req.fid, r.insertId);
     else if (access(req.family).plus) push.sendToFamily(req.fid, { title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
   }
+  return !!r.affectedRows;
+}
+router.post('/kids/:id/complete', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const day = today();
+  const task = (await dayTasks(req.fid, kid.id, day)).find(t => t.id === +req.body.task_id);
+  if (!task) return res.status(400).json({ error: 'Tarefa não disponível hoje' });
+  await completeTask(req, kid, task, day);
   res.json({ ok: true });
 });
+
+// ---------- Missão com cronômetro (ex.: ler 45 min) ----------
+// spent = segundos já feitos (sem o trecho correndo). Ao completar o tempo, a missão é marcada como feita.
+// Devolve { [taskId]: { minutes, left (min, sem o trecho correndo), run (s correndo ou null), ended } }
+async function taskTimers(req, kid, day, tasks) {
+  const timed = tasks.filter(t => +t.minutes > 0); if (!timed.length) return {};
+  await pool.query('DELETE FROM task_runs WHERE kid_id=? AND day<>?', [kid.id, day]);
+  const [rows] = await pool.query('SELECT task_id, spent, started_at IS NOT NULL running, TIMESTAMPDIFF(SECOND, started_at, NOW()) sec FROM task_runs WHERE kid_id=? AND day=?', [kid.id, day]);
+  const [cs] = await pool.query('SELECT task_id FROM completions WHERE kid_id=? AND day=?', [kid.id, day]);
+  const rn = Object.fromEntries(rows.map(r => [r.task_id, r])), done = new Set(cs.map(c => c.task_id));
+  const out = {};
+  for (const t of timed) {
+    const total = t.minutes * 60, r = rn[t.id];
+    let spent = r ? +r.spent : 0, run = r?.running ? Math.max(0, +r.sec) : null, ended = false;
+    if (!done.has(t.id) && r && spent + (run || 0) >= total - 3) { // tolerância de 3s entre o relógio do aparelho e o do servidor
+      await pool.query('UPDATE task_runs SET spent=?, started_at=NULL WHERE kid_id=? AND task_id=? AND day=?', [total, kid.id, t.id, day]);
+      ended = await completeTask(req, kid, t, day); spent = total; run = null;
+    }
+    if (done.has(t.id)) run = null;
+    out[t.id] = { minutes: +t.minutes, left: Math.max(0, total - spent) / 60, run, ended };
+  }
+  return out;
+}
+router.post('/kids/:id/task-timer/:tid', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const day = today(), task = (await dayTasks(req.fid, kid.id, day)).find(t => t.id === +req.params.tid);
+  if (!task || !(+task.minutes > 0)) return res.status(404).json({ error: 'Missão não encontrada' });
+  const [[c]] = await pool.query('SELECT id FROM completions WHERE kid_id=? AND task_id=? AND day=?', [kid.id, task.id, day]);
+  if (c) return res.status(400).json({ error: 'Essa missão já foi feita' });
+  if (req.body.action === 'start') {
+    await pool.query('INSERT INTO task_runs (family_id,kid_id,task_id,day,spent,started_at) VALUES (?,?,?,?,0,NOW()) ON DUPLICATE KEY UPDATE started_at=COALESCE(started_at,NOW())', [req.fid, kid.id, task.id, day]);
+  } else {
+    await pool.query('UPDATE task_runs SET spent=LEAST(?, spent+GREATEST(0,TIMESTAMPDIFF(SECOND,started_at,NOW()))), started_at=NULL WHERE kid_id=? AND task_id=? AND day=? AND started_at IS NOT NULL', [task.minutes * 60, kid.id, task.id, day]);
+  }
+  const timer = (await taskTimers(req, kid, day, [task]))[task.id];
+  res.json({ timer });
+});
+
+
 
 // Recado lido (com resposta rápida opcional, que avisa os pais)
 const REPLIES = ['Ok!', 'Já vou!', 'Preciso de ajuda'];
@@ -240,6 +292,8 @@ router.delete('/kids/:id/complete/:taskId', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   await pool.query(`DELETE FROM completions WHERE kid_id=? AND task_id=? AND day=? AND (status='pending' OR ?) AND family_id=?`,
     [kid.id, req.params.taskId, today(), kid.adult ? 1 : 0, req.fid]);
+  const [[left]] = await pool.query('SELECT COUNT(*) n FROM completions WHERE kid_id=? AND task_id=? AND day=?', [kid.id, req.params.taskId, today()]);
+  if (!left.n) await pool.query('DELETE FROM task_runs WHERE kid_id=? AND task_id=? AND day=?', [kid.id, req.params.taskId, today()]);
   res.json({ ok: true });
 });
 

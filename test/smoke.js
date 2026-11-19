@@ -148,6 +148,27 @@ const step = (m) => console.log('✔', m);
     await tdb.end();
     step('cronômetro: começa, pausa vira tempo usado, acaba sozinho e não passa do ganho');
 
+    // missão com cronômetro (ex.: ler 45 min): play, pausa, continua; ao completar o tempo, fica feita
+    const ler = (await ok('POST', '/api/admin/tasks', { title: 'Ler um livro', type: 'daily', minutes: 45, all_kids: 0, kid_ids: [eva] })).id;
+    assert.equal((await ok('GET', '/api/admin/tasks')).find(x => x.id === ler).minutes, 45);
+    const lerT = async () => (await ok('GET', `/api/kids/${eva}/home`)).tasks.find(x => x.id === ler);
+    let lt = await lerT(); assert.deepEqual([lt.timer.minutes, lt.timer.left, lt.timer.run, lt.status], [45, 45, null, 'todo']);
+    const ttUrl = `/api/kids/${eva}/task-timer/${ler}`;
+    await ok('POST', ttUrl, { action: 'start' });
+    const tdb2 = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+    await tdb2.query('UPDATE task_runs SET started_at=DATE_SUB(started_at, INTERVAL 600 SECOND) WHERE task_id=?', [ler]);
+    const paused = (await ok('POST', ttUrl, { action: 'pause' })).timer;
+    assert.equal(paused.run, null); assert.ok(Math.abs(paused.left - 35) < 0.1, 'pausou com ~35 min: ' + paused.left);
+    await ok('POST', ttUrl, { action: 'start' }); // continua de onde parou
+    await tdb2.query('UPDATE task_runs SET started_at=DATE_SUB(started_at, INTERVAL 2100 SECOND) WHERE task_id=?', [ler]);
+    lt = await lerT(); assert.equal(lt.timer.ended, true); assert.equal(lt.status, 'pending'); assert.equal(lt.timer.left, 0);
+    assert.equal((await api('POST', ttUrl, { action: 'start' })).status, 400); // já feita
+    await ok('DELETE', `/api/kids/${eva}/complete/${ler}`); // desfazer: cronômetro volta do zero
+    lt = await lerT(); assert.equal(lt.status, 'todo'); assert.equal(lt.timer.left, 45);
+    await tdb2.end();
+    await ok('DELETE', `/api/admin/tasks/${ler}`);
+    step('missão com cronômetro: play, pausa, continua e conclui sozinha ao acabar o tempo');
+
     // aprovação automática por filho: Bernardo ligado, Eva continua pendente
     await ok('PUT', `/api/admin/kids/${ber}`, { name: 'Bernardo', avatar: 'robot', color: '#4aa8ff', active: true, auto_approve: true });
     await ok('POST', `/api/kids/${ber}/complete`, { task_id: ids[0] });
