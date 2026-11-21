@@ -89,6 +89,7 @@ async function syncPayment(mpId) {
       await c.query('UPDATE families SET paid_until=?, plan=? WHERE id=?', [end, row.plan, row.family_id]);
       await c.query("UPDATE payments SET status='approved', paid_at=NOW(), period_end=?, method=?, mp_payment_id=? WHERE id=?",
         [end, p.payment_method_id || null, String(p.id), row.id]);
+      if (row.coupon) await c.query('UPDATE coupons SET uses=uses+1 WHERE code=?', [row.coupon]);
     } else {
       await c.query('UPDATE payments SET status=?, method=?, mp_payment_id=? WHERE id=?',
         [amountOk ? p.status : 'invalid', p.payment_method_id || null, String(p.id), row.id]);
@@ -114,7 +115,35 @@ function mpReason(e) {
   return 'O Mercado Pago recusou a operação' + (why ? ': ' + why : '') + '. Tente de novo.';
 }
 
-const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e.mp || e); res.status(500).json({ error: e.mp ? mpReason(e) : 'Erro interno' }); });
+const wrap = (fn) => (req, res) => fn(req, res).catch(e => {
+  if (!e.status) console.error(e.mp || e);
+  res.status(e.status || 500).json({ error: e.mp ? mpReason(e) : e.status ? e.message : 'Erro interno' });
+});
+const bad = (m) => { throw Object.assign(new Error(m), { status: 400 }); };
+
+// ---------- Cupons de desconto (criados no painel do dono) ----------
+const cleanCode = (c) => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30);
+// Cupom válido ou erro explicando. Com fid, a mesma família não usa o mesmo cupom duas vezes.
+async function findCoupon(codeIn, fid) {
+  const code = cleanCode(codeIn);
+  if (!code) bad('Digite o código do cupom');
+  const [[c]] = await pool.query('SELECT * FROM coupons WHERE code=?', [code]);
+  if (!c || !c.active) bad('Cupom inválido');
+  if (c.expires && c.expires < today()) bad('Este cupom venceu');
+  if (c.max_uses && c.uses >= c.max_uses) bad('Este cupom já foi usado o máximo de vezes');
+  if (fid) {
+    const [[u]] = await pool.query("SELECT 1 x FROM payments WHERE family_id=? AND coupon=? AND status='approved' LIMIT 1", [fid, c.code]);
+    if (u) bad('Você já usou este cupom');
+  }
+  return c;
+}
+// Preço do plano com o cupom (se houver). O valor sai sempre daqui, nunca do navegador.
+async function priceFor(plan, code, fid) {
+  const full = (await prices())[plan];
+  const c = code ? await findCoupon(code, fid) : null;
+  return { full, amount: c ? Math.round(full * (100 - c.percent)) / 100 : full, coupon: c?.code || null, percent: c?.percent || 0 };
+}
+const needPay = (p) => { if (!(p.amount > 0)) bad('Com este cupom o plano sai de graça: toque em "Ativar grátis".'); };
 const needSession = (req, res, next) => req.session?.fid ? (req.fid = req.session.fid, next()) : res.status(401).json({ error: 'Faça login da família' });
 
 router.get('/status', needSession, wrap(async (req, res) => {
@@ -126,10 +155,10 @@ router.get('/status', needSession, wrap(async (req, res) => {
 
 async function startCheckout(req, fid, planIn) {
   const plan = PLANS.includes(planIn) ? planIn : 'annual';
-  const pr = await prices();
-  const amount = pr[plan];
+  const pc = await priceFor(plan, req.body.coupon, fid); needPay(pc);
+  const amount = pc.amount;
   const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [fid]);
-  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [fid, plan, amount]);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount,coupon) VALUES (?,?,?,?)', [fid, plan, amount, pc.coupon]);
   const base = appUrl() || `${req.protocol}://${req.get('host')}`;
   const https = base.startsWith('https://');
   const back = `${base}/app?pagamento=${r.insertId}`;
@@ -153,9 +182,10 @@ router.post('/checkout', needSession, wrap(async (req, res) => {
 // Pix dentro do app (Checkout Transparente): gera o QR Code e o "copia e cola"; o app consulta até cair (e o webhook também confirma)
 async function startPix(req, fid, planIn) {
   const plan = PLANS.includes(planIn) ? planIn : 'annual';
-  const amount = (await prices())[plan];
+  const pc = await priceFor(plan, req.body.coupon, fid); needPay(pc);
+  const amount = pc.amount;
   const [[f]] = await pool.query('SELECT email,name FROM families WHERE id=?', [fid]);
-  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount,method) VALUES (?,?,?,?)', [fid, plan, amount, 'pix']);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount,method,coupon) VALUES (?,?,?,?,?)', [fid, plan, amount, 'pix', pc.coupon]);
   const base = appUrl() || `${req.protocol}://${req.get('host')}`;
   const pay = await mp('POST', '/v1/payments', {
     transaction_amount: amount, description: `GameTask: plano ${PLAN_TITLE[plan]}`, payment_method_id: 'pix',
@@ -208,9 +238,10 @@ const CARD_MSG = {
 async function startCard(req, fid, planIn) {
   const b = req.body, plan = PLANS.includes(planIn) ? planIn : 'annual';
   if (!b.token || !b.payment_method_id) throw Object.assign(new Error('cartão'), { mp: { message: 'Faltam os dados do cartão.' }, mpStatus: 400 });
-  const amount = (await prices())[plan];
+  const pc = await priceFor(plan, req.body.coupon, fid); needPay(pc);
+  const amount = pc.amount;
   const [[f]] = await pool.query('SELECT email FROM families WHERE id=?', [fid]);
-  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount) VALUES (?,?,?)', [fid, plan, amount]);
+  const [r] = await pool.query('INSERT INTO payments (family_id,plan,amount,coupon) VALUES (?,?,?,?)', [fid, plan, amount, pc.coupon]);
   const base = appUrl() || `${req.protocol}://${req.get('host')}`;
   const id = b.payer?.identification;
   const pay = await mp('POST', '/v1/payments', {
@@ -247,7 +278,7 @@ async function guestFamily(req, res) {
   const hits = (tries.get(req.ip) || []).filter(t => Date.now() - t < 3600e3);
   if (hits.length >= 15) { res.status(429).json({ error: 'Muitas tentativas. Tente de novo em alguns minutos.' }); return null; }
   tries.set(req.ip, [...hits, Date.now()]);
-  if (!mpToken()) { noMp(res); return null; }
+  if (!mpToken() && !req.path.endsWith('-free')) { noMp(res); return null; }
   // só o e-mail é obrigatório: o nome da família é escolhido depois do pagamento
   const email = String(req.body.email || '').toLowerCase().trim(), name = String(req.body.name || '').trim().slice(0, 80);
   if (!/^\S+@\S+\.\S+$/.test(email)) { res.status(400).json({ error: 'Digite um e-mail válido' }); return null; }
@@ -278,6 +309,42 @@ router.post('/guest-checkout', wrap(async (req, res) => {
 router.post('/guest-pix', wrap(async (req, res) => {
   const fid = await guestFamily(req, res); if (!fid) return;
   res.json(await pixOrCheckout(req, fid, req.body.plan));
+}));
+
+// Confere o cupom digitado no carrinho ou na tela de planos
+const cupTries = new Map();
+router.post('/coupon', wrap(async (req, res) => {
+  const hits = (cupTries.get(req.ip) || []).filter(t => Date.now() - t < 3600e3);
+  if (hits.length >= 30) return res.status(429).json({ error: 'Muitas tentativas. Tente de novo mais tarde.' });
+  cupTries.set(req.ip, [...hits, Date.now()]);
+  const c = await findCoupon(req.body.code, req.session?.fid);
+  res.json({ code: c.code, percent: c.percent });
+}));
+// Cupom de 100%: libera o plano sem passar pelo Mercado Pago
+async function grantFree(req, fid, planIn) {
+  const plan = PLANS.includes(planIn) ? planIn : 'annual';
+  const pc = await priceFor(plan, req.body.coupon, fid);
+  if (!pc.coupon || pc.amount > 0) bad('Este cupom não dá 100% de desconto');
+  const c = await pool.getConnection();
+  let end;
+  try {
+    await c.beginTransaction();
+    const [[f]] = await c.query('SELECT paid_until,trial_ends FROM families WHERE id=? FOR UPDATE', [fid]);
+    const start = [today(), f.paid_until, f.trial_ends].filter(Boolean).sort().at(-1);
+    end = addPeriod(start, plan);
+    await c.query('UPDATE families SET paid_until=?, plan=? WHERE id=?', [end, plan, fid]);
+    await c.query("INSERT INTO payments (family_id,plan,amount,status,method,coupon,period_end,paid_at) VALUES (?,?,0,'approved','cupom',?,?,NOW())", [fid, plan, pc.coupon, end]);
+    await c.query('UPDATE coupons SET uses=uses+1 WHERE code=?', [pc.coupon]);
+    await c.commit();
+  } catch (e) { await c.rollback(); throw e; } finally { c.release(); }
+  finishSignup(fid).catch(e => console.error('e-mail', e.message));
+  return { status: 'approved', period_end: end };
+}
+router.post('/free', needSession, wrap(async (req, res) => res.json(await grantFree(req, req.fid, req.body.plan))));
+router.post('/guest-free', wrap(async (req, res) => {
+  await findCoupon(req.body.coupon); // confere antes de criar o cadastro
+  const fid = await guestFamily(req, res); if (!fid) return;
+  res.json(await grantFree(req, fid, req.body.plan));
 }));
 
 // Volta do checkout: confere na hora, sem esperar o webhook

@@ -510,6 +510,42 @@ const step = (m) => console.log('✔', m);
     cookie = '';
     assert.equal((await api('GET', '/api/billing/pix/' + px.ref)).status, 401); // sem sessão não consulta
     step('Pix: QR dentro do app, confirmação por consulta e reaproveita cadastro sem pagamento');
+    // cupons de desconto: o dono cria; vale no carrinho; 100% ativa sem Mercado Pago; limite de usos
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
+    await ok('POST', '/api/auth/parent', { pin: '1234' });
+    await ok('POST', '/api/owner/coupons', { code: 'teste10', percent: 10 });
+    await ok('POST', '/api/owner/coupons', { code: 'GRATIS', percent: 100, max_uses: 1 });
+    assert.equal((await api('POST', '/api/owner/coupons', { code: 'TESTE10', percent: 5 })).status, 400); // código repetido
+    assert.equal((await api('POST', '/api/owner/coupons', { code: 'X1', percent: 150 })).status, 400);
+    const cups = await ok('GET', '/api/owner/coupons');
+    assert.deepEqual(cups.map(c => [c.code, c.percent]).sort(), [['GRATIS', 100], ['TESTE10', 10]]);
+    cookie = '';
+    assert.equal((await api('POST', '/api/billing/coupon', { code: 'NAOEXISTE' })).status, 400);
+    assert.deepEqual(await ok('POST', '/api/billing/coupon', { code: ' teste10 ' }), { code: 'TESTE10', percent: 10 });
+    const annual = (await ok('GET', '/api/public/pricing')).annual;
+    const cpx = await ok('POST', '/api/billing/guest-pix', { plan: 'annual', email: 'cupom@x.co', coupon: 'TESTE10' });
+    assert.equal(cpx.amount, Math.round(annual * 90) / 100); // cobra com 10% de desconto
+    assert.equal((await ok('GET', `/api/billing/pix/${cpx.ref}`)).status, 'approved');
+    assert.equal((await api('POST', '/api/billing/guest-pix', { plan: 'annual', email: 'cupom2@x.co', coupon: 'GRATIS' })).status, 400); // 100% não gera Pix
+    cookie = '';
+    const fr = await ok('POST', '/api/billing/guest-free', { plan: 'plus', email: 'gratis@x.co', coupon: 'GRATIS' });
+    assert.equal(fr.status, 'approved');
+    const gme = await ok('GET', '/api/auth/me'); assert.equal(gme.access.status, 'paid'); assert.equal(gme.access.plan, 'plus');
+    cookie = '';
+    assert.equal((await api('POST', '/api/billing/guest-free', { plan: 'annual', email: 'gratis2@x.co', coupon: 'GRATIS' })).status, 400); // só 1 uso
+    cookie = '';
+    await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
+    await ok('POST', '/api/auth/parent', { pin: '1234' });
+    const used = await ok('GET', '/api/owner/coupons');
+    assert.deepEqual(used.map(c => [c.code, c.uses]).sort(), [['GRATIS', 1], ['TESTE10', 1]]);
+    const pays = await ok('GET', '/api/owner/payments');
+    assert.ok(pays.some(p => p.coupon === 'GRATIS' && +p.amount === 0 && p.method === 'cupom' && p.status === 'approved'));
+    await ok('PUT', `/api/owner/coupons/${used.find(c => c.code === 'TESTE10').id}`, { active: false });
+    cookie = '';
+    assert.equal((await api('POST', '/api/billing/coupon', { code: 'TESTE10' })).status, 400); // pausado
+    step('cupons: desconto no Pix, 100% ativa direto, limite de usos e pausa');
+
     cookie = '';
     await ok('POST', '/api/auth/login', { email: 'a@b.co', password: 'secret1' });
 

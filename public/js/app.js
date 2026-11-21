@@ -316,7 +316,7 @@ async function route() {
   if (a === 'redefinir' && b) return viewReset(b);
   if (a === 'convite' && b) return viewInvite(b);
   if (a === 'finalizar' && b) return viewFinalize(b);
-  if (!me.family) return a === 'comprar' ? viewBuy(b) : viewLogin(a === 'criar' ? 'register' : 'login');
+  if (!me.family) return a === 'comprar' ? viewBuy(b, location.hash.split('/')[3]) : viewLogin(a === 'criar' ? 'register' : 'login');
   if (me.pending) { await viewFinalize(); return paid?.(); } // comprou pela página de vendas: falta criar senha e PIN
   if (a === 'criar' || a === 'login' || a === 'comprar') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
@@ -1321,23 +1321,32 @@ async function viewPaywall() {
         <ul><li>${im('check')}Tudo do plano anual</li><li>${im('phone')}Avisos no celular e no tablet</li><li>${im('clock')}Lembrete antes de cada horário</li><li>${im('lock')}Aviso para os pais aprovarem</li></ul>
         <button class="btn" data-plan="plus">Assinar Plus</button></article>
     </div>
+    <div class="cup pw-cup" id="cup"></div>
     <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago.${a.status === 'trial' ? ' Assinando agora, o plano começa quando os dias grátis acabarem: você não perde nenhum.' : ' O acesso é liberado assim que o pagamento é confirmado.'}</p>
     <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
   </div></div>`;
+  let cup = null;
+  couponBox($('#cup'), (c) => { cup = c; }, null);
+  const paidOk = async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); };
   $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
     if (!ME.parent) return viewPin(); // só um responsável assina (volta para os planos depois do PIN)
+    const plan = b.dataset.plan, total = offPrice(s.prices[plan], cup);
+    if (cup && !(total > 0)) {
+      const fr = sheet('Ativar com o cupom?', `<p class="lead" style="margin-top:6px">Cupom <b>${esc(cup.code)}</b>: o plano sai de graça.</p>`,
+        async () => { await api('POST', '/billing/free', { plan, coupon: cup.code }); await paidOk(); }, { saveLabel: 'Ativar grátis' });
+      return fr;
+    }
     if (!s.enabled) throw new Error('O pagamento on-line ainda está sendo ativado. Tente mais tarde.');
-    const plan = b.dataset.plan;
-    const ch = sheet('Como você quer pagar?', `<div class="pay-opts"><button type="button" class="btn green" data-via="pix">Pix, rápido e aqui mesmo</button>${s.card ? '<button type="button" class="btn" data-via="card">Cartão de crédito</button><button type="button" class="switch" data-via="mp">Boleto ou outras formas</button>' : '<button type="button" class="btn ghost" data-via="mp">Cartão ou boleto</button>'}</div>`, async () => {});
+    const ch = sheet('Como você quer pagar?', `${cup ? `<p class="lead cup-sum">Cupom <b>${esc(cup.code)}</b>: de <s>${brl(s.prices[plan])}</s> por <b>${brl(total)}</b></p>` : ''}<div class="pay-opts"><button type="button" class="btn green" data-via="pix">Pix, rápido e aqui mesmo</button>${s.card ? '<button type="button" class="btn" data-via="card">Cartão de crédito</button><button type="button" class="switch" data-via="mp">Boleto ou outras formas</button>' : '<button type="button" class="btn ghost" data-via="mp">Cartão ou boleto</button>'}</div>`, async () => {});
     ch.querySelector('.actions').remove();
     ch.querySelector('[data-via=pix]').onclick = guard(async () => {
-      const r = await api('POST', '/billing/pix', { plan }); ch.remove();
+      const r = await api('POST', '/billing/pix', { plan, coupon: cup?.code }); ch.remove();
       if (r.url) { location.href = r.url; return; }
       showPix(r, async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); });
     });
-    ch.querySelector('[data-via=mp]').onclick = guard(async () => { const r = await api('POST', '/billing/checkout', { plan }); location.href = r.url; });
+    ch.querySelector('[data-via=mp]').onclick = guard(async () => { const r = await api('POST', '/billing/checkout', { plan, coupon: cup?.code }); location.href = r.url; });
     const cb = ch.querySelector('[data-via=card]');
-    if (cb) cb.onclick = () => { ch.remove(); showCard({ key: s.card, amount: s.prices[plan], email: s.email, pay: (d) => api('POST', '/billing/card', { plan, ...d }),
+    if (cb) cb.onclick = () => { ch.remove(); showCard({ key: s.card, amount: total, email: s.email, pay: (d) => api('POST', '/billing/card', { plan, coupon: cup?.code, ...d }),
       onPaid: async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); } }); };
   }));
   const back = $('#back'); if (back) back.onclick = () => { location.hash = ME.parent ? '#/admin' : '#/'; };
@@ -1423,7 +1432,7 @@ async function viewSetup() {
 
 // ---------- Painel do dono do sistema ----------
 let otab = 'overview';
-const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['prices', 'gear', 'Preços']];
+const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['coupons', 'gift', 'Cupons'], ['prices', 'gear', 'Preços']];
 const STATUS = { trial: ['Teste', 'wait'], paid: ['Pago', 'ok'], free: ['Cortesia', 'ok'], expired: ['Vencido', 'no'], owner: ['Dono', 'ok'] };
 const PAY = { approved: ['Aprovado', 'ok'], pending: ['Aguardando', 'wait'], in_process: ['Em análise', 'wait'], rejected: ['Recusado', 'no'], cancelled: ['Cancelado', 'no'], refunded: ['Estornado', 'no'], charged_back: ['Contestado', 'no'], invalid: ['Valor divergente', 'no'] };
 const tag = (m, k) => { const [l, c] = m[k] || [k, 'wait']; return `<span class="tag ${c}">${esc(l)}</span>`; };
@@ -1434,7 +1443,7 @@ async function viewOwner() {
     <nav class="tabs" aria-label="Seções">${OTABS.map(([k, ic, l]) => `<button class="tab ${k === otab ? 'on' : ''}" data-tab="${k}" ${k === otab ? 'aria-current="page"' : ''}>${im(ic)}${l}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
   $$('[data-tab]').forEach(b => b.onclick = () => { otab = b.dataset.tab; sfx.tap(); viewOwner().catch(e => toast(e.message, true)); });
-  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, prices: ownerPrices })[otab]($('#pane'));
+  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, coupons: ownerCoupons, prices: ownerPrices })[otab]($('#pane'));
 }
 async function ownerOverview(pane) {
   const s = await api('GET', '/owner/summary'), c = s.counts, r = s.revenue;
@@ -1484,12 +1493,43 @@ async function ownerFamilies(pane, q = '') {
 }
 async function ownerPayments(pane) {
   const rows = await api('GET', '/owner/payments');
-  const METHOD = { pix: 'Pix', bolbradesco: 'Boleto', pec: 'Lotérica', account_money: 'Saldo MP' };
+  const METHOD = { pix: 'Pix', bolbradesco: 'Boleto', pec: 'Lotérica', account_money: 'Saldo MP', cupom: 'Cupom 100%' };
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Pagamentos</h2></div>
     ${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Data</th><th>Família</th><th>Plano</th><th>Valor</th><th>Forma</th><th>Situação</th><th>Acesso até</th></tr></thead><tbody>${rows.map(p => `<tr>
-      <td>${dmy(p.paid_at || p.created_at)}</td><td>${esc(p.family)}<div class="s">${esc(p.email)}</div></td><td>${PLAN_N[p.plan]}</td><td>${brl(p.amount)}</td>
+      <td>${dmy(p.paid_at || p.created_at)}</td><td>${esc(p.family)}<div class="s">${esc(p.email)}</div></td><td>${PLAN_N[p.plan]}</td><td>${brl(p.amount)}${p.coupon ? `<div class="s">cupom ${esc(p.coupon)}</div>` : ''}</td>
       <td>${esc(METHOD[p.method] || (p.method ? 'Cartão ' + p.method : '—'))}</td><td>${tag(PAY, p.status)}</td><td>${p.period_end ? dmy(p.period_end) : '—'}</td></tr>`).join('')}</tbody></table></div>`
     : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
+}
+async function ownerCoupons(pane) {
+  const rows = await api('GET', '/owner/coupons');
+  const link = (c) => `${location.origin}/app#/comprar/annual/${c.code}`;
+  const used = (c) => c.max_uses ? `usado ${c.uses} de ${c.max_uses}` : `usado ${c.uses} ${c.uses === 1 ? 'vez' : 'vezes'}`;
+  pane.innerHTML = `<form class="box" id="cf" novalidate><div class="box-h"><h2 class="d">Novo cupom</h2></div>
+      <div class="cup-new">
+        <div class="field"><label for="cc">Código</label><input id="cc" name="code" placeholder="NATAL25" autocapitalize="characters" maxlength="30" required></div>
+        <div class="field"><label for="cp">Desconto (%)</label><input id="cp" name="percent" type="number" min="1" max="100" step="1" placeholder="10" inputmode="numeric" required></div>
+        <div class="field"><label for="cm">Limite de usos</label><input id="cm" name="max_uses" type="number" min="1" step="1" placeholder="Sem limite" inputmode="numeric"></div>
+        <div class="field"><label for="ce">Vale até</label><input id="ce" name="expires" type="date"></div>
+      </div>
+      <p class="hint">100% libera o plano de graça, sem passar pelo Mercado Pago. Cada família usa o mesmo cupom só uma vez.</p>
+      <div class="err" role="alert"></div><div class="actions"><button class="btn green">Criar cupom</button></div></form>
+    <section class="box"><div class="box-h"><h2 class="d">Cupons (${rows.length})</h2></div>
+      ${rows.length ? `<div class="list">${rows.map(c => `<div class="item ${c.active ? '' : 'off'}"><div class="ic">${im('gift')}</div><div class="grow">
+        <div class="t"><span class="cup-code">${esc(c.code)}</span> <b>${c.percent}%</b>${c.active ? '' : ' <span class="tag">pausado</span>'}</div>
+        <div class="s">${used(c)}${c.expires ? ` · vale até ${dmy(c.expires)}` : ''}</div></div>
+        <div class="btns"><button class="btn ghost sm" data-link="${c.id}">Copiar link</button><button class="btn ghost sm" data-tog="${c.id}">${c.active ? 'Pausar' : 'Ativar'}</button><button class="btn ghost sm" data-del="${c.id}">Apagar</button></div></div>`).join('')}</div>`
+      : zero('gift', 'Nenhum cupom ainda. Crie o primeiro acima.')}</section>`;
+  $('#cf').onsubmit = guard(async (e) => {
+    e.preventDefault(); const fm = e.target;
+    try { const r = await api('POST', '/owner/coupons', Object.fromEntries(new FormData(fm))); sfx.win(); toast(`Cupom ${r.code} criado`); await ownerCoupons(pane); }
+    catch (er) { $('.err', fm).textContent = er.message; sfx.bad(); }
+  });
+  const byId = (id) => rows.find(c => c.id === +id);
+  $$('[data-link]', pane).forEach(b => b.onclick = async () => { const u = link(byId(b.dataset.link)); try { await navigator.clipboard.writeText(u); toast('Link do carrinho com o cupom copiado'); } catch { toast(u); } });
+  $$('[data-tog]', pane).forEach(b => b.onclick = guard(async () => { const c = byId(b.dataset.tog); await api('PUT', `/owner/coupons/${c.id}`, { active: !c.active }); await ownerCoupons(pane); }));
+  $$('[data-del]', pane).forEach(b => b.onclick = () => { const c = byId(b.dataset.del);
+    sheet(`Apagar o cupom ${c.code}?`, '<p class="lead" style="margin-top:6px">Quem já usou continua com o plano. O código deixa de funcionar.</p>',
+      async () => { await api('DELETE', `/owner/coupons/${c.id}`); await ownerCoupons(pane); }, { saveLabel: 'Apagar', danger: true }); });
 }
 async function ownerPrices(pane) {
   const s = (await api('GET', '/owner/summary')).settings;
@@ -1687,14 +1727,42 @@ const CART = {
   monthly: { t: 'Mensal', note: 'por mês', perks: ['Tudo do plano anual', 'Sem fidelidade: renove quando quiser'] },
   plus: { t: 'Plus', note: 'por ano', perks: ['Tudo do plano anual', 'Avisos no celular e no tablet', 'Lembrete antes de cada horário'] },
 };
-async function viewBuy(planIn) {
+// Cupom de desconto: "Tem um cupom?" abre o campo; aplicado, chama onChange({ code, percent }) ou onChange(null)
+const offPrice = (v, c) => c ? Math.round(v * (100 - c.percent)) / 100 : v;
+function couponBox(box, onChange, initial) {
+  let cur = null;
+  const paint = () => {
+    box.innerHTML = cur ? `<div class="cup-ok">${im('gift')}<span>Cupom <b>${esc(cur.code)}</b>: ${cur.percent}% de desconto</span><button type="button" class="link" data-x>Remover</button></div>`
+      : `<button type="button" class="link cup-open" data-open>Tem um cupom de desconto?</button>
+        <div class="cup-form" hidden><input name="cupom" placeholder="CÓDIGO" autocapitalize="characters" autocomplete="off" aria-label="Código do cupom" maxlength="30"><button type="button" class="btn sm" data-go>Aplicar</button></div><p class="err cup-err" role="alert"></p>`;
+    const x = $('[data-x]', box); if (x) x.onclick = () => { cur = null; paint(); onChange(null); sfx.tap(); };
+    const o = $('[data-open]', box); if (o) o.onclick = () => { o.hidden = true; $('.cup-form', box).hidden = false; $('input', box).focus(); };
+    const go = $('[data-go]', box), inp = $('input', box);
+    if (go) {
+      const apply = async (code) => {
+        go.disabled = true; $('.cup-err', box).textContent = '';
+        try { cur = await api('POST', '/billing/coupon', { code }); paint(); onChange(cur); sfx.win(); }
+        catch (e) { if (!$('.cup-form', box)) paint(); $('[data-open]', box).hidden = true; $('.cup-form', box).hidden = false; $('.cup-err', box).textContent = e.message; sfx.bad(); }
+        finally { const g = $('[data-go]', box); if (g) g.disabled = false; }
+      };
+      go.onclick = () => apply(inp.value);
+      inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); apply(inp.value); } };
+      if (initial) { inp.value = initial; initial = null; apply(inp.value); }
+    }
+  };
+  paint();
+}
+
+async function viewBuy(planIn, codeIn) {
   const p = await api('GET', '/public/pricing');
-  let plan = CART[planIn] ? planIn : 'annual';
+  let plan = CART[planIn] ? planIn : 'annual', cup = null;
   const draw = () => {
-    const c = CART[plan];
+    const c = CART[plan], total = offPrice(p[plan], cup), free = cup && !(total > 0);
     $('#cart').innerHTML = `<div class="cart-top">${im(plan === 'plus' ? 'rocket' : 'trophy')}<div><b class="d">Plano ${c.t}</b><span>${c.perks.join(' · ')}</span></div></div>
-      <div class="cart-total"><span>Total hoje</span><b class="d num">${brl(p[plan])}</b><small>${c.note}</small></div>
+      <div class="cart-total"><span>Total hoje</span>${cup ? `<s class="num">${brl(p[plan])}</s>` : ''}<b class="d num">${free ? 'Grátis' : brl(total)}</b><small>${c.note}</small></div>
       <p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa quando o teste grátis acabar (${trialText(p.trial_days)})</b>. Nenhum dia se perde.</span></p>`;
+    $('#payBtns').innerHTML = free ? '<button class="btn green big" name="via" value="free">Ativar grátis</button>'
+      : `<button class="btn green big" name="via" value="pix">Pagar com Pix</button>${p.card ? '<button class="btn" name="via" value="card">Pagar com cartão</button><button class="switch" name="via" value="mp">Boleto ou outras formas</button>' : '<button class="btn ghost" name="via" value="mp">Cartão ou boleto</button>'}`;
   };
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth cartwrap">
     <div class="logo">${im('game')}<h1 class="d stroke" style="font-size:40px">Seu carrinho</h1></div>
@@ -1703,30 +1771,33 @@ async function viewBuy(planIn) {
       <div id="cart" class="cart"></div>
       <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" inputmode="email" autocomplete="email" required><p class="hint">Só isso por agora. Nome, senha e PIN você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>
-      <div class="actions pay-actions"><button class="btn green big" name="via" value="pix">Pagar com Pix</button>${p.card ? '<button class="btn" name="via" value="card">Pagar com cartão</button><button class="switch" name="via" value="mp">Boleto ou outras formas</button>' : '<button class="btn ghost" name="via" value="mp">Cartão ou boleto</button>'}</div>
+      <div class="cup" id="cup"></div>
+      <div class="actions pay-actions" id="payBtns"></div>
       <p class="pw-note" style="margin-top:12px">${im('shield')}Pagamento seguro pelo Mercado Pago.</p>
     </form>
     <button class="switch" id="free">Prefiro testar de graça primeiro</button>
     <a class="switch home-link" href="#/login">Já tenho conta</a>
   </div></div>`;
   draw();
+  couponBox($('#cup'), (c) => { cup = c; draw(); }, codeIn);
   $('#f').addEventListener('change', (e) => { if (e.target.name === 'plan') { plan = e.target.value; draw(); sfx.tap(); } });
   $('#free').onclick = () => { location.hash = '#/criar'; };
   $('#f').onsubmit = async (e) => {
     e.preventDefault();
     const via = e.submitter?.value || 'pix', btns = $$('.actions .btn', e.target), label = e.submitter?.textContent;
-    btns.forEach(b => { b.disabled = true; }); if (e.submitter) e.submitter.textContent = via === 'pix' ? 'Gerando o Pix…' : 'Abrindo o Mercado Pago…';
-    const body = { plan, email: e.target.email.value };
+    btns.forEach(b => { b.disabled = true; }); if (e.submitter) e.submitter.textContent = via === 'pix' ? 'Gerando o Pix…' : via === 'free' ? 'Ativando…' : 'Abrindo o Mercado Pago…';
+    const body = { plan, email: e.target.email.value, coupon: cup?.code };
     if (via === 'card') {
       btns.forEach(b => { b.disabled = false; }); e.submitter.textContent = label;
       if (!/^\S+@\S+\.\S+$/.test(body.email.trim())) { $('#err').textContent = 'Digite um e-mail válido'; e.target.email.focus(); sfx.bad(); return; }
       $('#err').textContent = '';
-      return showCard({ key: p.card, amount: p[plan], email: body.email.trim(), pay: (d) => api('POST', '/billing/guest-card', { ...body, ...d }),
+      return showCard({ key: p.card, amount: offPrice(p[plan], cup), email: body.email.trim(), pay: (d) => api('POST', '/billing/guest-card', { ...body, ...d }),
         onPaid: async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); } });
     }
     try {
       $('#err').textContent = '';
       if (via === 'mp') { const r = await api('POST', '/billing/guest-checkout', body); location.href = r.url; return; }
+      if (via === 'free') { await api('POST', '/billing/guest-free', body); await route(); burst('trophy', 'Plano ativado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); return; }
       const r = await api('POST', '/billing/guest-pix', body);
       if (r.url) { location.href = r.url; return; }
       showPix(r, async () => { await route(); burst('trophy', 'Pagamento confirmado!', 'Falta só dar um nome à família e criar a senha e o PIN dos pais.', 'Continuar'); });

@@ -841,3 +841,20 @@ button.meter:active{transform:scale(.98)}
   .admin-top{padding-bottom:14px}
   .admin-body{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
 }
+
+/* ---------- v21: cupons de desconto ---------- */
+.cup{margin-top:14px}
+.cup .cup-open{font-weight:800}
+.cup-form{display:flex;gap:8px;align-items:stretch}
+.cup-form input{flex:1;min-width:0;text-transform:uppercase;letter-spacing:.06em;font-weight:900}
+.cup-err:empty{display:none}
+.cup-ok{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:#e6f8ec;border:2px solid var(--green);color:var(--navy);font-weight:800}
+.cup-ok img{width:30px;height:30px}
+.cup-ok span{flex:1}
+.cart-total s{opacity:.6;font-weight:800;margin-right:6px}
+.pw-cup{max-width:460px;margin:18px auto 0;background:#fff;border:2px solid var(--navy);border-radius:18px;padding:12px 14px;color:var(--navy)}
+.pw-cup .link{color:var(--navy)}
+.cup-sum{margin:4px 0 12px}
+.cup-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.cup-new .field{margin-top:8px}
+.cup-code{font-family:var(--display);letter-spacing:.06em;background:var(--yellow);border:2px solid var(--navy);border-radius:8px;padding:0 8px}

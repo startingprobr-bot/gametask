@@ -89,6 +89,32 @@ router.post('/families/:id/reset-link', wrap(async (req, res) => {
   res.json({ link: await require('../mail').createResetLink(req, f.id, 24) });
 }));
 
+// ---------- Cupons de desconto ----------
+router.get('/coupons', wrap(async (req, res) => {
+  const [rows] = await pool.query('SELECT * FROM coupons ORDER BY active DESC, id DESC');
+  res.json(rows);
+}));
+router.post('/coupons', wrap(async (req, res) => {
+  const code = String(req.body.code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 30);
+  const pct = Math.round(+req.body.percent), max = req.body.max_uses ? Math.round(+req.body.max_uses) : null;
+  const exp = /^\d{4}-\d{2}-\d{2}$/.test(req.body.expires || '') ? req.body.expires : null;
+  if (code.length < 3) return res.status(400).json({ error: 'Código com pelo menos 3 letras ou números' });
+  if (!(pct >= 1 && pct <= 100)) return res.status(400).json({ error: 'Desconto de 1% a 100%' });
+  if (max !== null && !(max >= 1)) return res.status(400).json({ error: 'Limite de usos: 1 ou mais (ou deixe vazio)' });
+  const [[dup]] = await pool.query('SELECT id FROM coupons WHERE code=?', [code]);
+  if (dup) return res.status(400).json({ error: 'Já existe um cupom com este código' });
+  await pool.query('INSERT INTO coupons (code,percent,max_uses,expires) VALUES (?,?,?,?)', [code, pct, max, exp]);
+  res.json({ ok: true, code });
+}));
+router.put('/coupons/:id', wrap(async (req, res) => {
+  await pool.query('UPDATE coupons SET active=? WHERE id=?', [req.body.active ? 1 : 0, +req.params.id]);
+  res.json({ ok: true });
+}));
+router.delete('/coupons/:id', wrap(async (req, res) => {
+  await pool.query('DELETE FROM coupons WHERE id=?', [+req.params.id]);
+  res.json({ ok: true });
+}));
+
 router.put('/settings', wrap(async (req, res) => {
   const m = r2(req.body.price_monthly), a = r2(req.body.price_annual), p = r2(req.body.price_plus ?? 67), d = Math.round(+req.body.trial_days);
   if (!(m > 0) || !(a > 0) || !(p > 0) || !(d >= 0 && d <= 3650)) return res.status(400).json({ error: 'Preços maiores que zero e dias de teste entre 0 e 3650' });
