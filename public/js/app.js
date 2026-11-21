@@ -39,7 +39,8 @@ const SVG = {
 
 // ---------- API ----------
 async function api(method, url, body) {
-  const r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  const pdev = PAINEL && store.get('gt-pdev');
+  const r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
   if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
@@ -297,6 +298,10 @@ function burst(icon, title, text, btn = 'Continuar', onClose) {
 // Instalado à parte a partir de /painel, com nome e ícone de disfarce: abre direto no painel (digital ou PIN).
 const PAINEL = location.pathname.startsWith('/painel');
 const DISGUISES = [['banco', 'Banco'], ['notas', 'Notas'], ['agenda', 'Agenda'], ['clima', 'Clima'], ['ajustes', 'Ajustes']];
+async function rememberPainel() {
+  if (!PAINEL) return;
+  try { const r = await api('POST', '/auth/parent/device'); store.set('gt-pdev', r.token); await api('POST', '/auth/parent/exit'); } catch {}
+}
 const myDisguise = () => { const k = new URLSearchParams(location.search).get('i'); return DISGUISES.find(d => d[0] === k) || DISGUISES[0]; };
 
 // ---------- Roteador ----------
@@ -316,6 +321,7 @@ async function route() {
   if (a === 'criar' || a === 'login' || a === 'comprar') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
+  if (PAINEL && !me.parent && store.get('gt-pdev')) store.set('gt-pdev', ''); // lembrança apagada no servidor: pede o PIN de novo
   if (PAINEL && a !== 'dono') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
@@ -697,7 +703,7 @@ function viewPin() {
   const finger = pkIds().length && window.PublicKeyCredential;
   app.innerHTML = `<div class="lobby"><div class="auth">
     <div class="logo">${im('lock')}<h1 class="d stroke" style="font-size:44px">Painel dos pais</h1></div>
-    <div class="card" id="card">${finger ? `<button class="btn green finger" id="fp">${SVG.finger}Entrar com a digital</button><p class="or">ou digite seu PIN</p>` : '<h2 class="d" style="text-align:center">Digite seu PIN</h2>'}
+    <div class="card" id="card">${finger ? `<button class="btn green finger" id="fp">${SVG.finger}Entrar com a digital</button><p class="or">ou digite seu PIN</p>` : '<h2 class="d" style="text-align:center">Digite seu PIN</h2>'}${PAINEL ? '<p class="hint" style="text-align:center">Só desta vez: depois este app abre direto.</p>' : ''}
       <div class="pin-dots" id="dots" aria-hidden="true">${'<i></i>'.repeat(4)}</div>
       <div class="err" id="err" role="alert" style="text-align:center"></div>
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="btn ghost" data-k="${n}">${n}</button>`).join('')}
@@ -707,7 +713,7 @@ function viewPin() {
   const dots = () => { const n = Math.max(4, pin.length); $('#dots').innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); };
   const submit = async () => {
     if (pin.length < 4) return;
-    try { await api('POST', '/auth/parent', { pin }); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
+    try { await api('POST', '/auth/parent', { pin }); await rememberPainel(); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
     catch (er) { pin = ''; dots(); $('#err').textContent = er.message; const c = $('#card'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); sfx.bad(); }
   };
   const press = (k) => { if (k === 'del') pin = pin.slice(0, -1); else if (k === 'ok') return submit(); else if (pin.length < 8) pin += k; $('#err').textContent = ''; sfx.tap(); dots(); };
@@ -721,7 +727,7 @@ function viewPin() {
   const useFp = async (auto) => {
     if (!fp || fp.disabled) return;
     fp.disabled = true;
-    try { await pkUse(); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
+    try { await pkUse(); await rememberPainel(); sfx.done(); document.removeEventListener('keydown', kb); await route(); }
     catch (er) { if (!auto) { $('#err').textContent = pkErr(er); sfx.bad(); } }
     finally { fp.disabled = false; }
   };
@@ -746,13 +752,13 @@ async function viewAdmin() {
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
       ${ME.actor ? `<span class="who-chip">Olá, ${esc(ME.actor.name)}</span>` : ''}
       ${plan}${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
-      <button class="btn ghost sm" id="exit">${PAINEL ? im('lock') + 'Bloquear' : 'Voltar ao jogo'}</button></div>
+      ${PAINEL ? '' : '<button class="btn ghost sm" id="exit">Voltar ao jogo</button>'}</div>
     ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
     <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
   $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); viewAdmin().catch(e => toast(e.message, true)); });
   $('.tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
-  $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
+  if ($('#exit')) $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
   const fpOn = $('#fpOn'); if (fpOn) {
     fpOn.onclick = async () => { try { await pkAdd(); sfx.win(); toast('Digital ativada neste aparelho'); $('.fp-offer').remove(); } catch (e) { toast(pkErr(e), true); } };
     $('#fpNo').onclick = () => { store.set('gt-pk-skip', '1'); $('.fp-offer').remove(); };
@@ -1203,7 +1209,8 @@ async function adminSettings(pane, refresh) {
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     <div id="alarms"></div>
     ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>` : ''}
-    <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><button class="btn red sm" id="out">Desconectar</button></section>`;
+    <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
+  const fg = $('#forget', pane); if (fg) fg.onclick = guard(async () => { await api('DELETE', '/auth/parent/device'); store.set('gt-pdev', ''); toast('Pronto: o app vai pedir o PIN ao abrir'); await route(); });
   const dgUrl = () => `${location.origin}/painel?i=${$('[name=dg]:checked', pane).value}`;
   $$('[name=dg]', pane).forEach(r => r.onchange = () => sfx.tap());
   $('#sepGo', pane).onclick = () => { sfx.tap(); if (!window.open(dgUrl(), '_blank')) location.href = dgUrl(); };
@@ -1334,7 +1341,7 @@ async function viewPaywall() {
   const keep = $('#keepFree'); if (keep) keep.onclick = () => { sfx.tap(); location.hash = '#/'; };
   const want = store.get('gt-plan'); if (want) { $(`[data-plan="${want}"]`)?.closest('.plan').classList.add('pick'); setTimeout(() => store.set('gt-plan', ''), 1500); }
   $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Será preciso entrar com o e-mail e a senha da família de novo.</p>',
-    async () => { await api('POST', '/auth/logout'); location.href = '/'; }, { saveLabel: 'Desconectar', danger: true });
+    async () => { await api('POST', '/auth/logout'); location.href = PAINEL ? location.pathname + location.search : '/app'; }, { saveLabel: 'Desconectar', danger: true });
 }
 
 // ---------- Catálogo de tarefas ----------

@@ -107,6 +107,9 @@ const SCHEMA = [
 `CREATE TABLE IF NOT EXISTS time_runs (
   family_id INT NOT NULL, kid_id INT NOT NULL, reward_id INT NOT NULL, day DATE NOT NULL,
   started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  PRIMARY KEY (kid_id, reward_id), INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS parent_devices (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, member_id INT NOT NULL, token_hash CHAR(64) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY u (token_hash), INDEX(family_id))`,
 `CREATE TABLE IF NOT EXISTS task_runs (
   family_id INT NOT NULL, kid_id INT NOT NULL, task_id INT NOT NULL, day DATE NOT NULL,
   spent INT NOT NULL DEFAULT 0, started_at TIMESTAMP NULL, PRIMARY KEY (kid_id, task_id, day), INDEX(family_id))`,

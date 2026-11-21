@@ -18,6 +18,15 @@ app.use(cookieSession({
   name: 'gt', keys: [process.env.SESSION_SECRET || 'dev-secret'],
   maxAge: 365 * 24 * 3600 * 1000, httpOnly: true, sameSite: 'lax', secure: prod,
 }));
+// App dos pais lembrado neste aparelho: o cabeçalho abre o painel só nos pedidos que vêm dele.
+// O app das crianças no mesmo celular não manda o cabeçalho, então continua trancado.
+const sha = (t) => require('crypto').createHash('sha256').update(String(t)).digest('hex');
+app.use('/api', (req, res, next) => {
+  const t = req.get('x-parent-device');
+  if (!t || !req.session?.fid) return next();
+  pool.query('SELECT d.member_id FROM parent_devices d JOIN members m ON m.id=d.member_id AND m.active=1 WHERE d.token_hash=? AND d.family_id=?', [sha(t), req.session.fid])
+    .then(([[d]]) => { if (d) req.deviceActor = d.member_id; next(); }, next);
+});
 
 // Limitador simples de tentativas (senha/PIN)
 const fails = new Map();
@@ -27,6 +36,8 @@ const fail = (k) => fails.set(k, [...recent(k), Date.now()]);
 
 const PARENT_MIN = 30; // minutos de sessão do modo responsável
 const isParent = (s) => !!(s.parentUntil && s.parentUntil > Date.now());
+const parentReq = (req) => !!req.deviceActor || isParent(req.session);
+const actorId = async (req) => req.deviceActor || req.session.actor || await members.principalId(req.session.fid);
 const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: 'Erro interno' }); });
 
 // ---- Auth da família ----
@@ -88,8 +99,8 @@ app.get('/api/auth/me', wrap(async (req, res) => {
   if (!req.session?.fid) return res.json({ family: null });
   const [[f]] = await pool.query('SELECT name,email,plan,paid_until,trial_ends,onboarded,setup_pending FROM families WHERE id=?', [req.session.fid]);
   if (!f) { req.session = null; return res.json({ family: null }); }
-  const access = billing.access(f), parent = isParent(req.session);
-  const actor = parent ? members.pub(await members.member(req.session.fid, req.session.actor || await members.principalId(req.session.fid))) : null;
+  const access = billing.access(f), parent = parentReq(req);
+  const actor = parent ? members.pub(await members.member(req.session.fid, await actorId(req))) : null;
   const me = members.pub(await members.member(req.session.fid, req.session.mid));
   res.json({ family: f.name, pending: !!f.setup_pending, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
 }));
@@ -109,11 +120,23 @@ app.post('/api/auth/parent', needFamily, wrap(async (req, res) => {
   res.json({ ok: true, name: m.name });
 }));
 app.post('/api/auth/parent/exit', needFamily, (req, res) => { req.session.parentUntil = 0; res.json({ ok: true }); });
+// Lembrar o app dos pais neste aparelho (logo depois do PIN ou da digital): abre direto nas próximas vezes
+app.post('/api/auth/parent/device', needFamily, wrap(async (req, res) => {
+  if (!isParent(req.session)) return res.status(403).json({ error: 'Digite o PIN primeiro' });
+  const mid = req.session.actor || await members.principalId(req.fid);
+  const token = require('crypto').randomBytes(32).toString('base64url');
+  await pool.query('INSERT INTO parent_devices (family_id,member_id,token_hash) VALUES (?,?,?)', [req.fid, mid, sha(token)]);
+  res.json({ token });
+}));
+app.delete('/api/auth/parent/device', needFamily, wrap(async (req, res) => {
+  await pool.query('DELETE FROM parent_devices WHERE token_hash=? AND family_id=?', [sha(req.get('x-parent-device') || ''), req.fid]);
+  res.json({ ok: true });
+}));
 
 // Painel aberto: carrega quem abriu (sessões antigas, sem "actor", contam como o responsável principal)
 const needParent = (req, res, next) => {
-  if (!isParent(req.session)) return res.status(403).json({ error: 'Área do responsável' });
-  (async () => req.session.actor || await members.principalId(req.fid))()
+  if (!parentReq(req)) return res.status(403).json({ error: 'Área do responsável' });
+  actorId(req)
     .then(id => members.member(req.fid, id))
     .then(m => m ? (req.actor = m, next()) : (req.session.parentUntil = 0, res.status(403).json({ error: 'Área do responsável' })), next);
 };

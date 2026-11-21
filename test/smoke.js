@@ -527,6 +527,22 @@ const step = (m) => console.log('✔', m);
     assert.equal((await fetch(BASE + mf.icons[1].src)).status, 200);
     assert.equal((await (await fetch(BASE + '/painel/manifest.json?i=xx')).json()).name, 'Banco'); // disfarce inválido cai no padrão
     step('área dos pais: página /painel e manifesto com nome e ícone de disfarce');
+    const kmf = await (await fetch(BASE + '/manifest.json')).json();
+    assert.equal(kmf.scope, '/app'); // app das crianças não "engole" o /painel
+
+    // app dos pais lembrado no aparelho: abre o painel só com o cabeçalho; o resto continua trancado
+    await ok('POST', '/api/auth/parent', { pin: '1234' });
+    const { token: pdev } = await ok('POST', '/api/auth/parent/device');
+    await ok('POST', '/api/auth/parent/exit');
+    const withDev = (m, u) => fetch(BASE + u, { method: m, headers: { cookie, 'x-parent-device': pdev } });
+    assert.equal((await api('GET', '/api/admin/tasks')).status, 403);
+    assert.equal((await withDev('GET', '/api/admin/tasks')).status, 200);
+    assert.equal((await (await withDev('GET', '/api/auth/me')).json()).parent, true);
+    assert.equal((await (await fetch(BASE + '/api/admin/tasks', { headers: { cookie, 'x-parent-device': 'errado' } })).status), 403);
+    assert.equal((await api('POST', '/api/auth/parent/device')).status, 403); // só logo depois do PIN
+    await withDev('DELETE', '/api/auth/parent/device');
+    assert.equal((await withDev('GET', '/api/admin/tasks')).status, 403);
+    step('app dos pais: abre direto no aparelho lembrado, sem destrancar o app das crianças');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');
