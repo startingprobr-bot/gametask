@@ -293,6 +293,12 @@ function burst(icon, title, text, btn = 'Continuar', onClose) {
 // Sem zoom de pinça (o iPhone/iPad ignora o user-scalable=no; assim ele também não amplia)
 ['gesturestart', 'gesturechange'].forEach(ev => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
 
+// ---------- App dos pais ----------
+// Instalado à parte a partir de /painel, com nome e ícone de disfarce: abre direto no painel (digital ou PIN).
+const PAINEL = location.pathname.startsWith('/painel');
+const DISGUISES = [['banco', 'Banco'], ['notas', 'Notas'], ['agenda', 'Agenda'], ['clima', 'Clima'], ['ajustes', 'Ajustes']];
+const myDisguise = () => { const k = new URLSearchParams(location.search).get('i'); return DISGUISES.find(d => d[0] === k) || DISGUISES[0]; };
+
 // ---------- Roteador ----------
 let timer, ME = {};
 async function route() {
@@ -310,6 +316,7 @@ async function route() {
   if (a === 'criar' || a === 'login' || a === 'comprar') { location.hash = store.get('gt-plan') ? '#/assinar' : '#/'; return; }
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
+  if (PAINEL && a !== 'dono') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   await viewPlayers(me);
@@ -361,18 +368,19 @@ addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEv =
 addEventListener('appinstalled', () => { $('.install')?.remove(); toast('GameTask instalado!'); });
 function installBanner() {
   if (inApp() || $('.install')) return;
-  const snooze = +(store.get('gt-install-later') || 0);
+  const snKey = PAINEL ? 'gt-install-later-p' : 'gt-install-later';
+  const snooze = +(store.get(snKey) || 0);
   if (Date.now() < snooze) return;
   if (!installEv && !onIOS) return;
   if ($('.sheet-bg,.burst')) return setTimeout(installBanner, 8000);
   const d = document.createElement('div'); d.className = 'install'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Instalar o GameTask');
-  d.innerHTML = `<img src="/icons/icon-192.png" alt="" class="install-ic"><div class="grow"><b>Instale o GameTask</b>
+  d.innerHTML = `<img src="${PAINEL ? `/icons/d/${myDisguise()[0]}-192.png` : '/icons/icon-192.png'}" alt="" class="install-ic"><div class="grow"><b>${PAINEL ? `Instale a área dos pais (aparece como "${myDisguise()[1]}")` : 'Instale o GameTask'}</b>
     <span>${installEv ? 'Abre como um app, em tela cheia, direto da tela inicial.' : 'Toque em <b>Compartilhar</b> <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg> e depois em <b>Adicionar à Tela de Início</b>.'}</span></div>
     ${installEv ? '<button class="btn green sm" data-in>Instalar</button>' : ''}<button class="install-x" data-later aria-label="Agora não">✕</button>`;
   document.body.append(d);
-  $('[data-later]', d).onclick = () => { store.set('gt-install-later', String(Date.now() + 5 * 864e5)); d.remove(); };
+  $('[data-later]', d).onclick = () => { store.set(snKey, String(Date.now() + 5 * 864e5)); d.remove(); };
   const b = $('[data-in]', d);
-  if (b) b.onclick = async () => { d.remove(); installEv.prompt(); const r = await installEv.userChoice.catch(() => null); installEv = null; if (r?.outcome !== 'accepted') store.set('gt-install-later', String(Date.now() + 5 * 864e5)); };
+  if (b) b.onclick = async () => { d.remove(); installEv.prompt(); const r = await installEv.userChoice.catch(() => null); installEv = null; if (r?.outcome !== 'accepted') store.set(snKey, String(Date.now() + 5 * 864e5)); };
 }
 if (onIOS) setTimeout(installBanner, 3000);
 
@@ -695,7 +703,7 @@ function viewPin() {
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="btn ghost" data-k="${n}">${n}</button>`).join('')}
         <button class="btn ghost" data-k="del" aria-label="Apagar">${SVG.del}</button><button class="btn ghost" data-k="0">0</button><button class="btn green" data-k="ok">OK</button></div>
     </div>
-    <div class="actions"><button class="btn ghost sm" id="back">Voltar ao jogo</button></div></div></div>`;
+    ${PAINEL ? '' : '<div class="actions"><button class="btn ghost sm" id="back">Voltar ao jogo</button></div>'}</div></div>`;
   const dots = () => { const n = Math.max(4, pin.length); $('#dots').innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); };
   const submit = async () => {
     if (pin.length < 4) return;
@@ -706,7 +714,7 @@ function viewPin() {
   const kb = (e) => { if (!$('#dots')) return document.removeEventListener('keydown', kb); if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('del'); else if (e.key === 'Enter') press('ok'); };
   document.addEventListener('keydown', kb);
   $$('[data-k]').forEach(b => b.onclick = () => press(b.dataset.k));
-  $('#back').onclick = () => { document.removeEventListener('keydown', kb); location.hash = '#/'; };
+  const bk = $('#back'); if (bk) bk.onclick = () => { document.removeEventListener('keydown', kb); location.hash = '#/'; };
   // Com digital ativada neste aparelho, o pedido do dedo já abre sozinho; o PIN fica como segunda opção.
   // (Se o navegador exigir um toque antes, a tentativa automática falha em silêncio e o botão continua ali.)
   const fp = $('#fp');
@@ -738,7 +746,7 @@ async function viewAdmin() {
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
       ${ME.actor ? `<span class="who-chip">Olá, ${esc(ME.actor.name)}</span>` : ''}
       ${plan}${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
-      <button class="btn ghost sm" id="exit">Voltar ao jogo</button></div>
+      <button class="btn ghost sm" id="exit">${PAINEL ? im('lock') + 'Bloquear' : 'Voltar ao jogo'}</button></div>
     ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
     <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
@@ -1188,9 +1196,18 @@ async function adminSettings(pane, refresh) {
         <div class="s">${esc(m.role)} · ${access(m)}${m.plays ? ' · na rotina' : ''}${m.passkeys ? ' · digital' : ''}${m.email ? ' · ' + esc(m.email) : ''}</div></div>
         <div class="btns"><button class="btn ghost sm" data-m="${m.id}">Editar</button></div></div>`).join('')}</div>
       ${mb.invites.length ? `<p class="hint">${mb.invites.length === 1 ? '1 convite aguardando' : mb.invites.length + ' convites aguardando'} (${mb.invites.map(i => esc(i.name)).join(', ')}). <button type="button" class="link" id="invX">Cancelar convites</button></p>` : ''}</section>` : ''}
+    <section class="box"><div class="box-h"><h2 class="d">Área dos pais separada</h2></div>
+      <p class="lead">Instale o painel como outro app no seu celular. Ele abre direto aqui, com a digital ou o PIN, sem passar pelo jogo. Escolha um disfarce para a criança não reconhecer:</p>
+      <div class="disg" role="radiogroup" aria-label="Disfarce do app">${DISGUISES.map(([k, n], i) => `<label><input type="radio" name="dg" value="${k}" ${i === 0 ? 'checked' : ''}><img src="/icons/d/${k}-192.png" alt=""><span>${n}</span></label>`).join('')}</div>
+      <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
+      <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     <div id="alarms"></div>
     ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>` : ''}
     <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><button class="btn red sm" id="out">Desconectar</button></section>`;
+  const dgUrl = () => `${location.origin}/painel?i=${$('[name=dg]:checked', pane).value}`;
+  $$('[name=dg]', pane).forEach(r => r.onchange = () => sfx.tap());
+  $('#sepGo', pane).onclick = () => { sfx.tap(); if (!window.open(dgUrl(), '_blank')) location.href = dgUrl(); };
+  $('#sepCopy', pane).onclick = async () => { try { await navigator.clipboard.writeText(dgUrl()); toast('Link copiado'); } catch { toast(dgUrl()); } };
   const f = $('#f'); if (f) f.onsubmit = async (e) => {
     e.preventDefault();
     try { await api('PUT', '/admin/settings', { coin_value: f.coin_value.value }); toast('Ajustes salvos'); f.querySelector('.err').textContent = ''; }

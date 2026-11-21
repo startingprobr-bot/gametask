@@ -810,3 +810,11 @@ button.meter:active{transform:scale(.98)}
 .btn.tgo.on{background:var(--yellow-hi,#ffe14d);color:var(--navy)}
 .alarm-bg.good{background:rgba(20,130,60,.85);animation-name:alarmgood}
 @keyframes alarmgood{50%{background:rgba(59,209,95,.9)}}
+
+/* ---------- v19: área dos pais separada (disfarce) ---------- */
+.disg{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 14px}
+.disg label{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;font-weight:800;font-size:14px}
+.disg input{position:absolute;opacity:0;pointer-events:none}
+.disg img{width:64px;height:64px;border-radius:16px;border:3px solid transparent;box-shadow:0 2px 6px rgba(13,27,76,.18);transition:transform .15s,border-color .15s}
+.disg input:checked+img{border-color:var(--navy);transform:scale(1.08)}
+.disg input:focus-visible+img{outline:3px solid var(--blue,#4aa8ff);outline-offset:2px}

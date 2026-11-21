@@ -54,7 +54,7 @@ const step = (m) => console.log('✔', m);
   await new Promise(r => mpFake.listen(3198, '127.0.0.1', r));
   const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
   try {
-    for (let i = 0; i < 120; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
+    for (let i = 0; i < 360; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
 
     // sem login não acessa nada
     assert.equal((await api('GET', '/api/kids')).status, 401); step('API exige login da família');
@@ -518,6 +518,15 @@ const step = (m) => console.log('✔', m);
     assert.ok(land.includes('59,90') && land.includes('9,90') && !land.includes('{{'));
     assert.ok((await (await fetch(BASE + '/app')).text()).includes('/js/app.js'));
     step('landing com preços dinâmicos e app em /app');
+
+    // área dos pais instalada à parte, com disfarce
+    const pnl = await (await fetch(BASE + '/painel?i=notas')).text();
+    assert.ok(pnl.includes('<title>Notas</title>') && pnl.includes('/painel/manifest.json?i=notas') && pnl.includes('/icons/d/notas-180.png') && pnl.includes('/js/app.js'));
+    const mf = await (await fetch(BASE + '/painel/manifest.json?i=notas')).json();
+    assert.deepEqual([mf.id, mf.name, mf.start_url, mf.scope], ['/painel', 'Notas', '/painel?i=notas', '/painel']);
+    assert.equal((await fetch(BASE + mf.icons[1].src)).status, 200);
+    assert.equal((await (await fetch(BASE + '/painel/manifest.json?i=xx')).json()).name, 'Banco'); // disfarce inválido cai no padrão
+    step('área dos pais: página /painel e manifesto com nome e ícone de disfarce');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');

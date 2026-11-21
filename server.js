@@ -154,6 +154,25 @@ app.get('/', wrap(async (req, res) => {
   res.set('cache-control', 'no-cache').type('html').send(html);
 }));
 app.get('/app', sendApp);
+// Área dos pais instalada à parte, com nome e ícone de disfarce (para a criança não reconhecer)
+const DISGUISES = { banco: ['Banco', '#0e7a4f'], notas: ['Notas', '#f7c948'], agenda: ['Agenda', '#eef2f8'], clima: ['Clima', '#3a8ee6'], ajustes: ['Ajustes', '#6b7280'] };
+const disguise = (q) => (DISGUISES[q] ? q : 'banco');
+app.get('/painel', (req, res) => {
+  const k = disguise(req.query.i), [name, color] = DISGUISES[k];
+  const html = INDEX.replace('<title>GameTask</title>', `<title>${name}</title><meta name="apple-mobile-web-app-title" content="${name}">`)
+    .replace('href="/manifest.json"', `href="/painel/manifest.json?i=${k}"`)
+    .replace('href="/icons/icon-192.png"', `href="/icons/d/${k}-180.png"`)
+    .replace('<meta name="theme-color" content="#2a6cf0">', `<meta name="theme-color" content="${color}">`);
+  res.set('cache-control', 'no-cache').type('html').send(html);
+});
+app.get('/painel/manifest.json', (req, res) => {
+  const k = disguise(req.query.i), [name, color] = DISGUISES[k];
+  res.type('application/manifest+json').json({
+    id: '/painel', name, short_name: name, start_url: `/painel?i=${k}`, scope: '/painel', display: 'standalone', orientation: 'any',
+    background_color: color, theme_color: color,
+    icons: [{ src: `/icons/d/${k}-192.png`, sizes: '192x192', type: 'image/png' }, { src: `/icons/d/${k}-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }],
+  });
+});
 app.use(express.static(PUB, { index: false }));
 app.get('*', sendApp);
 
