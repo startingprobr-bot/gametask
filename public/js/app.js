@@ -964,14 +964,17 @@ async function adminTasks(pane, refresh) {
     <div class="field" data-show="daily"><span class="lab">Dias da semana</span><div class="days">${DAYS.map((d, i) => `<label><input type="checkbox" name="wd" value="${i}" ${t.weekdays.includes(i) ? 'checked' : ''}><span title="${DAYN[i]}">${d}</span></label>`).join('')}</div></div>
     <div data-show="one_off carry"><div class="field"><label for="tdt" data-dl>Data</label><input id="tdt" type="date" name="date" value="${esc(t.date || ymd(new Date()))}"></div>
       <label class="check" data-show="one_off"><input type="checkbox" name="repeat_weekly" ${t.repeat_weekly ? 'checked' : ''}>Repetir toda semana neste dia</label></div>
-    <div class="field"><label for="th">Horário (opcional)</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
-    <div class="field"><label for="tmin">Cronômetro (minutos, opcional)</label><input id="tmin" type="number" min="0" max="600" step="1" name="minutes" value="${+t.minutes || ''}" placeholder="Ex.: 45" inputmode="numeric"><p class="hint">Para tarefas com tempo, como ler um livro. A criança dá play, pode pausar e continuar, e a missão se conclui sozinha quando o tempo acaba.</p></div>
-    <div class="field"><label for="tc">Moedas por conclusão</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"><p class="hint">0 = não vale moeda.</p></div>
+    <div class="frow3">
+      <div class="field"><label for="th">Horário</label><input id="th" type="time" name="time" value="${esc(t.time || '')}"></div>
+      <div class="field"><label for="tmin">Cronômetro</label><input id="tmin" type="number" min="0" max="600" step="1" name="minutes" value="${+t.minutes || ''}" placeholder="min" inputmode="numeric"></div>
+      <div class="field"><label for="tc">Moedas</label><input id="tc" type="number" step="0.5" min="0" name="coins" value="${t.coins}" inputmode="decimal"></div>
+    </div>
+    <p class="hint">Horário e cronômetro são opcionais. Cronômetro em minutos (ex.: ler 45). 0 moedas = não vale moeda.</p>
     <div class="field"><span class="lab">Quem faz</span>${seg('all_kids', [['1', 'Os filhos'], ...(kidsOn.some(k => k.adult) ? [['2', 'Toda a família']] : []), ['0', 'Escolher']], String(t.all_kids === 2 && !kidsOn.some(k => k.adult) ? 1 : t.all_kids))}
       <p class="hint" data-hint></p>
-      <div data-kids>${kidsOn.map(k => `<label class="check"><input type="checkbox" name="kid" value="${k.id}" ${t.kid_ids.includes(k.id) ? 'checked' : ''}>${im(k.avatar, '', 'fox')}${esc(k.name)}${k.adult ? ' <span class="muted">adulto</span>' : ''}</label>`).join('')}</div></div>
-    <div class="field"><span class="lab">Recompensas que esta tarefa alimenta</span>
-      ${rewards.filter(r => r.active && !(r.kind === 'goal' && r.goal_mode === 'coins')).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div>
+      <div data-kids class="checks">${kidsOn.map(k => `<label class="check"><input type="checkbox" name="kid" value="${k.id}" ${t.kid_ids.includes(k.id) ? 'checked' : ''}>${im(k.avatar, '', 'fox')}${esc(k.name)}${k.adult ? ' <span class="muted">adulto</span>' : ''}</label>`).join('')}</div></div>
+    <div class="field"><span class="lab">Recompensas que esta tarefa alimenta</span><div class="checks">
+      ${rewards.filter(r => r.active && !(r.kind === 'goal' && r.goal_mode === 'coins')).map(r => { const linked = t.reward_ids.includes(r.id); return `<label class="check"><input type="checkbox" name="rw" value="${r.id}" data-t="${r.total_value}" data-n="${r.task_count}" data-linked="${linked ? 1 : 0}" data-k="${r.kind}" data-u="${esc(r.unit)}" ${linked ? 'checked' : ''}>${im(r.icon, '', 'game')}${esc(r.title)}<span class="muted" data-pv></span></label>`; }).join('') || '<p class="hint">Crie recompensas na aba Recompensas.</p>'}</div></div>
     <label class="check"><input type="checkbox" name="active" ${t.active ? 'checked' : ''}>Tarefa ativa</label>`;
   const read = (f) => ({
     title: f.title.value, icon: f.icon.value, description: f.description.value, type: f.type.value === 'carry' ? 'one_off' : f.type.value,
