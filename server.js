@@ -162,6 +162,8 @@ const brl = (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximum
 // aberto no celular compara com /api/version para se atualizar sozinho depois de um deploy.
 const VERSION = require('crypto').createHash('sha1')
   .update(['js/app.js', 'css/game.css', 'sw.js', 'index.html'].map(f => fs.readFileSync(path.join(PUB, f))).join('')).digest('hex').slice(0, 10);
+// a página de vendas também precisa furar o cache do CSS, senão o navegador mistura HTML novo com CSS velho
+const LANDING_CSS_V = require('crypto').createHash('sha1').update(fs.readFileSync(path.join(PUB, 'css/landing.css'))).digest('hex').slice(0, 10);
 const INDEX = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8')
   .replace('/js/app.js"', `/js/app.js?v=${VERSION}"`).replace('/css/game.css"', `/css/game.css?v=${VERSION}"`);
 const sendApp = (req, res) => res.set('cache-control', 'no-cache').type('html').send(INDEX);
@@ -173,7 +175,8 @@ app.get('/', wrap(async (req, res) => {
     .replaceAll('{{ANUAL_MES}}', brl(Math.floor(p.annual / 12 * 100) / 100))
     .replaceAll('{{PLUS_MES}}', brl(Math.floor(p.plus / 12 * 100) / 100)).replaceAll('{{PLUS}}', brl(p.plus))
     .replaceAll('{{ECONOMIA}}', String(Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100))))
-    .replaceAll('{{TESTE}}', trialText(p.trial_days));
+    .replaceAll('{{TESTE}}', trialText(p.trial_days))
+    .replace('/css/landing.css"', `/css/landing.css?v=${LANDING_CSS_V}"`);
   res.set('cache-control', 'no-cache').type('html').send(html);
 }));
 app.get('/app', sendApp);
