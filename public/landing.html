@@ -32,7 +32,8 @@
 <main>
 
   <!-- CENA 1 · BARULHO -->
-  <section class="noise" data-fx-fundo="#0d1b4c" data-fx-tinta="#ffffff">
+  <section class="noise" id="barulho" data-fx-fixa data-fx-altura="2.8" data-fx-fundo="#0d1b4c" data-fx-tinta="#ffffff">
+    <div class="fx-palco noise-stage">
     <div class="bubbles" aria-hidden="true">
       <span class="bb p" style="--x:6%;--y:14%;--r:-6deg;--d:.1s">Já escovou os dentes?</span>
       <span class="bb p" style="--x:62%;--y:8%;--r:4deg;--d:.5s">Desliga esse videogame!</span>
@@ -54,6 +55,7 @@
         <a class="btn ghost big" href="#como">Ver como funciona</a>
       </div>
       <p class="fine">R$ {{ANUAL_MES}} por mês no plano anual · Garantia de {{GARANTIA}} dias</p>
+    </div>
     </div>
   </section>
 
@@ -450,8 +452,18 @@
     chaps.forEach((c, i) => c.classList.toggle('on', Math.round(pos) === i));
   };
 
+  // ---------- CENA 1: os balões de cobrança vão se amontoando a cada rolada ----------
+  const noise = document.getElementById('barulho'), nbs = [...noise.querySelectorAll('.bubbles .bb')];
+  let nvis = nbs;
+  const pickVis = () => { nvis = nbs.filter(b => getComputedStyle(b).display !== 'none'); };
+  pickVis(); addEventListener('resize', pickVis);
+  const runNoise = () => {
+    const p = still ? 1 : prog(noise);
+    nvis.forEach((b, k) => b.classList.toggle('on', p >= (k + .6) / nvis.length * .82));
+  };
+
   let raf = 0;
-  const frame = () => { raf = 0; fillList(); runTurn(); runClock(); runLater(); };
+  const frame = () => { raf = 0; runNoise(); fillList(); runTurn(); runClock(); runLater(); };
   const ask = () => { if (!raf) raf = requestAnimationFrame(frame); };
   addEventListener('scroll', ask, { passive: true }); addEventListener('resize', ask); addEventListener('load', ask); ask();
 

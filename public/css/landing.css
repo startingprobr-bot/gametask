@@ -57,8 +57,9 @@ a{color:inherit}
 .bb.k::after{left:auto;right:22px}
 
 /* ---------- CENA 1 · Barulho ---------- */
-.noise{background:#0d1b4c;color:#fff;position:relative;min-height:calc(100svh - 68px);display:grid;align-items:center;padding:64px 0 104px;overflow:hidden;isolation:isolate}
-.noise::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(60% 50% at 50% 50%,rgba(255,77,61,.22),transparent 70%)}
+.noise{background:#0d1b4c;color:#fff}
+.noise-stage{top:68px;height:calc(100vh - 68px);height:calc(100dvh - 68px);isolation:isolate;padding:24px 0 40px}
+.noise-stage::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(60% 50% at 50% 50%,rgba(255,77,61,.22),transparent 70%)}
 .bubbles{position:absolute;inset:0;z-index:0}
 .bubbles .bb{opacity:.92}
 .noise-copy{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -69,9 +70,10 @@ a{color:inherit}
 .cta-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:40px}
 .fine{margin-top:16px;font-weight:800;font-size:15px;opacity:.8}
 @media (prefers-reduced-motion:no-preference){
-  .bubbles .bb{animation:pop .45s var(--spring) both,shake 2.4s ease-in-out infinite;animation-delay:var(--d),calc(var(--d) + .45s)}
-  .bubbles .bb:nth-child(2n){animation-duration:.45s,1.9s}
-  .bubbles .bb:nth-child(3n){animation-duration:.45s,2.9s}
+  .bubbles .bb{visibility:hidden}
+  .bubbles .bb.on{visibility:visible;animation:pop .45s var(--spring) both,shake 2.4s ease-in-out .45s infinite}
+  .bubbles .bb.on:nth-child(2n){animation-duration:.45s,1.9s}
+  .bubbles .bb.on:nth-child(3n){animation-duration:.45s,2.9s}
 }
 @keyframes pop{from{opacity:0;transform:rotate(var(--r)) scale(.4)}}
 @keyframes shake{0%,100%{transform:rotate(var(--r)) translate(0,0)}25%{transform:rotate(calc(var(--r) + 2deg)) translate(2px,-2px)}75%{transform:rotate(calc(var(--r) - 2deg)) translate(-2px,1px)}}
@@ -273,7 +275,7 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
   .brand img{width:36px;height:36px}.brand .d{font-size:23px}
   .hide-sm{display:none}
   .btn.big{width:100%;font-size:21px}
-  .noise{min-height:calc(100svh - 60px);align-items:end;padding:228px 0 64px}
+  .noise-stage{top:60px;height:calc(100vh - 60px);height:calc(100dvh - 60px);align-items:flex-end;padding:228px 0 40px}
   /* no celular, os balões se amontoam no alto, acima do título */
   .bubbles .bb{font-size:13px;padding:7px 12px;max-width:none}
   .bubbles .bb:nth-child(1){left:4%!important;top:18px!important}
@@ -437,3 +439,14 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
   .fx-reduzido .how-stage .steps{flex-direction:column;width:auto}
 }
 @media (max-width:960px){.how-stage .steps{align-items:flex-start}}
+
+.fx-reduzido .noise-stage{padding:64px 0 104px}
+@media (max-width:620px){
+  .noise-stage{padding:200px 0 20px}
+  .noise .tag{font-size:12px;margin-bottom:10px}
+  .noise h1{font-size:clamp(34px,10vw,44px)}
+  .noise .sub{font-size:15.5px;margin-top:14px;line-height:1.5}
+  .noise .cta-row{margin-top:22px}
+  .noise .cta-row .btn.ghost{display:none}
+  .noise .fine{font-size:13px;margin-top:10px}
+}
