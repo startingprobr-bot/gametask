@@ -278,3 +278,15 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
 /* ---------- fim da história ---------- */
 .final h2{margin-bottom:12px}
 .final-sub{color:#fff;font-weight:800;font-size:clamp(18px,2.2vw,22px);max-width:34ch;margin:0 0 28px;text-shadow:0 1px 0 rgba(13,27,76,.5)}
+
+/* ---------- quem fez ---------- */
+.founder{background:#fff;padding:80px 0;border-top:2px solid var(--navy)}
+.founder h2{font-size:clamp(30px,4.4vw,46px);max-width:22ch;margin-bottom:26px}
+.founder .note{background:var(--cream);border:2px solid var(--navy);border-radius:24px;box-shadow:0 4px 0 var(--navy);padding:28px clamp(20px,4vw,36px)}
+.founder .note p{color:var(--ink-soft);font-size:18px;max-width:60ch}
+.founder .note p+p,.founder .origins+p{margin-top:12px}
+.founder .origins{list-style:none;margin:16px 0 4px;padding:0;display:grid;gap:12px}
+.founder .origins li{display:flex;align-items:flex-start;gap:12px;font-size:17px;color:var(--ink-soft)}
+.founder .origins img{width:38px;height:38px;flex:0 0 auto}
+.founder .origins b{color:var(--navy)}
+.founder .sign{margin-top:18px;font-family:var(--display);color:var(--navy);font-size:20px}
