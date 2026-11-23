@@ -322,11 +322,12 @@ async function route() {
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
   if (PAINEL && !me.parent && store.get('gt-pdev')) store.set('gt-pdev', ''); // lembrança apagada no servidor: pede o PIN de novo
-  if (PAINEL && a !== 'dono') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
+  if (PAINEL && a !== 'dono') { if (me.parent) setTimeout(() => maybePushWizard().catch(() => {}), 1500); return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup(); }
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   await viewPlayers(me);
   paid?.();
+  setTimeout(() => maybePushWizard().catch(() => {}), 1500);
 }
 
 // Volta do Mercado Pago: /app?pagamento=<id>&payment_id=<mp>&status=...
@@ -1576,7 +1577,7 @@ async function adminAlarms(pane, refresh) {
   const sub = supported ? await mySub() : null, mine = sub && p.devices.find(d => d.endpoint === sub.endpoint);
   const when = (w) => w.length === 7 ? 'todo dia' : w === '12345' ? 'seg a sex' : [...w].map(d => DAYN[d]).join(', ');
 
-  const device = !p.plus ? `<div class="upsell">${im('phone')}<div><b>Avisos no celular e no tablet fazem parte do plano anual.</b><p>Lembrete antes de cada tarefa com horário, alarmes como "hora de ir para a escola" e aviso para você aprovar as missões.</p></div><a class="btn sm" href="#/assinar">Conhecer o Plus</a></div>`
+  const device = !p.plus ? `<div class="upsell">${im('phone')}<div><b>Avisos no celular e no tablet fazem parte do plano anual.</b><p>Lembrete antes de cada tarefa com horário, alarmes como "hora de ir para a escola" e aviso para você aprovar as missões.</p></div><a class="btn sm" href="#/assinar">Ver planos</a></div>`
     : !supported ? (isIOS && !standalone ? `<div class="notice">${im('phone')}<p>No iPhone e no iPad, os avisos só funcionam com o GameTask instalado: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Abra pelo ícone e volte aqui.</p></div>`
       : `<div class="notice">${im('cross')}<p>Este navegador não recebe avisos. Use o Chrome no Android ou no computador, ou o GameTask instalado no iPhone/iPad.</p></div>`)
     : Notification.permission === 'denied' ? `<div class="notice">${im('lock')}<p>Os avisos foram bloqueados neste aparelho. Libere em <b>Configurações do site → Notificações</b> do navegador e volte aqui.</p></div>`
@@ -1655,6 +1656,97 @@ async function adminAlarms(pane, refresh) {
       async (f) => { await api('PUT', '/admin/alarms/' + a.id, read(f)); refresh(); });
     bg.querySelector('#del').onclick = guard(async () => { await api('DELETE', '/admin/alarms/' + a.id); bg.remove(); toast('Aviso apagado'); refresh(); });
   });
+}
+
+// ---------- Assistente de avisos: abre sozinho no app instalado e guia em poucos toques ----------
+// O site não consegue abrir as telas de bateria do Android; o que dá: a janelinha "Permitir", um teste com o app fechado
+// e, se não chegar, o passo a passo da marca do aparelho.
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+let wizShown = false;
+async function maybePushWizard() {
+  if (wizShown || !ME?.family || !ME.access?.plus || !pushOk() || !(standalone || PAINEL) || $('.sheet-bg')) return;
+  const st = store.get('gt-pushwiz') || '';
+  if (st === 'done' || (st.startsWith('later:') && Date.now() < +st.slice(6))) return;
+  const sub = await mySub().catch(() => null);
+  if (sub && st !== 'testing') return;
+  wizShown = true;
+  pushWizard(st === 'testing' && sub ? 'ask' : Notification.permission === 'denied' ? 'blocked' : 'start');
+}
+const FIX = {
+  xiaomi: ['Segure o dedo no ícone do <b>GameTask</b> e toque em <b>Informações do app</b>.', 'Em <b>Notificações</b>, ligue tudo, inclusive <b>Tela de bloqueio</b> e <b>Notificações flutuantes</b>.',
+    'Agora segure o ícone do <b>Chrome</b> → <b>Informações do app</b> → <b>Início automático</b>: ligue.', 'Ainda no Chrome, em <b>Economia de bateria</b>, escolha <b>Sem restrições</b>.',
+    'Na tela de apps recentes, segure o Chrome e toque no <b>cadeado</b>.'],
+  samsung: ['Segure o ícone do <b>GameTask</b> → <b>Informações do app</b> → <b>Notificações</b>: permita.', 'Segure o ícone do <b>Chrome</b> → <b>Informações do app</b> → <b>Bateria</b>: escolha <b>Sem restrição</b>.',
+    'Em Configurações → <b>Bateria</b> → <b>Limites de uso em segundo plano</b>, tire o Chrome dos “apps em suspensão”.'],
+  android: ['Segure o ícone do <b>GameTask</b> → <b>Informações do app</b> → <b>Notificações</b>: permita.', 'Segure o ícone do <b>Chrome</b> → <b>Informações do app</b> → <b>Bateria</b>: escolha <b>Sem restrições</b> (ou “Não otimizar”).'],
+  ios: ['Abra os <b>Ajustes</b> → <b>Notificações</b> → <b>GameTask</b> e ligue <b>Permitir Notificações</b>.', 'Confira se o modo <b>Foco</b> (Não Perturbe) está desligado.', 'Abra sempre pelo ícone do GameTask na Tela de Início, não pelo Safari.'],
+};
+const BRANDS = [['xiaomi', 'Xiaomi, Redmi ou Poco'], ['samsung', 'Samsung'], ['android', 'Motorola ou outro Android'], ['ios', 'iPhone ou iPad']];
+async function pushSubscribe() {
+  const { key } = await api('GET', '/push/key');
+  const reg = await navigator.serviceWorker.ready, opts = { userVisibleOnly: true, applicationServerKey: b64key(key) };
+  let s = await reg.pushManager.getSubscription();
+  if (!s) { try { s = await reg.pushManager.subscribe(opts); } catch { await new Promise(r => setTimeout(r, 800)); s = await reg.pushManager.subscribe(opts); } }
+  if (PAINEL && ME.parent) await api('POST', '/admin/push', { sub: s.toJSON(), label: guessLabel(), reminders: true, approvals: true });
+  else await api('POST', '/push/device', { sub: s.toJSON(), label: guessLabel() });
+  return s;
+}
+function pushWizard(step = 'start') {
+  const bg = document.createElement('div'); bg.className = 'sheet-bg';
+  bg.innerHTML = '<div class="sheet wiz" role="dialog" aria-label="Ligar os avisos"></div>'; document.body.append(bg);
+  const box = bg.firstChild, close = () => bg.remove();
+  const later = () => { store.set('gt-pushwiz', 'later:' + (Date.now() + 3 * 864e5)); close(); };
+  const done = () => { store.set('gt-pushwiz', 'done'); close(); sfx.win(); toast('Avisos funcionando neste aparelho!'); };
+  const steps = (list) => `<ol class="wiz-steps">${list.map(s => `<li><span>${s}</span></li>`).join('')}</ol>`;
+  const show = (s) => {
+    const [name, arg] = s.split(':');
+    const V = {
+      start: `${im('bell')}<h2 class="d">Ligue os avisos deste aparelho</h2>
+        <p>Assim o GameTask avisa “hora da escola” e “o tempo de videogame acabou”, mesmo com o app fechado.</p>
+        <p class="wiz-tip">Vai abrir uma janelinha. É só tocar em <b>Permitir</b>.</p>
+        <div class="err" role="alert"></div>
+        <button class="btn green big" data-go="allow">Ligar os avisos</button><button class="link" data-go="later">Agora não</button>`,
+      test: `${im('phone')}<h2 class="d">Agora, o teste</h2>
+        <p>Toque no botão e <b>saia do GameTask</b> (volte para a tela inicial). Em 10 segundos chega um aviso.</p>
+        <div class="err" role="alert"></div>
+        <button class="btn green big" data-go="send">Enviar o teste</button><button class="link" data-go="later">Testar depois</button>`,
+      wait: `${im('hourglass')}<h2 class="d">Pode sair do app agora</h2>
+        <p>O aviso de teste chega em 10 segundos. Quando voltar, me conte se ele apareceu.</p>
+        <button class="btn green big" data-go="yes">Chegou!</button><button class="btn ghost" data-go="no">Não chegou</button>`,
+      ask: `${im('bell')}<h2 class="d">O aviso de teste chegou?</h2>
+        <button class="btn green big" data-go="yes">Chegou!</button><button class="btn ghost" data-go="no">Não chegou</button><button class="link" data-go="test">Enviar de novo</button>`,
+      brand: `${im('phone')}<h2 class="d">Qual é o aparelho?</h2><p>Alguns celulares desligam os avisos para economizar bateria. Vou te mostrar onde liberar.</p>
+        <div class="wiz-brands">${BRANDS.map(([k, l]) => `<button class="btn ghost" data-go="fix:${k}">${l}</button>`).join('')}</div>`,
+      fix: `${im('wrench')}<h2 class="d">Só mais estes ajustes</h2>${steps(FIX[arg] || FIX.android)}
+        <button class="btn green big" data-go="test">Já fiz, testar de novo</button><button class="link" data-go="later">Fazer depois</button>`,
+      blocked: `${im('lock')}<h2 class="d">Os avisos ficaram bloqueados</h2>${steps(isIOS ? FIX.ios.slice(0, 1) : [FIX.android[0]])}
+        <button class="btn green big" data-go="start">Já liberei</button><button class="link" data-go="later">Fazer depois</button>`,
+    };
+    box.innerHTML = V[name];
+    $$('[data-go]', box).forEach(b => b.onclick = async () => {
+      const go = b.dataset.go, err = $('.err', box);
+      if (go === 'later') return later();
+      if (go === 'yes') return done();
+      if (go === 'no') return show('brand');
+      if (go === 'allow') {
+        b.disabled = true;
+        try {
+          const p = await Notification.requestPermission();
+          if (p !== 'granted') return show('blocked');
+          await pushSubscribe(); sfx.done(); show('test');
+        } catch (e) { err.textContent = e.message || 'Não deu certo. Tente de novo.'; b.disabled = false; }
+        return;
+      }
+      if (go === 'send') {
+        b.disabled = true;
+        try { const s = (await mySub()) || await pushSubscribe(); await api('POST', '/push/test', { endpoint: s.endpoint, delay: 10 }); store.set('gt-pushwiz', 'testing'); show('wait'); }
+        catch (e) { err.textContent = e.message; b.disabled = false; }
+        return;
+      }
+      show(go);
+    });
+  };
+  show(step);
 }
 
 // ---------- Cartão dentro do app (formulário oficial do Mercado Pago: os dados do cartão não passam pelo nosso servidor) ----------

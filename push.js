@@ -34,6 +34,21 @@ async function sendToFamily(fid, payload, kind = 'reminders') {
   return ok;
 }
 
+// Um aparelho só (o teste do assistente de avisos)
+async function sendToSub(s, payload) {
+  if (!ready) return false;
+  try {
+    await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 900, urgency: 'high' });
+    await pool.query('INSERT INTO push_sent (family_id,title,ok,fail) VALUES (?,?,1,0)', [s.family_id, String(payload.title).slice(0, 120)]).catch(() => {});
+    return true;
+  } catch (e) {
+    const gone = e.statusCode === 404 || e.statusCode === 410;
+    if (gone) await pool.query('DELETE FROM push_subs WHERE id=?', [s.id]).catch(() => {});
+    await pool.query('INSERT INTO push_sent (family_id,title,ok,fail,err) VALUES (?,?,0,1,?)', [s.family_id, String(payload.title).slice(0, 120), gone ? 'aparelho desinscrito (ligue os avisos de novo nele)' : `erro ${e.statusCode || e.message}`.slice(0, 80)]).catch(() => {});
+    return false;
+  }
+}
+
 // Só a primeira chamada com a mesma chave envia (evita aviso repetido mesmo se o servidor reiniciar)
 async function once(k) {
   const [r] = await pool.query('INSERT IGNORE INTO push_log (k) VALUES (?)', [k]);
@@ -113,4 +128,4 @@ function start() {
   }).catch(e => console.error('push init', e.message));
 }
 
-module.exports = { start, init, tick, sendToFamily, publicKey, timeUp };
+module.exports = { start, init, tick, sendToFamily, sendToSub, publicKey, timeUp };

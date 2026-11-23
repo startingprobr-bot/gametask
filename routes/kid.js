@@ -301,6 +301,28 @@ router.delete('/kids/:id/complete/:taskId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Avisos neste aparelho (assistente que abre sozinho no app instalado) ----------
+// O tablet das crianças liga os lembretes sem o PIN dos pais; pedidos de aprovação só pelo painel dos pais.
+const kwrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); res.status(500).json({ error: 'Erro interno' }); });
+router.get('/push/key', kwrap(async (req, res) => res.json({ key: await push.publicKey(), plus: access(req.family).plus })));
+router.post('/push/device', kwrap(async (req, res) => {
+  if (!access(req.family).plus) return res.status(403).json({ error: 'Os avisos no celular e no tablet fazem parte do plano anual.', code: 'plus' });
+  const s = req.body.sub || {};
+  if (!/^https:\/\//.test(s.endpoint || '') || !s.keys?.p256dh || !s.keys?.auth) return res.status(400).json({ error: 'Inscrição inválida' });
+  await pool.query(`INSERT INTO push_subs (family_id,endpoint,p256dh,auth,label,reminders,approvals) VALUES (?,?,?,?,?,1,0)
+    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),p256dh=VALUES(p256dh),auth=VALUES(auth)`,
+    [req.fid, s.endpoint, s.keys.p256dh, s.keys.auth, String(req.body.label || 'Aparelho').slice(0, 60)]);
+  res.json({ ok: true });
+}));
+// Teste só para este aparelho, com uma espera para dar tempo de fechar o app
+router.post('/push/test', kwrap(async (req, res) => {
+  const [[s]] = await pool.query('SELECT * FROM push_subs WHERE family_id=? AND endpoint=?', [req.fid, String(req.body.endpoint || '')]);
+  if (!s) return res.status(404).json({ error: 'Os avisos ainda não estão ligados neste aparelho' });
+  const wait = Math.max(0, Math.min(20, +req.body.delay || 0)) * 1000;
+  setTimeout(() => push.sendToSub(s, { title: 'Teste do GameTask', body: 'Chegou! Os avisos estão funcionando neste aparelho.', tag: 'teste', url: '/app#/' }), wait);
+  res.json({ ok: true });
+}));
+
 module.exports = router;
 module.exports.wheelPrizes = wheelPrizes;
 module.exports.kidTime = kidTime;

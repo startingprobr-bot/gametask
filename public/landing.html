@@ -123,12 +123,14 @@
   </section>
 
   <!-- CENA 4 · COMO FUNCIONA -->
-  <section class="how" id="como" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+  <section class="how" id="como" data-fx-fixa data-fx-altura="4" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+    <div class="fx-palco how-stage" id="howStage">
     <div class="in">
-      <p class="kicker dark">Como funciona</p>
-      <h2 class="d" data-fx="subir">Três passos, e a casa entra no modo jogo</h2>
+      <div class="how-head"><div><p class="kicker dark">Como funciona</p>
+      <h2 class="d">Três passos, e a casa entra no modo jogo</h2></div>
+      <button type="button" class="snd" id="snd" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>Ligar o som</span></button></div>
       <ol class="steps">
-        <li data-fx="subir">
+        <li>
           <span class="n d">1</span>
           <h3>Monte a rotina da casa</h3>
           <p>Escolha as missões num catálogo pronto e ajuste à sua casa: tire, inclua e adapte à idade de cada um.</p>
@@ -137,7 +139,7 @@
             <span><img src="/img/3d/pencil.png" alt="">Dever de casa</span>
           </div>
         </li>
-        <li data-fx="subir" data-fx-atraso="140">
+        <li>
           <span class="n d">2</span>
           <h3>A criança joga</h3>
           <p>Toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Prepare-se para ouvir “já fiz!” antes de perguntar.</p>
@@ -145,17 +147,18 @@
             <div class="play-top"><img class="play-av" src="/img/3d/fox.png" alt=""><b class="d">Eva</b><span class="play-pill" id="ppill"><img src="/img/3d/coin.png" alt=""><b class="d" id="pcoins">46</b></span></div>
             <div class="play-card"><span class="play-tile"><img src="/img/3d/soap.png" alt=""></span><span class="play-t">Lavar a louça<small><img src="/img/3d/coin.png" alt="">+3</small></span><button type="button" class="play-go" id="pgo">Concluí!</button></div>
             <p class="play-hint">Toque em <b>Concluí!</b> para testar</p>
-            <svg class="cursor" id="pcur" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2.5l13.5 11-6 .8 3.6 6.8-2.7 1.4-3.6-6.9-4.8 4z" fill="#fff" stroke="#0d1b4c" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </div>
         </li>
-        <li data-fx="subir" data-fx-atraso="280">
+        <li>
           <span class="n d">3</span>
           <h3>Você só aprova</h3>
           <p>No painel dos pais, protegido por PIN, você confere o que foi feito. Ficou pela metade? Um toque em Rejeitar e a missão volta para a lista. Pai, mãe e avó usam a mesma regra.</p>
           <div class="approve"><span><img src="/img/3d/soap.png" alt="">Lavar a louça · Eva</span><button type="button" id="approveGo">Aprovar</button></div>
         </li>
       </ol>
-      <div class="cleared" id="cleared" hidden><span class="ok-dot" aria-hidden="true">✔</span><p><b>Tudo aprovado.</b> As moedas já estão na conta da Eva.</p><button type="button" class="link" id="again">Ver os passos de novo</button></div>
+    </div>
+    <p class="how-done" id="howDone" aria-live="polite"><span class="ok-dot" aria-hidden="true">✔</span><span><b>Tudo aprovado.</b> As moedas já estão na conta da Eva.</span></p>
+    <svg class="cursor" id="pcur" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2.5l13.5 11-6 .8 3.6 6.8-2.7 1.4-3.6-6.9-4.8 4z" fill="#fff" stroke="#0d1b4c" stroke-width="1.6" stroke-linejoin="round"/></svg>
     </div>
   </section>
 
@@ -313,11 +316,16 @@
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const prog = (el) => { const r = el.getBoundingClientRect(), run = el.offsetHeight - innerHeight; return run > 0 ? clamp(-r.top / run, 0, 1) : 1; };
-  // som curtinho de moeda (só depois de um toque do visitante)
+  // som de moeda (o navegador só deixa tocar depois de um toque ou clique na página)
   let ac = null;
-  const ding = () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime;
-    o.type = 'square'; o.frequency.setValueAtTime(988, t0); o.frequency.setValueAtTime(1319, t0 + .06); g.gain.setValueAtTime(.05, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .18);
-    o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + .2); } catch {} };
+  const audio = () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch {} return ac; };
+  const unlock = () => { audio(); const b = document.getElementById('snd'); if (b) { b.setAttribute('aria-pressed', 'true'); b.querySelector('span').textContent = 'Som ligado'; } };
+  addEventListener('pointerdown', unlock, { once: true }); addEventListener('keydown', unlock, { once: true });
+  const ding = (i = 0) => { const a = ac; if (!a || a.state !== 'running') return; try {
+    const t0 = a.currentTime, f = 1318 * Math.pow(1.03, i % 4);
+    [[f, 0, .07], [f * 1.5, .06, .22]].forEach(([fr, at, len]) => { const o = a.createOscillator(), g = a.createGain(); o.type = 'square';
+      o.frequency.setValueAtTime(fr, t0 + at); g.gain.setValueAtTime(.0001, t0 + at); g.gain.exponentialRampToValueAtTime(.045, t0 + at + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + at + len);
+      o.connect(g).connect(a.destination); o.start(t0 + at); o.stop(t0 + at + len + .02); }); } catch {} };
   const bump = (el) => { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); };
 
   // ---------- CENA 2: a lista da cabeça enche conforme a rolagem ----------
@@ -434,8 +442,9 @@
   // ---------- CENA 4: "Concluí!" solta as moedas até o contador, igual ao app ----------
   const go = document.getElementById('pgo'), pill = document.getElementById('ppill'), out = document.getElementById('pcoins'), box = document.getElementById('play');
   let coins = 46, busy = false;
-  const count = (to) => { const from = coins, t0 = performance.now(); coins = to;
-    const step = (t) => { const q = Math.min(1, (t - t0) / 600); out.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 3))); if (q < 1) requestAnimationFrame(step); };
+  let tok = 0;
+  const count = (to) => { const from = coins, t0 = performance.now(), my = tok; coins = to;
+    const step = (t) => { if (my !== tok) return; const q = Math.min(1, (t - t0) / 600); out.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 3))); if (q < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step); bump(pill); };
   const fly = (sound) => {
     const a = go.getBoundingClientRect(), b = pill.getBoundingClientRect();
@@ -446,48 +455,54 @@
       const lift = -70 - Math.random() * 50, spread = (i - 2.5) * 16;
       c.animate([{ transform: 'translate(0,0) scale(.4)', opacity: 0 }, { transform: `translate(${spread}px,${lift}px) scale(1.15)`, opacity: 1, offset: .3 },
         { transform: `translate(${tx - fx}px,${ty - fy}px) scale(.5)`, opacity: 1 }], { duration: 850, delay: i * 70, easing: 'cubic-bezier(.55,0,.35,1)', fill: 'both' })
-        .onfinish = () => { c.remove(); if (sound) ding(); res(); };
+        .onfinish = () => { c.remove(); if (sound) ding(i); res(); };
     })));
   };
-  const play = async (sound) => {
-    if (busy) return; busy = true;
-    go.textContent = 'Feito!'; go.classList.add('done'); box.classList.add('won');
-    if (!still) await fly(sound);
-    count(coins + 3);
-    setTimeout(() => { go.textContent = 'Concluí!'; go.classList.remove('done'); box.classList.remove('won'); busy = false; }, 2200);
-  };
-  go.onclick = () => play(true);
-  // quem não toca vê um cursor clicando sozinho cada vez que o cartão entra na tela
-  const cur = document.getElementById('pcur');
-  const demo = () => {
-    if (busy || still) return;
-    const b = box.getBoundingClientRect(), g = go.getBoundingClientRect();
-    const tx = g.left - b.left + g.width * .55, ty = g.top - b.top + g.height * .6;
-    cur.animate([{ transform: `translate(${b.width - 20}px,${b.height + 10}px)`, opacity: 0 }, { opacity: 1, offset: .15 },
-      { transform: `translate(${tx}px,${ty}px)`, opacity: 1, offset: .75 }, { transform: `translate(${tx}px,${ty}px) scale(.82)`, opacity: 1, offset: .88 },
-      { transform: `translate(${tx}px,${ty}px)`, opacity: 1 }], { duration: 1300, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' })
-      .onfinish = () => { play(false); setTimeout(() => cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: 'forwards' }), 900); };
-  };
-  if (!still && 'IntersectionObserver' in window) {
-    let inView = false;
-    new IntersectionObserver((en) => { const now = en[0].isIntersecting; if (now && !inView) setTimeout(demo, 400); inView = now; }, { threshold: .8 }).observe(box);
-  }
-
-  // passo 3: "Aprovar" aprova os três cartões, que somem como missões concluídas
-  const steps = document.querySelector('.steps'), cleared = document.getElementById('cleared'), ap = document.getElementById('approveGo');
-  ap.onclick = async () => {
-    if (ap.disabled) return; ap.disabled = true; ap.textContent = 'Aprovado'; ding();
-    const lis = [...steps.children];
-    if (!still) {
-      await Promise.all(lis.map((li, i) => li.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateY(-10px) scale(1.02)', opacity: 1, offset: .3 }, { transform: 'translateY(-60px) scale(.9)', opacity: 0 }],
-        { duration: 520, delay: (lis.length - 1 - i) * 110, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' }).finished));
-      const hgt = steps.offsetHeight;
-      await steps.animate([{ height: hgt + 'px' }, { height: '0px' }], { duration: 450, easing: 'cubic-bezier(.3,0,.2,1)' }).finished;
+  // ---------- CENA 4 presa na tela: a rolagem leva o cursor a "Concluí!" e depois a "Aprovar" ----------
+  const how = document.getElementById('como'), hs = document.getElementById('howStage'), steps = hs.querySelector('.steps'), lis = [...steps.children];
+  const ap = document.getElementById('approveGo'), cur = document.getElementById('pcur'), doneNote = document.getElementById('howDone');
+  let howStep = 0; // 0 nada · 1 concluído · 2 aprovado
+  const conclude = (anim) => { go.textContent = 'Feito!'; go.classList.add('done'); box.classList.add('won');
+    const my = tok; if (anim && !still) fly(true).then(() => { if (my === tok) count(49); }); else count(49); };
+  const unconclude = () => { tok++; go.textContent = 'Concluí!'; go.classList.remove('done'); box.classList.remove('won'); coins = 46; out.textContent = 46; };
+  const approve = () => { ap.disabled = true; ap.textContent = 'Aprovado'; [0, 1, 2].forEach(i => setTimeout(() => ding(i), i * 90)); bump(ap); };
+  const unapprove = () => { ap.disabled = false; ap.textContent = 'Aprovar'; };
+  go.onclick = () => { if (howStep < 1) { howStep = 1; conclude(true); } else fly(true).then(() => count(coins + 3)); };
+  ap.onclick = () => { if (howStep < 1) { howStep = 1; conclude(true); } if (howStep < 2) { howStep = 2; approve(); } };
+  document.getElementById('snd').onclick = (e) => { e.stopPropagation(); unlock(); ding(0); };
+  const mid = (el) => { const r = el.getBoundingClientRect(), s = hs.getBoundingClientRect(); return [r.left - s.left + r.width * .55, r.top - s.top + r.height * .62]; };
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const sm = (t) => t * t * (3 - 2 * t);
+  const runHow = () => {
+    if (still) return;
+    const p = prog(how), row = innerWidth <= 960;
+    // celular: um cartão por vez, desliza para o cartão da vez
+    if (row) { const w = lis[0].offsetWidth + 16, f = p < .12 ? 0 : p < .2 ? sm((p - .12) / .08) : p < .52 ? 1 : p < .6 ? 1 + sm((p - .52) / .08) : 2;
+      steps.style.transform = `translateX(${(-f * w).toFixed(1)}px)`; } else steps.style.transform = '';
+    // cursor: entra, vai até "Concluí!", clica; vai até "Aprovar", clica; some
+    const s = hs.getBoundingClientRect(), A = [s.width * .92, s.height * .96], B = mid(go), C = mid(ap);
+    let pos = A, press = 1, vis = 0;
+    if (p >= .08 && p < .86) {
+      vis = 1;
+      if (p < .3) pos = lerp(A, B, sm((p - .08) / .22));
+      else if (p < .5) { pos = B; press = p < .36 ? .82 : 1; }
+      else if (p < .7) pos = lerp(B, C, sm((p - .5) / .2));
+      else { pos = C; press = p < .76 ? .82 : 1; }
     }
-    steps.hidden = true; cleared.hidden = false;
-    lis.forEach(li => li.getAnimations().forEach(a => a.cancel()));
+    cur.style.opacity = vis; cur.style.transform = `translate(${pos[0].toFixed(1)}px,${pos[1].toFixed(1)}px) scale(${press})`;
+    // cliques (e o contrário ao rolar de volta)
+    if (p >= .32 && howStep < 1) { howStep = 1; conclude(true); }
+    if (p < .28 && howStep >= 1) { howStep = 0; unconclude(); unapprove(); }
+    if (p >= .72 && howStep < 2) { howStep = 2; approve(); }
+    if (p < .68 && howStep === 2) { howStep = 1; unapprove(); }
+    // no fim, os cartões sobem e somem como missões concluídas
+    const c = clamp((p - .8) / .14, 0, 1);
+    lis.forEach((li, i) => { const e = sm(clamp(c * 1.6 - (lis.length - 1 - i) * .25, 0, 1)); li.style.transform = e ? `translateY(${(-70 * e).toFixed(1)}px) scale(${(1 - .08 * e).toFixed(3)})` : ''; li.style.opacity = (1 - e).toFixed(3); });
+    doneNote.style.opacity = sm(clamp((c - .55) / .45, 0, 1)).toFixed(3);
+    doneNote.style.transform = `translate(-50%, ${(20 * (1 - sm(clamp((c - .55) / .45, 0, 1)))).toFixed(1)}px)`;
   };
-  document.getElementById('again').onclick = () => { steps.hidden = false; cleared.hidden = true; ap.disabled = false; ap.textContent = 'Aprovar'; };
+  if (still) { go.onclick = () => conclude(false); }
+  addEventListener('scroll', () => requestAnimationFrame(runHow), { passive: true }); addEventListener('resize', runHow); runHow();
 })();
 </script>
 </body>

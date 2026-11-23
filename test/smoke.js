@@ -158,6 +158,20 @@ const step = (m) => console.log('✔', m);
     for (let i = 0; i < 40 && !sent.length; i++) { [sent] = await tdb.query("SELECT title FROM push_sent WHERE title LIKE 'O tempo de % acabou'"); if (!sent.length) await new Promise(r => setTimeout(r, 100)); }
     assert.equal(sent.length, 1, 'aviso de tempo esgotado'); assert.ok(sent[0].title.includes('Eva'));
     await tdb.query("DELETE FROM push_subs WHERE endpoint='https://127.0.0.1:1/push/teste'");
+    // assistente de avisos: o tablet liga sem PIN (só lembretes) e pede um teste só para ele
+    assert.ok((await ok('GET', '/api/push/key')).key.length > 40);
+    const ec2 = require('crypto').createECDH('prime256v1'); ec2.generateKeys();
+    const dsub = { endpoint: 'https://127.0.0.1:1/push/tablet', keys: { p256dh: b64u(ec2.getPublicKey()), auth: b64u(require('crypto').randomBytes(16)) } };
+    assert.equal((await api('POST', '/api/push/device', { sub: { endpoint: 'http://x' } })).status, 400);
+    await ok('POST', '/api/push/device', { sub: dsub, label: 'Tablet' });
+    const [[dv]] = await tdb.query("SELECT reminders,approvals,label FROM push_subs WHERE endpoint=?", [dsub.endpoint]);
+    assert.deepEqual([dv.reminders, dv.approvals, dv.label], [1, 0, 'Tablet']);
+    assert.equal((await api('POST', '/api/push/test', { endpoint: 'https://nao-existe' })).status, 404);
+    await ok('POST', '/api/push/test', { endpoint: dsub.endpoint, delay: 0 });
+    let tst = [];
+    for (let i = 0; i < 40 && !tst.length; i++) { [tst] = await tdb.query("SELECT fail FROM push_sent WHERE title='Teste do GameTask'"); if (!tst.length) await new Promise(r => setTimeout(r, 100)); }
+    assert.equal(tst.length, 1);
+    await tdb.query("DELETE FROM push_subs WHERE endpoint=?", [dsub.endpoint]);
     assert.equal((await api('POST', tUrl, { action: 'start' })).status, 400);
     assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).timers.length, 0);
     await tdb.end();

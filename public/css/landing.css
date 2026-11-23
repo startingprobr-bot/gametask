@@ -413,3 +413,27 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
 .chips span{font-size:13px;padding:4px 10px 4px 5px}
 .chips img{width:20px;height:20px}
 .steps[hidden]{display:none}
+
+/* ---------- rodada 3: "Como funciona" presa na tela ---------- */
+.how{padding:0;background:#fff8e6}
+.how-stage{flex-direction:column;justify-content:center;background:#fff8e6}
+.how-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:48px}
+.how .how-head h2{margin-bottom:0}
+.snd{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:2px solid var(--navy);background:#fff;color:var(--navy);font:900 14px var(--body);cursor:pointer;white-space:nowrap}
+.snd svg{width:20px;height:20px}
+.snd[aria-pressed=true]{background:#d7f5da}
+.steps li{will-change:transform,opacity}
+.how-stage .cursor{position:absolute;left:0;top:0;opacity:0;width:34px;height:34px;transition:opacity .25s}
+.how-done{position:absolute;left:50%;top:58%;display:flex;align-items:center;gap:12px;padding:16px 22px;border-radius:20px;background:#e3f7e6;border:2px solid var(--navy);box-shadow:0 4px 0 var(--navy);font-size:19px;opacity:0;transform:translate(-50%,20px);pointer-events:none;width:max-content;max-width:calc(100vw - 32px)}
+.how-done .ok-dot{flex:0 0 auto}
+.fx-reduzido .how-stage{padding:104px 0}
+.fx-reduzido .how-done,.fx-reduzido .how-stage .cursor{display:none}
+@media (max-width:960px){
+  .how-stage{justify-content:flex-start;padding-top:84px}
+  .how-head{margin-bottom:40px;flex-wrap:wrap}
+  .how .how-head h2{font-size:30px}
+  .how-stage .steps{display:flex;gap:16px;max-width:none;width:max-content;align-items:stretch}
+  .how-stage .steps li{width:min(84vw,420px);flex:0 0 auto}
+  .fx-reduzido .how-stage .steps{flex-direction:column;width:auto}
+}
+@media (max-width:960px){.how-stage .steps{align-items:flex-start}}

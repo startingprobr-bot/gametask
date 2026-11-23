@@ -864,3 +864,15 @@ button.meter:active{transform:scale(.98)}
 .guar>img{width:30px;height:30px;flex:0 0 auto}
 .guar p{flex:1 1 220px;margin:0;font-size:15px;line-height:1.45}
 .paywall .guar{max-width:640px;margin:14px auto 0;background:rgba(255,255,255,.92);color:var(--ink,#0d1b4c)}
+
+/* ---------- v23: assistente de avisos ---------- */
+.wiz{text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:460px}
+.wiz>img{width:84px;height:84px}
+.wiz h2{font-size:30px}
+.wiz p{color:var(--ink-soft);font-weight:700;max-width:38ch}
+.wiz-tip{padding:10px 14px;border-radius:14px;background:#fff6cc;border:2px dashed #e8c33a;color:var(--ink,#0d1b4c)!important}
+.wiz .btn{width:100%}
+.wiz-brands{display:grid;gap:10px;width:100%}
+.wiz-steps{text-align:left;counter-reset:w;list-style:none;display:grid;gap:10px;width:100%;margin:4px 0 6px}
+.wiz-steps li{counter-increment:w;display:flex;gap:10px;align-items:flex-start;font-weight:700;line-height:1.4}
+.wiz-steps li::before{content:counter(w);flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--yellow,#ffd21f);border:2px solid var(--navy,#0d1b4c);font-weight:900}
