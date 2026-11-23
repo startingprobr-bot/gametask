@@ -394,7 +394,25 @@
   wheel.innerHTML = SL.map((l, i) => { const a0 = i * 60, a1 = a0 + 60, [x0, y0] = pt(a0, 140), [x1, y1] = pt(a1, 140), [tx, ty] = pt(a0 + 30, 88);
     return `<path d="M150 150L${x0} ${y0}A140 140 0 0 1 ${x1} ${y1}Z" fill="${COLS[i]}" stroke="#0d1b4c" stroke-width="3"/><text x="${tx}" y="${ty}" transform="rotate(${a0 + 30} ${tx} ${ty})" text-anchor="middle" dominant-baseline="middle">${l}</text>`; }).join('')
     + '<circle cx="150" cy="150" r="140" fill="none" stroke="#0d1b4c" stroke-width="5"/><circle cx="150" cy="150" r="16" fill="#fff" stroke="#0d1b4c" stroke-width="4"/>';
-  const WIN = 3, SPIN = 1080 + (360 - (WIN * 60 + 30));
+  const WIN = 3;
+  // sons iguais aos do app (só tocam depois de um toque na página, regra do navegador)
+  const tone = (notes, type = 'triangle', vol = .09) => { const a = ac; if (!a || a.state !== 'running') return; try { let t0 = a.currentTime;
+    for (const [fr, d] of notes) { const o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(fr, t0);
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+      o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + d + .02); t0 += d * .7; } } catch {} };
+  const tap = () => tone([[660, .06]], 'sine', .06), fanfare = () => tone([[523, .14], [659, .14], [784, .14], [1047, .14], [1318, .4]]);
+  let spun = false, spinT = 0, tickT = 0;
+  const spinWheel = () => {
+    spun = true; panels[1].classList.remove('won'); clearTimeout(spinT); clearTimeout(tickT);
+    const ms = still ? 50 : 7000, final = 360 * 12 - (WIN + .5) * 60 + (Math.random() - .5) * 24, t0 = performance.now();
+    wheel.style.transition = 'none'; wheel.style.transform = 'rotate(0deg)'; void wheel.getBoundingClientRect();
+    wheel.style.transition = `transform ${ms}ms cubic-bezier(.15,.55,.1,1)`; wheel.style.transform = `rotate(${final}deg)`;
+    // o tic da setinha vai ficando mais espaçado enquanto a roleta freia
+    const tick = () => { const q = (performance.now() - t0) / ms; if (still || q >= .97) return; tap(); tickT = setTimeout(tick, 90 + 520 * q * q); };
+    tick();
+    spinT = setTimeout(() => { clearTimeout(tickT); panels[1].classList.add('won'); fanfare(); }, ms);
+  };
+  const resetWheel = () => { spun = false; clearTimeout(spinT); clearTimeout(tickT); panels[1].classList.remove('won'); wheel.style.transition = 'none'; wheel.style.transform = 'rotate(0deg)'; };
   const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.round(s % 60)).padStart(2, '0');
   const rFg = document.getElementById('rFg'), CIRC = 2 * Math.PI * 52; rFg.style.strokeDasharray = CIRC;
   const checks = [...panels[0].querySelectorAll('.v-checks i')], road = panels[0].querySelector('.v-road'), me = panels[0].querySelector('.v-me'), fill = panels[0].querySelector('.v-fill');
@@ -404,10 +422,7 @@
       const g = .08 + .72 * t; fill.style.transform = `scaleX(${g})`; me.style.transform = `translateX(${g * (road.clientWidth - 70)}px)`;
       document.getElementById('gN').textContent = Math.round(t * 120);
     },
-    (t) => { // roleta
-      const s = clamp((t - .12) / .78, 0, 1); wheel.style.transform = `rotate(${ease(s) * SPIN}deg)`;
-      panels[1].classList.toggle('won', s >= 1);
-    },
+    (t) => { if (t > .02 && !spun) spinWheel(); }, // roleta: dispara e gira sozinha, igual ao app
     (t) => { // mesada
       const c = Math.round(46 * clamp(t / .55, 0, 1)), paid = t > .85;
       document.getElementById('wCoins').textContent = paid ? 0 : c;
@@ -431,6 +446,7 @@
       if (p >= a + DWELL && i < N - 1) pos = i + clamp((p - a - DWELL) / MOVE, 0, 1); else if (p >= a) pos = Math.max(pos, i);
     }
     rail.style.transform = `translateX(${(-pos * 100).toFixed(3)}vw)`;
+    if (spun && pos < .4) resetWheel(); // voltou para as metas: a roleta gira de novo quando reaparecer
     chaps.forEach((c, i) => c.classList.toggle('on', Math.round(pos) === i));
   };
 
