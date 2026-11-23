@@ -298,3 +298,4 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
 .origins li>span:last-child{color:var(--ink-soft);font-size:15.5px;line-height:1.5}
 @media (max-width:900px){.f-grid{grid-template-columns:1fr;gap:32px}}
 @media (max-width:520px){.founder{padding:64px 0}.origins{grid-template-columns:1fr}.origins li{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:12px}.origins .ic{margin:0}.origins b{flex:1}.origins li>span:last-child{flex-basis:100%}}
+.f-lede{max-width:46ch;margin:-8px auto 28px}
