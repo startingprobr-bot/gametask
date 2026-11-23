@@ -450,3 +450,5 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
   .noise .cta-row .btn.ghost{display:none}
   .noise .fine{font-size:13px;margin-top:10px}
 }
+
+.chips .chip-new{background:transparent;border:2px dashed #b8c6ef;color:var(--ink-soft);padding:4px 12px}
