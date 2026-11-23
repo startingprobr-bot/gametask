@@ -146,9 +146,18 @@ const step = (m) => console.log('✔', m);
     tt = (await ok('POST', tUrl, { action: 'pause' })).time.find(x => x.id === game);
     assert.equal(tt.run, null); assert.ok(Math.abs(tt.used - 1.5) < 0.05, 'usou ~30s: ' + tt.used);
     await ok('POST', tUrl, { action: 'start' });
+    // aparelho com avisos ligados (endereço que não existe: o envio falha, mas fica registrado com o título)
+    const ec = require('crypto').createECDH('prime256v1'); ec.generateKeys();
+    const b64u = (b) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    await tdb.query("INSERT INTO push_subs (family_id,endpoint,p256dh,auth) SELECT family_id,'https://127.0.0.1:1/push/teste',?,? FROM kids WHERE id=?", [b64u(ec.getPublicKey()), b64u(require('crypto').randomBytes(16)), eva]);
     await tdb.query('UPDATE time_runs SET started_at=DATE_SUB(started_at, INTERVAL 5 HOUR) WHERE kid_id=?', [eva]);
     tt = (await ok('GET', `/api/kids/${eva}/home`)).time.find(x => x.id === game);
     assert.equal(tt.ended, true); assert.equal(tt.left, 0); assert.equal(tt.run, null);
+    // o tempo acabou: o servidor dispara o aviso para os aparelhos (chega mesmo com o app fechado), uma vez só
+    let sent = [];
+    for (let i = 0; i < 40 && !sent.length; i++) { [sent] = await tdb.query("SELECT title FROM push_sent WHERE title LIKE 'O tempo de % acabou'"); if (!sent.length) await new Promise(r => setTimeout(r, 100)); }
+    assert.equal(sent.length, 1, 'aviso de tempo esgotado'); assert.ok(sent[0].title.includes('Eva'));
+    await tdb.query("DELETE FROM push_subs WHERE endpoint='https://127.0.0.1:1/push/teste'");
     assert.equal((await api('POST', tUrl, { action: 'start' })).status, 400);
     assert.equal((await ok('GET', '/api/kids')).find(k => k.id === eva).timers.length, 0);
     await tdb.end();

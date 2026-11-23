@@ -1,4 +1,4 @@
-// Notificações no celular/tablet (Web Push, plano Plus).
+// Notificações no celular/tablet (Web Push, plano anual). Saem do servidor: chegam mesmo com o app fechado.
 // Agendador: a cada 30 s confere avisos (alarmes) e tarefas com horário de hoje e avisa os aparelhos da família.
 const webpush = require('web-push');
 const { pool, getSetting } = require('./db');
@@ -62,7 +62,14 @@ async function tick() {
       await sendToFamily(f.id, { title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time}`, tag: `a${a.id}`, alarm: true, url: '/app#/' });
     }
 
-    // 2) Tarefas com horário: avisa `remind_before` minutos antes e de novo na hora, só para quem ainda não fez.
+    // 2) Cronômetro do tempo de tela que zerou sem ninguém com o app aberto: conferir encerra e avisa (ver timeUp)
+    const [runs] = await pool.query('SELECT DISTINCT kid_id FROM time_runs WHERE family_id=?', [f.id]);
+    if (runs.length) {
+      const { kidTime } = require('./routes/kid'); // aqui dentro para não criar dependência circular
+      for (const r of runs) { const [[k]] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE id=? AND family_id=? AND active=1', [r.kid_id, f.id]); if (k) await kidTime(f.id, k); }
+    }
+
+    // 3) Tarefas com horário: avisa `remind_before` minutos antes e de novo na hora, só para quem ainda não fez.
     //    (Tarefa criada em cima da hora perde o aviso antecipado, mas ainda recebe o da hora.)
     const [tasks] = await pool.query('SELECT * FROM tasks WHERE family_id=? AND active=1 AND time IS NOT NULL', [f.id]);
     for (const t of tasks) {
@@ -90,6 +97,15 @@ async function tick() {
   }
 }
 
+// O tempo de tela de um filho acabou: avisa os aparelhos da família uma vez por rodada do cronômetro
+async function timeUp(fid, kid, reward, ts) {
+  if (!ready) return;
+  const [[f]] = await pool.query('SELECT id,email,plan,paid_until,trial_ends FROM families WHERE id=?', [fid]);
+  if (!f || !access(f).plus) return;
+  if (!await once(`tu${kid.id}:${reward.id}:${ts}`)) return;
+  await sendToFamily(fid, { title: `O tempo de ${reward.title} de ${kid.name} acabou`, body: 'Hora de desligar.', tag: `tu${kid.id}`, alarm: true, url: '/app#/' });
+}
+
 function start() {
   init().then(() => {
     const run = () => tick().catch(e => console.error('avisos', e.message));
@@ -97,4 +113,4 @@ function start() {
   }).catch(e => console.error('push init', e.message));
 }
 
-module.exports = { start, init, tick, sendToFamily, publicKey };
+module.exports = { start, init, tick, sendToFamily, publicKey, timeUp };

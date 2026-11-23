@@ -130,14 +130,18 @@ async function timeState(fid, kid, day, rewards, pTime) {
     `SELECT reward_id, SUM(CASE WHEN amount>0 THEN amount ELSE 0 END) earned, -SUM(CASE WHEN amount<0 THEN amount ELSE 0 END) used
      FROM ledger WHERE kid_id=? AND kind='time' AND day=? GROUP BY reward_id`, [kid.id, day]);
   const tm = Object.fromEntries(tl.map(x => [x.reward_id, x]));
-  const [runs] = await pool.query('SELECT reward_id, TIMESTAMPDIFF(SECOND, started_at, NOW()) sec FROM time_runs WHERE kid_id=?', [kid.id]);
+  const [runs] = await pool.query('SELECT reward_id, UNIX_TIMESTAMP(started_at) ts, TIMESTAMPDIFF(SECOND, started_at, NOW()) sec FROM time_runs WHERE kid_id=?', [kid.id]);
   const rn = Object.fromEntries(runs.map(x => [x.reward_id, x]));
   const out = [];
   for (const r of rewards) {
     const earned = r2(tm[r.id]?.earned || 0), pending = r2(pTime[r.id] || 0);
     let used = r2(tm[r.id]?.used || 0), run = rn[r.id] ? Math.max(0, +rn[r.id].sec) : null, ended = false;
     const left = Math.max(0, r2(earned + pending - used));
-    if (run !== null && run >= left * 60) { used = r2(used + await stopRun(fid, kid.id, r.id, left)); run = null; ended = true; }
+    if (run !== null && run >= left * 60) {
+      const ts = rn[r.id].ts;
+      used = r2(used + await stopRun(fid, kid.id, r.id, left)); run = null; ended = true;
+      push.timeUp(fid, kid, r, ts).catch(e => console.error('aviso de tempo', e.message)); // chega mesmo com o app fechado
+    }
     out.push({ id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value, earned, used, pending,
       left: Math.max(0, r2(earned + pending - used)), run, ended });
   }
@@ -299,5 +303,6 @@ router.delete('/kids/:id/complete/:taskId', async (req, res) => {
 
 module.exports = router;
 module.exports.wheelPrizes = wheelPrizes;
+module.exports.kidTime = kidTime;
 module.exports.spinFix = spinFix;
 module.exports.fixItems = fixItems;
