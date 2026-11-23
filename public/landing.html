@@ -64,9 +64,9 @@
         <p class="kicker">O peso</p>
         <h2 class="d" data-fx="subir">Toda casa com criança tem as mesmas três batalhas</h2>
         <ol>
-          <li data-fx="esquerda"><img src="/img/3d/clipboard.png" alt=""><div><h3>O disco arranhado</h3><p>Escova, cama, mochila, banho. Você repete a lista o dia inteiro e, à noite, alguém ainda jura que ninguém avisou.</p></div></li>
-          <li data-fx="esquerda" data-fx-atraso="120"><img src="/img/3d/tv.png" alt=""><div><h3>O “só mais cinco minutinhos”</h3><p>Os cinco minutinhos de videogame viram quarenta. E quem manda desligar vira o vilão da casa.</p></div></li>
-          <li data-fx="esquerda" data-fx-atraso="240"><img src="/img/3d/people.png" alt=""><div><h3>Cada adulto, uma regra</h3><p>O pai cobra, a mãe libera, a avó dá doce. Em uma semana a criança já sabe exatamente para quem pedir.</p></div></li>
+          <li data-fx="esquerda"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><circle cx="24" cy="24" r="4.5"/><path d="M24 12.5a11.5 11.5 0 0 1 11.5 11.5"/><path d="M13 31l5-4 3 3 5-5"/></svg></span><div><h3>O disco arranhado</h3><p>Escova, cama, mochila, banho. Você repete a lista o dia inteiro e, à noite, alguém ainda jura que ninguém avisou.</p></div></li>
+          <li data-fx="esquerda" data-fx-atraso="120"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="15" width="36" height="25" rx="5"/><path d="M17 7l7 8 7-8"/><circle cx="24" cy="27.5" r="7"/><path d="M24 24v4l2.5 2"/></svg></span><div><h3>O “só mais cinco minutinhos”</h3><p>Os cinco minutinhos de videogame viram quarenta. E quem manda desligar vira o vilão da casa.</p></div></li>
+          <li data-fx="esquerda" data-fx-atraso="240"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="15" r="5"/><circle cx="33" cy="15" r="5"/><path d="M6 37c0-5.5 4-9.5 9-9.5s9 4 9 9.5"/><path d="M24 37c0-5.5 4-9.5 9-9.5s9 4 9 9.5"/><path d="M19 7l-4-3M29 7l4-3"/></svg></span><div><h3>Cada adulto, uma regra</h3><p>O pai cobra, a mãe libera, a avó dá doce. Em uma semana a criança já sabe exatamente para quem pedir.</p></div></li>
         </ol>
       </div>
       <div class="load">
@@ -131,35 +131,36 @@
         <li data-fx="subir">
           <span class="n d">1</span>
           <h3>Monte a rotina da casa</h3>
-          <p>Cadastre os filhos e escolha as missões de um catálogo pronto. Depois ajuste à sua casa: tire, inclua e adapte à idade de cada um.</p>
+          <p>Escolha as missões num catálogo pronto e ajuste à sua casa: tire, inclua e adapte à idade de cada um.</p>
           <div class="chips">
             <span><img src="/img/3d/toothbrush.png" alt="">Escovar os dentes</span><span><img src="/img/3d/bed.png" alt="">Arrumar a cama</span>
-            <span><img src="/img/3d/openbook.png" alt="">Ler as escrituras</span><span><img src="/img/3d/pencil.png" alt="">Dever de casa</span>
-            <span><img src="/img/3d/teddy.png" alt="">Catar os brinquedos</span><span><img src="/img/3d/soap.png" alt="">Lavar a louça</span>
+            <span><img src="/img/3d/pencil.png" alt="">Dever de casa</span>
           </div>
         </li>
         <li data-fx="subir" data-fx-atraso="140">
           <span class="n d">2</span>
           <h3>A criança joga</h3>
-          <p>Escolhe o personagem, toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Prepare-se para ouvir “já fiz!” antes de perguntar.</p>
+          <p>Toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Prepare-se para ouvir “já fiz!” antes de perguntar.</p>
           <div class="play" id="play">
             <div class="play-top"><img class="play-av" src="/img/3d/fox.png" alt=""><b class="d">Eva</b><span class="play-pill" id="ppill"><img src="/img/3d/coin.png" alt=""><b class="d" id="pcoins">46</b></span></div>
             <div class="play-card"><span class="play-tile"><img src="/img/3d/soap.png" alt=""></span><span class="play-t">Lavar a louça<small><img src="/img/3d/coin.png" alt="">+3</small></span><button type="button" class="play-go" id="pgo">Concluí!</button></div>
             <p class="play-hint">Toque em <b>Concluí!</b> para testar</p>
+            <svg class="cursor" id="pcur" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 2.5l13.5 11-6 .8 3.6 6.8-2.7 1.4-3.6-6.9-4.8 4z" fill="#fff" stroke="#0d1b4c" stroke-width="1.6" stroke-linejoin="round"/></svg>
           </div>
         </li>
         <li data-fx="subir" data-fx-atraso="280">
           <span class="n d">3</span>
           <h3>Você só aprova</h3>
-          <p>No painel dos pais, protegido por PIN, você confere o que foi feito. A cama ficou pela metade? Um toque em Rejeitar e a missão volta para a lista. Pai, mãe e avó entram cada um com o seu acesso, e a regra é a mesma para todos.</p>
-          <div class="approve"><span><img src="/img/3d/soap.png" alt="">Lavar a louça · Eva</span><b>Aprovar</b></div>
+          <p>No painel dos pais, protegido por PIN, você confere o que foi feito. Ficou pela metade? Um toque em Rejeitar e a missão volta para a lista. Pai, mãe e avó usam a mesma regra.</p>
+          <div class="approve"><span><img src="/img/3d/soap.png" alt="">Lavar a louça · Eva</span><button type="button" id="approveGo">Aprovar</button></div>
         </li>
       </ol>
+      <div class="cleared" id="cleared" hidden><span class="ok-dot" aria-hidden="true">✔</span><p><b>Tudo aprovado.</b> As moedas já estão na conta da Eva.</p><button type="button" class="link" id="again">Ver os passos de novo</button></div>
     </div>
   </section>
 
   <!-- CENA 5 · TEMPO DE TELA -->
-  <section class="clock" data-fx-fixa data-fx-altura="2.6" data-fx-fundo="#e4efdf" data-fx-tinta="#0d1b4c">
+  <section class="clock" id="tempo" data-fx-fixa data-fx-altura="2.6" data-fx-fundo="#e4efdf" data-fx-tinta="#0d1b4c">
     <div class="fx-palco">
       <div class="in clock-grid">
         <div class="clock-copy">
@@ -178,23 +179,56 @@
     </div>
   </section>
 
-  <!-- CENA 6 · SEMANAS DEPOIS -->
-  <section class="later" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
-    <div class="in later-grid">
-      <div class="later-head">
-        <p class="kicker dark">Semanas depois</p>
-        <h2 class="d" data-fx="subir">Aos poucos, a rotina entra no lugar</h2>
-        <p>A novidade passa em uma semana. É isto que mantém o jogo de pé depois dela.</p>
+  <!-- CENA 6 · SEMANAS DEPOIS (trilho com quatro histórias) -->
+  <section class="later" id="depois" data-fx-fixa data-fx-altura="6" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+    <div class="fx-palco later-stage">
+      <div class="in later-top">
+        <div><p class="kicker dark">Semanas depois</p><h2 class="d">Aos poucos, a rotina entra no lugar</h2></div>
+        <ol class="chapters" aria-hidden="true"><li>Metas</li><li>Roleta do dia</li><li>Mesada</li><li>Cronômetro</li></ol>
       </div>
+      <div class="rail" id="rail">
+        <article class="panel" data-p="0">
+          <div class="p-copy"><h3 class="d">Metas de incentivo</h3><p>Parque de diversão depois de 150 missões, sorvete por 20 moedas. Cada missão feita empurra a meta para a frente, e a criança vê o prêmio chegando.</p></div>
+          <div class="p-vis v-goal">
+            <div class="v-checks"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="v-road"><s class="v-fill"></s><img class="v-me" src="/img/3d/fox.png" alt=""><img class="v-prize" src="/img/3d/ferris.png" alt=""></div>
+            <p class="v-lab"><b class="d" id="gN">0</b> de 150 missões até o <b>Parque de diversão</b></p>
+          </div>
+        </article>
+        <article class="panel" data-p="1">
+          <div class="p-copy"><h3 class="d">Roleta do dia</h3><p>Fez todas as missões do dia? A roleta aparece. Os prêmios quem escolhe é você: moedas, sorvete, mais tempo de jogo, escolher o jantar.</p></div>
+          <div class="p-vis v-wheel">
+            <p class="w-flag">Todas as missões feitas!</p>
+            <div class="w-box"><svg class="w-svg" id="wheel" viewBox="0 0 300 300" aria-hidden="true"></svg><span class="w-pin" aria-hidden="true"></span></div>
+            <p class="w-won" id="wWon">Ganhou: <b>Escolhe o jantar</b></p>
+          </div>
+        </article>
+        <article class="panel" data-p="2">
+          <div class="p-copy"><h3 class="d">Mesada que ensina</h3><p>Você decide quanto vale cada moeda (por exemplo, R$ 0,50). Elas juntam na carteira até o dia de pagar. Você paga, registra no app e o histórico fica guardado.</p></div>
+          <div class="p-vis v-wallet">
+            <div class="wl-top"><img src="/img/3d/fox.png" alt=""><b class="d">Carteira da Eva</b><span class="m-pill"><img src="/img/3d/coin.png" alt=""><b class="d" id="wCoins">0</b></span></div>
+            <div class="wl-calc" id="wCalc"><span><b id="wN">46</b> moedas × R$ 0,50</span><b class="d">= R$ 23,00</b></div>
+            <button type="button" class="wl-pay" id="wPay" tabindex="-1">Pagar R$ 23,00</button>
+          </div>
+        </article>
+        <article class="panel" data-p="3">
+          <div class="p-copy"><h3 class="d">Cronômetro na missão</h3><p>Ler por 45 minutos: a criança dá play, pode pausar e continuar, e a missão se conclui sozinha quando o tempo acaba.</p></div>
+          <div class="p-vis v-ring">
+            <div class="r-box"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="r-bg"/><circle cx="60" cy="60" r="52" class="r-fg" id="rFg"/></svg>
+              <div class="r-mid"><img src="/img/3d/openbook.png" alt=""><b class="d" id="rT">45:00</b><span id="rS">Lendo</span></div></div>
+            <p class="r-done" id="rDone">✔ Missão concluída · +2 moedas</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="more" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+    <div class="in">
       <ul class="feats">
-        <li data-fx="surgir"><img src="/img/3d/ferris.png" alt=""><div><h3>Metas que valem a pena</h3><p>Parque de diversão depois de 150 missões. Sorvete por 20 moedas. A criança acompanha o caminho até o prêmio.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/gift.png" alt=""><div><h3>Roleta do dia</h3><p>Fez todas as missões? Gira a roleta e ganha uma surpresa que você escolheu, como 50 moedas na conta.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/shield.png" alt=""><div><h3>Roleta da correção</h3><p>Dia de implicância com o irmão ou de desobediência? Você gira a roleta e a consequência combinada sai dela, sem sermão no calor da hora.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/headphone.png" alt=""><div><h3>Missões que falam</h3><p>Quem ainda não lê toca na missão e ouve o nome dela. O caçula entra no jogo junto com os irmãos.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/stopwatch.png" alt=""><div><h3>Cronômetro na missão</h3><p>Ler por 45 minutos: a criança dá play, pode pausar e continuar, e a missão se conclui quando o tempo acaba.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/coin.png" alt=""><div><h3>Mesada que ensina</h3><p>Você decide quanto vale cada moeda em reais. Elas acumulam até o dia de pagar, e a criança aprende a juntar para a meta.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/lock.png" alt=""><div><h3>Painel dos pais escondido</h3><p>Só você aprova, paga e muda as regras. Dá para instalar o painel no seu celular com cara de outro app, como Banco ou Notas.</p></div></li>
-        <li data-fx="surgir"><img src="/img/3d/phone.png" alt=""><div><h3>Avisos no celular</h3><p>“Bernardo, hora da escola!” e um aviso para você sempre que uma missão espera aprovação. No plano anual.</p></div></li>
+        <li data-fx="subir"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="26" r="15"/><path d="M24 26V11M24 26l13 7.5M24 26l-13 7.5"/><path d="M20 5h8l-4 6z"/></svg></span><div><h3>Roleta da correção</h3><p>Dia de implicância com o irmão ou de desobediência? Você gira a roleta e a consequência combinada sai dela, sem sermão no calor da hora.</p></div></li>
+        <li data-fx="subir" data-fx-atraso="120"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 19h7l10-8v26l-10-8H8z"/><path d="M32 18a8 8 0 0 1 0 12M36.5 13.5a14 14 0 0 1 0 21"/></svg></span><div><h3>Missões que falam</h3><p>Quem ainda não lê toca na missão e ouve o nome dela. O caçula entra no jogo junto com os irmãos.</p></div></li>
+        <li data-fx="subir" data-fx-atraso="240"><span class="ico" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="21" width="30" height="21" rx="5"/><path d="M16 21v-6a8 8 0 0 1 16 0v6"/><circle cx="24" cy="31" r="2.5"/><path d="M24 33.5V37"/></svg></span><div><h3>Painel dos pais escondido</h3><p>Só você aprova, paga e muda as regras. Dá para instalar o painel no seu celular com cara de outro app, como Banco ou Notas.</p></div></li>
       </ul>
     </div>
 
@@ -229,7 +263,7 @@
           <h3 class="d">Anual</h3>
           <div class="price"><small>R$</small><b class="d">{{ANUAL_MES}}</b><small>/mês</small></div>
           <p class="bill">Pagamento único de <b>R$ {{ANUAL}}</b> por ano</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/phone.png" alt="">Avisos no celular e no tablet</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
+          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
           <a class="btn green big" href="/app#/comprar/annual">Assinar o anual</a>
         </article>
         <article class="plan" data-fx="crescer" data-fx-atraso="120">
@@ -250,7 +284,7 @@
       <details><summary>Por que não tem teste grátis?</summary><p>Porque a garantia funciona melhor para você: o app fica liberado por completo desde o primeiro dia, e se não servir, o dinheiro volta inteiro.</p></details>
       <details><summary>Como eu pago?</summary><p>Pelo Mercado Pago, com Pix, cartão de crédito ou boleto. O acesso é liberado assim que o pagamento é confirmado.</p></details>
       <details><summary>A cobrança é automática?</summary><p>Não. Você paga o período que escolheu (um ano ou um mês) e o app avisa quando estiver perto de vencer. Nada é cobrado sem você confirmar.</p></details>
-      <details><summary>O que o plano anual tem a mais?</summary><p>Além de sair bem mais barato por mês, ele traz os avisos que tocam no celular e no tablet: lembretes antes das tarefas com horário (natação às 18h, por exemplo), alarmes como "Bernardo, hora de ir para a escola" e um aviso no seu celular sempre que uma criança conclui uma missão. No iPhone e no iPad, é só adicionar o GameTask à Tela de Início.</p></details>
+      <details><summary>Qual a diferença entre o anual e o mensal?</summary><p>O preço. O anual é pago de uma vez e sai por R$ {{ANUAL_MES}} por mês; o mensal custa R$ {{MENSAL}} e você renova mês a mês, sem fidelidade.</p></details>
       <details><summary>Quantos filhos e aparelhos posso usar?</summary><p>Quantos quiser. A assinatura é da família: todos os filhos e todos os aparelhos da casa estão incluídos.</p></details>
       <details><summary>As moedas são dinheiro de verdade?</summary><p>Você decide quanto vale cada moeda (por exemplo, R$ 0,50) e paga quando quiser. O app guarda o saldo e o histórico de pagamentos.</p></details>
       <details><summary>Serve para crianças pequenas?</summary><p>Sim. As missões têm ícones grandes e um botão só. Quem ainda não lê se guia pelas figuras e toca na missão para ouvir o nome dela.</p></details>
@@ -341,8 +375,59 @@
     timer.classList.toggle('low', t > .8 && t < 1);
   };
 
+  // ---------- CENA 6: trilho com quatro histórias; cada painel para na tela enquanto a sua cena acontece ----------
+  const later = document.getElementById('depois'), rail = document.getElementById('rail'), panels = [...rail.children], chaps = [...document.querySelectorAll('.chapters li')];
+  const N = panels.length, MOVE = .07, DWELL = (1 - MOVE * (N - 1)) / N;
+  const ease = (t) => 1 - Math.pow(1 - t, 3);
+  // roleta: 6 fatias com os prêmios de exemplo
+  const SL = ["50 moedas","Sorvete","+10 min de jogo","Escolhe o jantar","Filme em família","Dorme mais tarde"], COLS = ['#ff4fae', '#ffd21f', '#3bd15f', '#4aa8ff', '#8b5bff', '#ff8a1f'];
+  const wheel = document.getElementById('wheel');
+  const pt = (a, r) => { const t = (a - 90) * Math.PI / 180; return [(150 + r * Math.cos(t)).toFixed(1), (150 + r * Math.sin(t)).toFixed(1)]; };
+  wheel.innerHTML = SL.map((l, i) => { const a0 = i * 60, a1 = a0 + 60, [x0, y0] = pt(a0, 140), [x1, y1] = pt(a1, 140), [tx, ty] = pt(a0 + 30, 88);
+    return `<path d="M150 150L${x0} ${y0}A140 140 0 0 1 ${x1} ${y1}Z" fill="${COLS[i]}" stroke="#0d1b4c" stroke-width="3"/><text x="${tx}" y="${ty}" transform="rotate(${a0 + 30} ${tx} ${ty})" text-anchor="middle" dominant-baseline="middle">${l}</text>`; }).join('')
+    + '<circle cx="150" cy="150" r="140" fill="none" stroke="#0d1b4c" stroke-width="5"/><circle cx="150" cy="150" r="16" fill="#fff" stroke="#0d1b4c" stroke-width="4"/>';
+  const WIN = 3, SPIN = 1080 + (360 - (WIN * 60 + 30));
+  const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.round(s % 60)).padStart(2, '0');
+  const rFg = document.getElementById('rFg'), CIRC = 2 * Math.PI * 52; rFg.style.strokeDasharray = CIRC;
+  const checks = [...panels[0].querySelectorAll('.v-checks i')], road = panels[0].querySelector('.v-road'), me = panels[0].querySelector('.v-me'), fill = panels[0].querySelector('.v-fill');
+  const scenes = [
+    (t) => { // metas
+      checks.forEach((c, i) => c.classList.toggle('on', t * 12.5 > i + .5));
+      const g = .08 + .72 * t; fill.style.transform = `scaleX(${g})`; me.style.transform = `translateX(${g * (road.clientWidth - 70)}px)`;
+      document.getElementById('gN').textContent = Math.round(t * 120);
+    },
+    (t) => { // roleta
+      const s = clamp((t - .12) / .78, 0, 1); wheel.style.transform = `rotate(${ease(s) * SPIN}deg)`;
+      panels[1].classList.toggle('won', s >= 1);
+    },
+    (t) => { // mesada
+      const c = Math.round(46 * clamp(t / .55, 0, 1)), paid = t > .85;
+      document.getElementById('wCoins').textContent = paid ? 0 : c;
+      panels[2].classList.toggle('calc', t > .55); panels[2].classList.toggle('paid', paid);
+      document.getElementById('wPay').textContent = paid ? '✔ Pagamento registrado' : 'Pagar R$ 23,00';
+    },
+    (t) => { // cronômetro: corre, pausa um pouco, continua e conclui
+      const run = t < .35 ? t / .35 * .45 : t < .5 ? .45 : .45 + (t - .5) / .45 * .55, r = clamp(run, 0, 1);
+      document.getElementById('rT').textContent = fmt(2700 * (1 - r));
+      rFg.style.strokeDashoffset = (CIRC * (1 - r)).toFixed(1);
+      document.getElementById('rS').textContent = r >= 1 ? 'Concluída' : t >= .35 && t < .5 ? 'Pausado' : 'Lendo';
+      panels[3].classList.toggle('paused', t >= .35 && t < .5); panels[3].classList.toggle('done', r >= 1);
+    },
+  ];
+  const runLater = () => {
+    if (still) { scenes.forEach(f => f(1)); return; }
+    const p = prog(later); let pos = 0;
+    for (let i = 0; i < N; i++) {
+      const a = i * (DWELL + MOVE), t = clamp((p - a) / DWELL, 0, 1);
+      scenes[i](t);
+      if (p >= a + DWELL && i < N - 1) pos = i + clamp((p - a - DWELL) / MOVE, 0, 1); else if (p >= a) pos = Math.max(pos, i);
+    }
+    rail.style.transform = `translateX(${(-pos * 100).toFixed(3)}vw)`;
+    chaps.forEach((c, i) => c.classList.toggle('on', Math.round(pos) === i));
+  };
+
   let raf = 0;
-  const frame = () => { raf = 0; fillList(); runTurn(); runClock(); };
+  const frame = () => { raf = 0; fillList(); runTurn(); runClock(); runLater(); };
   const ask = () => { if (!raf) raf = requestAnimationFrame(frame); };
   addEventListener('scroll', ask, { passive: true }); addEventListener('resize', ask); addEventListener('load', ask); ask();
 
@@ -372,10 +457,37 @@
     setTimeout(() => { go.textContent = 'Concluí!'; go.classList.remove('done'); box.classList.remove('won'); busy = false; }, 2200);
   };
   go.onclick = () => play(true);
+  // quem não toca vê um cursor clicando sozinho cada vez que o cartão entra na tela
+  const cur = document.getElementById('pcur');
+  const demo = () => {
+    if (busy || still) return;
+    const b = box.getBoundingClientRect(), g = go.getBoundingClientRect();
+    const tx = g.left - b.left + g.width * .55, ty = g.top - b.top + g.height * .6;
+    cur.animate([{ transform: `translate(${b.width - 20}px,${b.height + 10}px)`, opacity: 0 }, { opacity: 1, offset: .15 },
+      { transform: `translate(${tx}px,${ty}px)`, opacity: 1, offset: .75 }, { transform: `translate(${tx}px,${ty}px) scale(.82)`, opacity: 1, offset: .88 },
+      { transform: `translate(${tx}px,${ty}px)`, opacity: 1 }], { duration: 1300, easing: 'cubic-bezier(.45,0,.2,1)', fill: 'forwards' })
+      .onfinish = () => { play(false); setTimeout(() => cur.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 400, fill: 'forwards' }), 900); };
+  };
   if (!still && 'IntersectionObserver' in window) {
-    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) { io.disconnect(); setTimeout(() => play(false), 500); } }, { threshold: .7 });
-    io.observe(box);
+    let inView = false;
+    new IntersectionObserver((en) => { const now = en[0].isIntersecting; if (now && !inView) setTimeout(demo, 400); inView = now; }, { threshold: .8 }).observe(box);
   }
+
+  // passo 3: "Aprovar" aprova os três cartões, que somem como missões concluídas
+  const steps = document.querySelector('.steps'), cleared = document.getElementById('cleared'), ap = document.getElementById('approveGo');
+  ap.onclick = async () => {
+    if (ap.disabled) return; ap.disabled = true; ap.textContent = 'Aprovado'; ding();
+    const lis = [...steps.children];
+    if (!still) {
+      await Promise.all(lis.map((li, i) => li.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateY(-10px) scale(1.02)', opacity: 1, offset: .3 }, { transform: 'translateY(-60px) scale(.9)', opacity: 0 }],
+        { duration: 520, delay: (lis.length - 1 - i) * 110, easing: 'cubic-bezier(.5,0,.75,0)', fill: 'forwards' }).finished));
+      const hgt = steps.offsetHeight;
+      await steps.animate([{ height: hgt + 'px' }, { height: '0px' }], { duration: 450, easing: 'cubic-bezier(.3,0,.2,1)' }).finished;
+    }
+    steps.hidden = true; cleared.hidden = false;
+    lis.forEach(li => li.getAnimations().forEach(a => a.cancel()));
+  };
+  document.getElementById('again').onclick = () => { steps.hidden = false; cleared.hidden = true; ap.disabled = false; ap.textContent = 'Aprovar'; };
 })();
 </script>
 </body>

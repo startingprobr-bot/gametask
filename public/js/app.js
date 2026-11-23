@@ -1322,7 +1322,7 @@ async function viewPaywall() {
       <article class="plan best"><span class="ribbon">Melhor preço${save ? ` · economize ${save}%` : ''}</span>
         <h2 class="d">Anual</h2><div class="price"><small>R$</small><b class="d num">${money(perMonth)}</b><small>/mês</small></div>
         <p class="bill">Pagamento único de <b>${brl(p.annual)}</b> por ano</p>
-        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('phone')}Avisos no celular e no tablet</li></ul>
+        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('check')}Pix, cartão ou boleto</li></ul>
         <button class="btn green" data-plan="annual">Assinar anual</button></article>
       <article class="plan"><h2 class="d">Mensal</h2><div class="price"><small>R$</small><b class="d num">${money(p.monthly)}</b><small>/mês</small></div>
         <p class="bill">Pago a cada mês, sem fidelidade</p>
@@ -1734,7 +1734,7 @@ function showPix(r, onPaid) {
 // ---------- Carrinho (vindo da página de vendas): paga primeiro, cria a senha depois ----------
 const trialText = (d) => { d = Math.round(+d) || 0; return d >= 30 && d % 30 === 0 ? (d === 30 ? '1 mês' : `${d / 30} meses`) : `${d} ${d === 1 ? 'dia' : 'dias'}`; };
 const CART = {
-  annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Avisos no celular e no tablet'] },
+  annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Pix, cartão ou boleto'] },
   monthly: { t: 'Mensal', note: 'por mês', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Sem fidelidade'] },
 };
 // Cupom de desconto: "Tem um cupom?" abre o campo; aplicado, chama onChange({ code, percent }) ou onChange(null)
