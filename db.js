@@ -138,7 +138,8 @@ const COLUMNS = [
   ['tasks', 'minutes', 'INT NOT NULL DEFAULT 0'],
   ['payments', 'coupon', 'VARCHAR(30) NULL'],              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
-const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '90' };
+// Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)
+const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '0', guarantee_days: '14' };
 
 async function migrate() {
   for (const sql of SCHEMA) await pool.query(sql);
@@ -149,6 +150,11 @@ async function migrate() {
     // quem tinha a aprovação automática ligada para a família continua igual, agora em cada filho
     if (t === 'kids' && c === 'auto_approve') await pool.query('UPDATE kids k JOIN families f ON f.id=k.family_id SET k.auto_approve=f.auto_approve');
   }
+  // troca do teste grátis pela garantia: na primeira subida com a garantia, o teste das NOVAS famílias vai a zero
+  // (quem já está no teste continua até o fim do prazo)
+  const [[hadTrial]] = await pool.query("SELECT 1 x FROM app_settings WHERE k='trial_days'");
+  const [[hadG]] = await pool.query("SELECT 1 x FROM app_settings WHERE k='guarantee_days'");
+  if (hadTrial && !hadG) await pool.query("UPDATE app_settings SET v='0' WHERE k='trial_days'");
   for (const [k, v] of Object.entries(DEFAULTS)) await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?)', [k, v]);
   await pool.query("ALTER TABLE payments MODIFY plan ENUM('monthly','annual','plus') NOT NULL");
   // Chaves VAPID das notificações: geradas uma vez e guardadas no banco (dispensa configurar variável)

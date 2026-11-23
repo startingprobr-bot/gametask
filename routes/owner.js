@@ -9,7 +9,7 @@ const r2 = (n) => Math.round((+n || 0) * 100) / 100;
 
 router.get('/summary', wrap(async (req, res) => {
   const all = await settings();
-  const s = { price_monthly: all.price_monthly, price_annual: all.price_annual, price_plus: all.price_plus, trial_days: all.trial_days };
+  const s = { price_monthly: all.price_monthly, price_annual: all.price_annual, price_plus: all.price_plus, trial_days: all.trial_days, guarantee_days: all.guarantee_days };
   const [fams] = await pool.query('SELECT id,email,plan,paid_until,trial_ends,created_at,last_seen FROM families');
   const t = today();
   const in7 = new Date(Date.parse(t + 'T00:00:00Z') + 7 * 864e5).toISOString().slice(0, 10);
@@ -116,9 +116,10 @@ router.delete('/coupons/:id', wrap(async (req, res) => {
 }));
 
 router.put('/settings', wrap(async (req, res) => {
-  const m = r2(req.body.price_monthly), a = r2(req.body.price_annual), p = r2(req.body.price_plus ?? 67), d = Math.round(+req.body.trial_days);
+  const m = r2(req.body.price_monthly), a = r2(req.body.price_annual), p = r2(req.body.price_plus ?? 67), d = Math.round(+(req.body.trial_days ?? 0)), g = Math.round(+(req.body.guarantee_days ?? 14));
   if (!(m > 0) || !(a > 0) || !(p > 0) || !(d >= 0 && d <= 3650)) return res.status(400).json({ error: 'Preços maiores que zero e dias de teste entre 0 e 3650' });
-  for (const [k, v] of [['price_monthly', m.toFixed(2)], ['price_annual', a.toFixed(2)], ['price_plus', p.toFixed(2)], ['trial_days', String(d)]])
+  if (!(g >= 0 && g <= 90)) return res.status(400).json({ error: 'Dias de garantia entre 0 e 90' });
+  for (const [k, v] of [['price_monthly', m.toFixed(2)], ['price_annual', a.toFixed(2)], ['price_plus', p.toFixed(2)], ['trial_days', String(d)], ['guarantee_days', String(g)]])
     await pool.query('INSERT INTO app_settings (k,v) VALUES (?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)', [k, v]);
   res.json({ ok: true });
 }));

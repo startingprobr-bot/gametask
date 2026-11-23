@@ -34,6 +34,7 @@ const step = (m) => console.log('✔', m);
         const j = JSON.parse(b); lastPref = { ref: j.external_reference, amount: j.items[0].unit_price };
         return res.end(JSON.stringify({ init_point: 'https://mp.test/pay/' + j.external_reference }));
       }
+      if (req.method === 'POST' && /^\/v1\/payments\/\w+\/refunds$/.test(req.url)) return res.end(JSON.stringify({ id: 1, status: 'approved' }));
       if (req.method === 'POST' && req.url === '/v1/payments') {
         const j = JSON.parse(b);
         if (j.token) { // cartão: 'bad' é recusado
@@ -55,6 +56,11 @@ const step = (m) => console.log('✔', m);
   const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 360; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
+    { // os cenários de teste grátis abaixo precisam do teste ligado (o padrão agora é 0, com garantia)
+      const sdb = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+      const [[g]] = await sdb.query("SELECT v FROM app_settings WHERE k='trial_days'"); assert.equal(g.v, '0');
+      await sdb.query("UPDATE app_settings SET v='90' WHERE k='trial_days'"); await sdb.end();
+    }
 
     // sem login não acessa nada
     assert.equal((await api('GET', '/api/kids')).status, 401); step('API exige login da família');
@@ -527,6 +533,13 @@ const step = (m) => console.log('✔', m);
     const cpx = await ok('POST', '/api/billing/guest-pix', { plan: 'annual', email: 'cupom@x.co', coupon: 'TESTE10' });
     assert.equal(cpx.amount, Math.round(annual * 90) / 100); // cobra com 10% de desconto
     assert.equal((await ok('GET', `/api/billing/pix/${cpx.ref}`)).status, 'approved');
+    // garantia: a primeira compra paga pode ser devolvida no prazo, sem motivo, e o acesso pago sai
+    const gs = await ok('GET', '/api/billing/status');
+    assert.equal(gs.guarantee.ref, cpx.ref); assert.equal(gs.access.status, 'paid');
+    assert.equal((await ok('POST', '/api/billing/refund', {})).amount, cpx.amount);
+    const gs2 = await ok('GET', '/api/billing/status');
+    assert.equal(gs2.guarantee, null); assert.notEqual(gs2.access.status, 'paid'); assert.equal(gs2.payments[0].status, 'refunded');
+    assert.equal((await api('POST', '/api/billing/refund', {})).status, 400); // não devolve duas vezes
     assert.equal((await api('POST', '/api/billing/guest-pix', { plan: 'annual', email: 'cupom2@x.co', coupon: 'GRATIS' })).status, 400); // 100% não gera Pix
     cookie = '';
     const fr = await ok('POST', '/api/billing/guest-free', { plan: 'plus', email: 'gratis@x.co', coupon: 'GRATIS' });

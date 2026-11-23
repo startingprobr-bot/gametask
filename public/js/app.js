@@ -417,7 +417,7 @@ function viewLogin(mode = 'login') {
       ${reg ? '' : '<p class="hint" style="margin-top:14px;text-align:center">Entre uma vez em cada aparelho. Ele fica conectado e já abre nos seus filhos.</p>'}
     </form>
     <button class="switch" id="sw">${reg ? 'Já tenho uma conta' : 'Primeira vez? Criar família'}</button>
-    ${reg ? '<p class="trial-note">Comece pelo período grátis. Não pedimos cartão de crédito.</p>' : ''}
+    ${reg ? '<p class="trial-note">Tem garantia: se não gostar, devolvemos o seu dinheiro.</p>' : ''}
     <a class="switch home-link" href="/">Conhecer o GameTask</a>
   </div></div>`;
   $('#sw').onclick = () => viewLogin(reg ? 'login' : 'register');
@@ -1211,7 +1211,7 @@ async function adminSettings(pane, refresh) {
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     <div id="alarms"></div>
-    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p></section>` : ''}
+    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
     <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
   const fg = $('#forget', pane); if (fg) fg.onclick = guard(async () => { await api('DELETE', '/auth/parent/device'); store.set('gt-pdev', ''); toast('Pronto: o app vai pedir o PIN ao abrir'); await route(); });
   const dgUrl = () => `${location.origin}/painel?i=${$('[name=dg]:checked', pane).value}`;
@@ -1267,6 +1267,7 @@ async function adminSettings(pane, refresh) {
   });
   $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Este aparelho vai pedir o e-mail e a senha de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
+  if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
   await adminAlarms($('#alarms'), refresh);
 }
 
@@ -1293,40 +1294,54 @@ function planText(a = {}) {
   return 'O período de uso terminou.';
 }
 const money = (n) => (+n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// Garantia: no prazo, mostra até quando vale e o botão de devolver o dinheiro (sem perguntar o motivo)
+function guaranteeBox(el, g) {
+  if (!el || !g) return;
+  el.innerHTML = `<div class="guar">${im('shield')}<p>Você está na garantia até <b>${dmy(g.until)}</b>. Se o GameTask não servir para a sua casa, devolvemos <b>${brl(g.amount)}</b>, sem perguntas.</p><button type="button" class="link" data-refund>Quero meu dinheiro de volta</button></div>`;
+  $('[data-refund]', el).onclick = () => {
+    if (!ME.parent) return viewPin();
+    sheet('Devolver o seu dinheiro?', `<p class="lead" style="margin-top:6px">Devolvemos <b>${brl(g.amount)}</b> pelo Mercado Pago, na mesma forma de pagamento. No Pix volta na hora; no cartão, aparece na fatura conforme o banco.</p><p class="lead">O plano pago termina agora. As missões e moedas ficam guardadas caso queira voltar.</p>`,
+      async () => { await api('POST', '/billing/refund', {}); toast('Pronto: o estorno foi pedido ao Mercado Pago'); await route(); }, { saveLabel: 'Devolver meu dinheiro', danger: true });
+  };
+}
 async function viewPaywall() {
   const s = await api('GET', '/billing/status'), a = s.access, p = s.prices;
   const perMonth = Math.floor(p.annual / 12 * 100) / 100, save = Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100));
-  const head = a.active ? 'Planos do GameTask' : a.plan ? 'Sua assinatura venceu' : 'O período grátis terminou';
-  const sub = a.active ? planText(a) : 'As missões e as moedas das crianças estão guardadas. Assine para continuar de onde pararam.';
+  const head = a.active ? 'Planos do GameTask' : a.plan ? 'Sua assinatura venceu' : a.until ? 'O período grátis terminou' : 'Escolha o seu plano';
+  const sub = a.active ? planText(a) : a.plan || a.until ? 'As missões e as moedas das crianças estão guardadas. Assine para continuar de onde pararam.'
+    : p.guarantee_days ? `Se não gostar em até ${p.guarantee_days} dias, devolvemos o seu dinheiro. Sem perguntas.` : 'Assine para começar.';
+  const freeCard = a.status === 'trial';
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="wrap paywall">
     <div class="pw-head">${im(a.active ? 'rocket' : 'lock')}<h1 class="d stroke">${head}</h1><p>${sub}</p></div>
     <div class="plans">
-      <article class="plan free ${a.status === 'trial' ? 'current' : ''}">${a.status === 'trial' ? '<span class="ribbon blue">Você está aqui</span>' : ''}
+      ${freeCard ? `<article class="plan free current"><span class="ribbon blue">Você está aqui</span>
         <h2 class="d">Grátis</h2><div class="price"><small>R$</small><b class="d num">0</b><small>por ${trialText(p.trial_days)}</small></div>
         <p class="bill">${a.status === 'trial' ? `Faltam <b>${a.days_left} ${a.days_left === 1 ? 'dia' : 'dias'}</b>, até ${dmy(a.until)}` : 'Para conhecer, sem cartão'}</p>
         <ul><li>${im('check')}Tudo liberado</li><li>${im('check')}Depois, escolha um plano</li></ul>
-        ${a.status === 'trial' ? '<button class="btn ghost" id="keepFree">Continuar no grátis</button>' : `<button class="btn ghost" disabled>${a.active ? 'Você já é assinante' : 'Período grátis usado'}</button>`}</article>
-      <article class="plan best"><span class="ribbon">Mais escolhido${save ? ` · economize ${save}%` : ''}</span>
+        <button class="btn ghost" id="keepFree">Continuar no grátis</button></article>` : ''}
+      <article class="plan best"><span class="ribbon">Melhor preço${save ? ` · economize ${save}%` : ''}</span>
         <h2 class="d">Anual</h2><div class="price"><small>R$</small><b class="d num">${money(perMonth)}</b><small>/mês</small></div>
         <p class="bill">Pagamento único de <b>${brl(p.annual)}</b> por ano</p>
         <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('check')}Pix, cartão ou boleto</li></ul>
         <button class="btn green" data-plan="annual">Assinar anual</button></article>
-      <article class="plan"><h2 class="d">Mensal</h2><div class="price"><small>R$</small><b class="d num">${money(p.monthly)}</b><small>/mês</small></div>
-        <p class="bill">Pago a cada mês, sem fidelidade</p>
-        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
-        <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
       <article class="plan plus"><span class="ribbon violet">Completo</span>
         <h2 class="d">Plus</h2><div class="price"><small>R$</small><b class="d num">${money(Math.floor(p.plus / 12 * 100) / 100)}</b><small>/mês</small></div>
         <p class="bill">Pagamento único de <b>${brl(p.plus)}</b> por ano</p>
         <ul><li>${im('check')}Tudo do plano anual</li><li>${im('phone')}Avisos no celular e no tablet</li><li>${im('clock')}Lembrete antes de cada horário</li><li>${im('lock')}Aviso para os pais aprovarem</li></ul>
         <button class="btn" data-plan="plus">Assinar Plus</button></article>
+      <article class="plan"><h2 class="d">Mensal</h2><div class="price"><small>R$</small><b class="d num">${money(p.monthly)}</b><small>/mês</small></div>
+        <p class="bill">Pago a cada mês, sem fidelidade</p>
+        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
+        <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
     </div>
     <div class="cup pw-cup" id="cup"></div>
-    <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago.${a.status === 'trial' ? ' Assinando agora, o plano começa quando os dias grátis acabarem: você não perde nenhum.' : ' O acesso é liberado assim que o pagamento é confirmado.'}</p>
+    <p class="pw-note">${im('shield')}Pagamento seguro pelo Mercado Pago.${a.status === 'trial' ? ' Assinando agora, o plano começa quando os dias grátis acabarem: você não perde nenhum.' : ' O acesso é liberado assim que o pagamento é confirmado.'}${p.guarantee_days ? ` Garantia de ${p.guarantee_days} dias: se não gostar, devolvemos o dinheiro.` : ''}</p>
+    <div id="guar"></div>
     <div class="pw-actions">${a.active ? '<button class="btn ghost sm" id="back">Voltar</button>' : ''}<button class="switch" id="out">Desconectar este aparelho</button></div>
   </div></div>`;
   let cup = null;
   couponBox($('#cup'), (c) => { cup = c; }, null);
+  guaranteeBox($('#guar'), s.guarantee);
   const paidOk = async () => { await route(); burst('trophy', 'Assinatura ativa!', 'Obrigado! Seu acesso está garantido.', 'Bora jogar'); };
   $$('[data-plan]').forEach(b => b.onclick = guard(async () => {
     if (!ME.parent) return viewPin(); // só um responsável assina (volta para os planos depois do PIN)
@@ -1533,18 +1548,19 @@ async function ownerCoupons(pane) {
 }
 async function ownerPrices(pane) {
   const s = (await api('GET', '/owner/summary')).settings;
-  pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Preços e teste grátis</h2></div>
+  pane.innerHTML = `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Preços e garantia</h2></div>
     <p class="lead">Valem para novas cobranças e para a página de vendas. Quem já pagou mantém o período comprado.</p>
     <div class="grid2"><div class="field"><label for="pa">Plano anual (R$ por ano)</label><input id="pa" name="price_annual" type="number" step="0.01" min="1" value="${s.price_annual}" inputmode="decimal"><p class="hint" id="pah"></p></div>
     <div class="field"><label for="pm">Plano mensal (R$ por mês)</label><input id="pm" name="price_monthly" type="number" step="0.01" min="1" value="${s.price_monthly}" inputmode="decimal"></div>
     <div class="field"><label for="pp">Plano Plus (R$ por ano)</label><input id="pp" name="price_plus" type="number" step="0.01" min="1" value="${s.price_plus}" inputmode="decimal"><p class="hint">Anual com avisos no celular e no tablet.</p></div></div>
-    <div class="field"><label for="td">Dias de teste grátis para novas famílias</label><input id="td" name="trial_days" type="number" min="0" step="1" value="${s.trial_days}" inputmode="numeric"><p class="hint">90 dias = 3 meses. Não muda o prazo de quem já se cadastrou.</p></div>
+    <div class="grid2"><div class="field"><label for="gd">Dias de garantia</label><input id="gd" name="guarantee_days" type="number" min="0" max="90" step="1" value="${s.guarantee_days ?? 14}" inputmode="numeric"><p class="hint">Na primeira compra, a família pode pedir o dinheiro de volta dentro deste prazo, sem dizer o motivo. O estorno sai na hora pelo Mercado Pago. 0 = sem garantia.</p></div>
+    <div class="field"><label for="td">Dias de teste grátis</label><input id="td" name="trial_days" type="number" min="0" step="1" value="${s.trial_days}" inputmode="numeric"><p class="hint">0 = sem teste (quem chega paga e tem a garantia). Não muda o prazo de quem já se cadastrou.</p></div></div>
     <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar preços</button></div></form>`;
   const f = $('#f'), h = () => { const a = +f.price_annual.value, m = +f.price_monthly.value; $('#pah').textContent = a && m ? `Sai por ${brl(Math.floor(a / 12 * 100) / 100)} por mês, ${Math.max(0, Math.round((1 - a / (m * 12)) * 100))}% mais barato que o mensal.` : ''; };
   f.oninput = h; h();
   f.onsubmit = async (e) => {
     e.preventDefault();
-    try { await api('PUT', '/owner/settings', { price_annual: f.price_annual.value, price_monthly: f.price_monthly.value, price_plus: f.price_plus.value, trial_days: f.trial_days.value }); toast('Preços salvos'); f.querySelector('.err').textContent = ''; }
+    try { await api('PUT', '/owner/settings', { price_annual: f.price_annual.value, price_monthly: f.price_monthly.value, price_plus: f.price_plus.value, trial_days: f.trial_days.value, guarantee_days: f.guarantee_days.value }); toast('Preços salvos'); f.querySelector('.err').textContent = ''; }
     catch (er) { f.querySelector('.err').textContent = er.message; sfx.bad(); }
   };
 }
@@ -1760,14 +1776,15 @@ async function viewBuy(planIn, codeIn) {
     const c = CART[plan], total = offPrice(p[plan], cup), free = cup && !(total > 0);
     $('#cart').innerHTML = `<div class="cart-top">${im(plan === 'plus' ? 'rocket' : 'trophy')}<div><b class="d">Plano ${c.t}</b><span>${c.perks.join(' · ')}</span></div></div>
       <div class="cart-total"><span>Total hoje</span>${cup ? `<s class="num">${brl(p[plan])}</s>` : ''}<b class="d num">${free ? 'Grátis' : brl(total)}</b><small>${c.note}</small></div>
-      <p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa quando o teste grátis acabar (${trialText(p.trial_days)})</b>. Nenhum dia se perde.</span></p>`;
+      ${p.trial_days > 0 ? `<p class="cart-note">${im('hourglass')}<span>Você paga hoje e o plano <b>só começa quando o teste grátis acabar (${trialText(p.trial_days)})</b>. Nenhum dia se perde.</span></p>`
+        : p.guarantee_days ? `<p class="cart-note">${im('shield')}<span><b>Garantia de ${p.guarantee_days} dias.</b> Se não gostar, devolvemos o seu dinheiro, sem perguntas.</span></p>` : ''}`;
     $('#payBtns').innerHTML = free ? '<button class="btn green big" name="via" value="free">Ativar grátis</button>'
       : `<button class="btn green big" name="via" value="pix">Pagar com Pix</button>${p.card ? '<button class="btn" name="via" value="card">Pagar com cartão</button><button class="switch" name="via" value="mp">Boleto ou outras formas</button>' : '<button class="btn ghost" name="via" value="mp">Cartão ou boleto</button>'}`;
   };
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth cartwrap">
     <div class="logo">${im('game')}<h1 class="d stroke" style="font-size:40px">Seu carrinho</h1></div>
     <form class="card" id="f" novalidate>
-      <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal'], ['plus', 'Plus']], plan)}</div>
+      <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['plus', 'Plus'], ['monthly', 'Mensal']], plan)}</div>
       <div id="cart" class="cart"></div>
       <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" inputmode="email" autocomplete="email" required><p class="hint">Só isso por agora. Nome, senha e PIN você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>

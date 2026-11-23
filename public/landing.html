@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>GameTask: as tarefas da casa viram um jogo</title>
-<meta name="description" content="Seus filhos cumprem as missões do dia e ganham moedas, tempo de tela e prêmios. Você só aprova. {{TESTE}} grátis, sem cartão.">
+<meta name="description" content="Seus filhos cumprem as missões do dia e ganham moedas, tempo de tela e prêmios. Você só aprova. Garantia de {{GARANTIA}} dias ou seu dinheiro de volta.">
 <meta property="og:title" content="GameTask: as tarefas da casa viram um jogo">
-<meta property="og:description" content="Escovar os dentes, arrumar a cama, lavar a louça: cada tarefa vira missão, com moedas e prêmios de verdade. {{TESTE}} grátis.">
+<meta property="og:description" content="Escovar os dentes, arrumar a cama, lavar a louça: cada tarefa vira missão, com moedas e prêmios de verdade. Garantia de {{GARANTIA}} dias.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#2a6cf0">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
@@ -33,14 +33,14 @@
     <div class="rays" aria-hidden="true"></div>
     <div class="in hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow"><img src="/img/3d/gift.png" alt="">{{TESTE}} grátis · sem cartão</p>
+        <p class="eyebrow"><img src="/img/3d/shield.png" alt="">Garantia de {{GARANTIA}} dias ou seu dinheiro de volta</p>
         <h1 class="d stroke">Pela décima vez: “já escovou os dentes?”</h1>
         <p class="sub">O GameTask transforma a rotina da casa num jogo. Seus filhos cumprem missões e ganham moedas, tempo de videogame e prêmios que você escolhe. Você para de repetir e passa a só aprovar.</p>
         <div class="cta-row">
-          <a class="btn green big" href="/app#/criar">Testar {{TESTE}} grátis</a>
+          <a class="btn green big" href="#precos">Quero o GameTask</a>
           <a class="btn ghost big" href="#como">Ver como funciona</a>
         </div>
-        <p class="fine">Depois do teste, R$ {{ANUAL_MES}} por mês no plano anual. Funciona no tablet, no celular e no computador.</p>
+        <p class="fine">R$ {{ANUAL_MES}} por mês no plano anual. Funciona no tablet, no celular e no computador.</p>
       </div>
 
       <div class="stage-mock" aria-hidden="true">
@@ -76,6 +76,14 @@
         <article><img src="/img/3d/tv.png" alt=""><h3>O “só mais cinco minutinhos”</h3><p>Os cinco minutinhos de videogame viram quarenta. E quem manda desligar vira o vilão da casa.</p></article>
         <article><img src="/img/3d/people.png" alt=""><h3>Cada adulto, uma regra</h3><p>O pai cobra, a mãe libera, a avó dá doce. Em uma semana a criança já sabe exatamente para quem pedir.</p></article>
       </div>
+      <div class="load">
+        <img src="/img/3d/memo.png" alt="">
+        <div>
+          <h3>E tem a quarta batalha, a que ninguém vê: a carga mental</h3>
+          <p>Carga mental é o nome de ser a pessoa que lembra de tudo. A escova, a mochila, a natação de terça, o que falta no armário e, às vezes, até a agenda do outro adulto da casa. É um trabalho de gerente em tempo integral que ninguém enxerga e ninguém agradece.</p>
+          <p><b>O GameTask tira essa lista da sua cabeça e põe na tela das crianças.</b></p>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -88,7 +96,7 @@
         <li>
           <span class="n d">1</span>
           <h3>Monte tudo em 2 minutos</h3>
-          <p>Cadastre os filhos e marque as missões de um catálogo pronto. Não precisa digitar nada.</p>
+          <p>Cadastre os filhos e escolha as missões de um catálogo pronto. Depois ajuste à sua casa: tire, inclua e adapte à idade de cada um.</p>
           <div class="chips">
             <span><img src="/img/3d/toothbrush.png" alt="">Escovar os dentes</span><span><img src="/img/3d/bed.png" alt="">Arrumar a cama</span>
             <span><img src="/img/3d/openbook.png" alt="">Ler as escrituras</span><span><img src="/img/3d/pencil.png" alt="">Dever de casa</span>
@@ -99,7 +107,11 @@
           <span class="n d">2</span>
           <h3>A criança joga</h3>
           <p>Escolhe o personagem, toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Prepare-se para ouvir “já fiz!” antes de perguntar.</p>
-          <div class="hero-row"><img src="/img/3d/fox.png" alt=""><img src="/img/3d/robot.png" alt=""><img src="/img/3d/unicorn.png" alt=""><img src="/img/3d/dragon.png" alt=""></div>
+          <div class="play" id="play">
+            <div class="play-top"><img class="play-av" src="/img/3d/fox.png" alt=""><b class="d">Eva</b><span class="play-pill" id="ppill"><img src="/img/3d/coin.png" alt=""><b class="d" id="pcoins">42</b></span></div>
+            <div class="play-card"><span class="play-tile"><img src="/img/3d/bed.png" alt=""></span><span class="play-t">Arrumar a cama<small><img src="/img/3d/coin.png" alt="">+3</small></span><button type="button" class="play-go" id="pgo">Concluí!</button></div>
+            <p class="play-hint">Toque em <b>Concluí!</b> para testar</p>
+          </div>
         </li>
         <li>
           <span class="n d">3</span>
@@ -179,16 +191,9 @@
     <div class="rays" aria-hidden="true"></div>
     <div class="in">
       <p class="kicker">Preços</p>
-      <h2 class="d stroke">Comece com {{TESTE}} grátis</h2>
-      <p class="lede">Teste com a família inteira, sem cartão. Se ninguém se animar, é só não assinar. Quem assina durante o teste não perde os dias grátis.</p>
+      <h2 class="d stroke">Assine com garantia de {{GARANTIA}} dias</h2>
+      <p class="lede">Use com a família inteira. Se ninguém se animar em até {{GARANTIA}} dias, você pede o dinheiro de volta pelo próprio app, sem explicar o motivo.</p>
       <div class="plans">
-        <article class="plan free">
-          <h3 class="d">Grátis</h3>
-          <div class="price"><small>R$</small><b class="d">0</b><small>por {{TESTE}}</small></div>
-          <p class="bill">Para conhecer, sem cartão de crédito</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Tudo liberado</li><li><img src="/img/3d/check.png" alt="">Depois, escolha um plano</li></ul>
-          <a class="btn ghost" href="/app#/criar">Começar grátis</a>
-        </article>
         <article class="plan best">
           <span class="ribbon">Melhor preço · economize {{ECONOMIA}}%</span>
           <h3 class="d">Anual</h3>
@@ -196,13 +201,6 @@
           <p class="bill">Pagamento único de <b>R$ {{ANUAL}}</b> por ano</p>
           <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
           <a class="btn green" href="/app#/comprar/annual">Assinar anual</a>
-        </article>
-        <article class="plan">
-          <h3 class="d">Mensal</h3>
-          <div class="price"><small>R$</small><b class="d">{{MENSAL}}</b><small>/mês</small></div>
-          <p class="bill">Pago mês a mês, sem fidelidade</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
-          <a class="btn ghost" href="/app#/comprar/monthly">Assinar mensal</a>
         </article>
         <article class="plan plus">
           <span class="ribbon violet">Completo</span>
@@ -212,7 +210,15 @@
           <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/phone.png" alt="">Avisos no celular e no tablet</li><li><img src="/img/3d/clock.png" alt="">"Bernardo, hora da escola!"</li><li><img src="/img/3d/lock.png" alt="">Aviso para os pais aprovarem</li></ul>
           <a class="btn violet" href="/app#/comprar/plus">Assinar Plus</a>
         </article>
+        <article class="plan">
+          <h3 class="d">Mensal</h3>
+          <div class="price"><small>R$</small><b class="d">{{MENSAL}}</b><small>/mês</small></div>
+          <p class="bill">Pago mês a mês, sem fidelidade</p>
+          <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
+          <a class="btn ghost" href="/app#/comprar/monthly">Assinar mensal</a>
+        </article>
       </div>
+      <p class="guarantee"><img src="/img/3d/shield.png" alt=""><span><b>Garantia de {{GARANTIA}} dias.</b> Não serviu para a sua casa? Um toque em “Quero meu dinheiro de volta” e o Mercado Pago devolve o valor. Sem perguntas.</span></p>
     </div>
   </section>
 
@@ -221,8 +227,8 @@
     <div class="in narrow">
       <p class="kicker dark">Dúvidas</p>
       <h2 class="d">Perguntas frequentes</h2>
-      <details><summary>Preciso cadastrar cartão para testar?</summary><p>Não. Você cria a conta da família com e-mail e senha e usa tudo por {{TESTE}} sem pagar nada.</p></details>
-      <details><summary>O que acontece quando o teste acaba?</summary><p>O app pede uma assinatura para continuar. Missões, moedas e histórico ficam guardados e voltam assim que você assina.</p></details>
+      <details><summary>Como funciona a garantia?</summary><p>Você assina e usa com a família. Se não gostar em até {{GARANTIA}} dias depois do pagamento, toque em “Quero meu dinheiro de volta” em Ajustes, no painel dos pais. Não pedimos o motivo. O estorno sai pelo Mercado Pago: no Pix volta na hora; no cartão, aparece na fatura conforme o banco. A garantia vale para a primeira compra.</p></details>
+      <details><summary>Por que não tem teste grátis?</summary><p>Porque a garantia funciona melhor para você: o app fica liberado por completo desde o primeiro dia, e se não servir, o dinheiro volta inteiro.</p></details>
       <details><summary>Como eu pago?</summary><p>Pelo Mercado Pago, com Pix, cartão de crédito ou boleto. O acesso é liberado assim que o pagamento é confirmado.</p></details>
       <details><summary>A cobrança é automática?</summary><p>Não. Você paga o período que escolheu (um ano ou um mês) e o app avisa quando estiver perto de vencer. Nada é cobrado sem você confirmar.</p></details>
       <details><summary>O que o plano Plus tem a mais?</summary><p>Avisos que tocam no celular e no tablet: lembretes antes das tarefas com horário (natação às 18h, por exemplo), alarmes como "Bernardo, hora de ir para a escola" e um aviso no seu celular sempre que uma criança conclui uma missão. No iPhone e no iPad, é só adicionar o GameTask à Tela de Início.</p></details>
@@ -241,8 +247,8 @@
       <img src="/img/3d/rocket.png" alt="" class="rocket">
       <h2 class="d stroke">Hoje à noite, a louça pode virar uma missão.</h2>
       <p class="final-sub">Amanhã cedo, quem vai perguntar “o que falta fazer?” são eles.</p>
-      <a class="btn green big" href="/app#/criar">Testar {{TESTE}} grátis</a>
-      <p class="fine">{{TESTE}} grátis. Sem cartão. Pronto em 2 minutos.</p>
+      <a class="btn green big" href="#precos">Quero o GameTask</a>
+      <p class="fine">Garantia de {{GARANTIA}} dias ou seu dinheiro de volta. Pronto em 2 minutos.</p>
     </div>
   </section>
 </main>
@@ -268,6 +274,47 @@
     coins.textContent = on ? '44' : '42';
     coins.parentElement.classList.remove('bump'); void coins.offsetWidth; coins.parentElement.classList.add('bump');
   }, 2600);
+})();
+</script>
+<script>
+// Passo 2: "Concluí!" solta as moedas até o contador, igual ao app
+(() => {
+  const go = document.getElementById('pgo'), pill = document.getElementById('ppill'), out = document.getElementById('pcoins'), box = document.getElementById('play');
+  if (!go) return;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let coins = 42, busy = false, ac = null;
+  const ding = (i) => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime;
+    o.type = 'square'; o.frequency.setValueAtTime(988, t0); o.frequency.setValueAtTime(1319, t0 + .06); g.gain.setValueAtTime(.05, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .18);
+    o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + .2); } catch {} };
+  const bump = () => { pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump'); };
+  const count = (to) => { const from = coins, t0 = performance.now(); coins = to;
+    const step = (t) => { const p = Math.min(1, (t - t0) / 600); out.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step); bump(); };
+  const fly = (sound) => {
+    const a = go.getBoundingClientRect(), b = pill.getBoundingClientRect();
+    const fx = a.left + a.width / 2, fy = a.top + a.height / 2, tx = b.left + 14, ty = b.top + b.height / 2;
+    return Promise.all(Array.from({ length: 5 }, (_, i) => new Promise(res => {
+      const c = document.createElement('img'); c.src = '/img/3d/coin.png'; c.alt = ''; c.className = 'fly-coin';
+      c.style.left = fx - 20 + 'px'; c.style.top = fy - 20 + 'px'; document.body.append(c);
+      const lift = -70 - Math.random() * 50, spread = (i - 2.5) * 16;
+      c.animate([{ transform: 'translate(0,0) scale(.4)', opacity: 0 }, { transform: `translate(${spread}px,${lift}px) scale(1.15)`, opacity: 1, offset: .3 },
+        { transform: `translate(${tx - fx}px,${ty - fy}px) scale(.5)`, opacity: 1 }], { duration: 850, delay: i * 70, easing: 'cubic-bezier(.55,0,.35,1)', fill: 'both' })
+        .onfinish = () => { c.remove(); if (sound) ding(i); res(); };
+    })));
+  };
+  const play = async (sound) => {
+    if (busy) return; busy = true;
+    go.textContent = 'Feito!'; go.classList.add('done'); box.classList.add('won');
+    if (!still) await fly(sound);
+    count(coins + 3);
+    setTimeout(() => { go.textContent = 'Concluí!'; go.classList.remove('done'); box.classList.remove('won'); busy = false; }, 2200);
+  };
+  go.onclick = () => play(true);
+  // mostra sozinho uma vez quando o cartão aparece na tela
+  if (!still && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) { io.disconnect(); setTimeout(() => play(false), 500); } }, { threshold: .7 });
+    io.observe(box);
+  }
 })();
 </script>
 </body>

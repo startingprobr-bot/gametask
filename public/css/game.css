@@ -858,3 +858,9 @@ button.meter:active{transform:scale(.98)}
 .cup-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
 .cup-new .field{margin-top:8px}
 .cup-code{font-family:var(--display);letter-spacing:.06em;background:var(--yellow);border:2px solid var(--navy);border-radius:8px;padding:0 8px}
+
+/* ---------- v22: garantia ---------- */
+.guar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin-top:14px;padding:12px 14px;border-radius:16px;background:rgba(59,209,95,.12);border:2px solid rgba(59,209,95,.45)}
+.guar>img{width:30px;height:30px;flex:0 0 auto}
+.guar p{flex:1 1 220px;margin:0;font-size:15px;line-height:1.45}
+.paywall .guar{max-width:640px;margin:14px auto 0;background:rgba(255,255,255,.92);color:var(--ink,#0d1b4c)}

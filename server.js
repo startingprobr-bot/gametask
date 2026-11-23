@@ -8,7 +8,6 @@ const { pool, migrate, ensureDatabase, getSetting } = require('./db');
 const billing = require('./billing');
 const mail = require('./mail');
 const members = require('./members');
-const { trialText } = require('./util');
 
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
@@ -49,8 +48,8 @@ app.post('/api/auth/register', wrap(async (req, res) => {
   await members.dropStale(email.toLowerCase());
   if (await members.emailTaken(email.toLowerCase())) return res.status(409).json({ error: 'E-mail já cadastrado' });
   const trial = +(await getSetting('trial_days'));
-  const [r] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY))',
-    [name.trim(), email.toLowerCase(), bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10), trial]);
+  const [r] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY))', // sem teste: vence ontem
+    [name.trim(), email.toLowerCase(), bcrypt.hashSync(password, 10), bcrypt.hashSync(String(pin), 10), trial > 0 ? trial : -1]);
   const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,?,'Responsável',1,1,?)",
     [r.insertId, String(req.body.my_name || 'Responsável').trim().slice(0, 60) || 'Responsável', bcrypt.hashSync(String(pin), 10)]);
   req.session = { fid: r.insertId, mid: m.insertId, actor: m.insertId, parentUntil: Date.now() + PARENT_MIN * 60000 };
@@ -148,7 +147,7 @@ const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHE
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ v: VERSION }));
 app.get('/api/public/pricing', wrap(async (req, res) => res.json({ ...await billing.prices(), card: billing.cardKey() })));
 app.use('/api/auth', members.auth);
-app.post(['/api/billing/checkout', '/api/billing/pix', '/api/billing/card', '/api/billing/free'], needFamily, needParent, needFull);
+app.post(['/api/billing/checkout', '/api/billing/pix', '/api/billing/card', '/api/billing/free', '/api/billing/refund'], needFamily, needParent, needFull);
 app.use('/api/billing', billing.router);
 app.use('/api/owner', needFamily, needParent, needFull, needOwner, require('./routes/owner'));
 app.use('/api/admin', needFamily, billing.needActive, needParent, members.limitDaily, members.admin, require('./routes/admin'));
@@ -175,7 +174,7 @@ app.get('/', wrap(async (req, res) => {
     .replaceAll('{{ANUAL_MES}}', brl(Math.floor(p.annual / 12 * 100) / 100))
     .replaceAll('{{PLUS_MES}}', brl(Math.floor(p.plus / 12 * 100) / 100)).replaceAll('{{PLUS}}', brl(p.plus))
     .replaceAll('{{ECONOMIA}}', String(Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100))))
-    .replaceAll('{{TESTE}}', trialText(p.trial_days))
+    .replaceAll('{{GARANTIA}}', String(p.guarantee_days))
     .replace('/css/landing.css"', `/css/landing.css?v=${LANDING_CSS_V}"`);
   res.set('cache-control', 'no-cache').type('html').send(html);
 }));

@@ -299,3 +299,38 @@ details p{padding:0 20px 20px;color:var(--ink-soft);max-width:62ch}
 @media (max-width:900px){.f-grid{grid-template-columns:1fr;gap:32px}}
 @media (max-width:520px){.founder{padding:64px 0}.origins{grid-template-columns:1fr}.origins li{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:12px}.origins .ic{margin:0}.origins b{flex:1}.origins li>span:last-child{flex-basis:100%}}
 .f-lede{max-width:46ch;margin:-8px auto 28px}
+
+/* ---------- carga mental ---------- */
+.load{display:flex;gap:20px;align-items:flex-start;margin-top:22px;background:var(--navy);color:#fff;border:2px solid var(--navy);border-radius:24px;padding:26px clamp(20px,3vw,32px);box-shadow:0 4px 0 #050e32}
+.load>img{width:72px;height:72px;flex:0 0 auto}
+.load h3{font-family:var(--display);font-weight:400;font-size:clamp(22px,2.4vw,28px);line-height:1.1;margin-bottom:10px;color:var(--yellow)}
+.load p{color:#dfe9ff;font-size:17px;line-height:1.6;max-width:70ch}
+.load p+p{margin-top:10px}.load b{color:#fff}
+@media (max-width:640px){.load{flex-direction:column;gap:10px}.load>img{width:56px;height:56px}}
+/* ---------- passo 2: moedas ---------- */
+.play{margin-top:auto;padding:12px;border-radius:18px;background:var(--mist);border:2px solid var(--mist-2)}
+.play-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.play-av{width:34px;height:34px}
+.play-top b{font-size:18px;color:var(--navy);flex:1}
+.play-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px 3px 5px;border-radius:999px;background:#fff;border:2px solid var(--navy);box-shadow:0 2px 0 var(--navy)}
+.play-pill img{width:22px;height:22px}.play-pill b{font-size:18px;flex:0;min-width:2ch;text-align:right}
+.play-pill.bump{animation:bump .5s var(--spring)}
+.play-card{display:flex;align-items:center;gap:8px;padding:8px;border-radius:14px;background:#fff;border:2px solid var(--navy);box-shadow:0 3px 0 var(--navy)}
+.play-tile{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--cream);flex:0 0 auto}
+.play-tile img{width:30px;height:30px}
+.play-t{flex:1;min-width:0;font-weight:900;font-size:15px;line-height:1.2;color:var(--navy)}
+.play-t small{display:flex;align-items:center;gap:3px;font-size:13px;color:var(--ink-soft)}.play-t small img{width:16px;height:16px}
+.play-go{font:400 16px var(--display);color:#fff;background:var(--green);border:2px solid var(--navy);border-radius:12px;padding:8px 12px;box-shadow:0 3px 0 var(--navy);cursor:pointer;transition:transform .15s var(--spring)}
+.play-go:hover{transform:translateY(-2px)}.play-go:active{transform:translateY(2px);box-shadow:0 1px 0 var(--navy)}
+.play-go.done{background:var(--mist-2);color:var(--green-lo)}
+.play-go:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.play-hint{margin-top:8px;text-align:center;font-size:13px;color:var(--ink-soft)}
+.play.won .play-card{animation:bump .5s var(--spring)}
+.fly-coin{position:fixed;width:40px;height:40px;pointer-events:none;z-index:80}
+/* ---------- preços: 3 planos + garantia ---------- */
+.plans{grid-template-columns:repeat(3,minmax(0,1fr));max-width:1040px;margin-left:auto;margin-right:auto}
+@media (max-width:1180px){.plans{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:900px){.plans{grid-template-columns:minmax(0,420px)}}
+.guarantee{display:flex;align-items:center;gap:14px;max-width:760px;margin:34px auto 0;padding:16px 20px;background:#fff;border:2px solid var(--navy);border-radius:20px;box-shadow:0 4px 0 var(--navy);color:var(--ink-soft);font-size:16px;line-height:1.5}
+.guarantee img{width:48px;height:48px;flex:0 0 auto}.guarantee b{color:var(--navy)}
+.split .kicker{color:#fff;font-size:14px;line-height:normal}

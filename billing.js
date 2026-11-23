@@ -20,9 +20,9 @@ const appUrl = () => (process.env.APP_URL || '').replace(/\/$/, '');
 const D = (s) => new Date(s + 'T00:00:00Z');
 const iso = (d) => d.toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((D(b) - D(a)) / 864e5);
-function addPeriod(start, plan) {
+function addPeriod(start, plan, sign = 1) {
   const d = D(start);
-  if (plan === 'monthly') d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCFullYear(d.getUTCFullYear() + 1);
+  if (plan === 'monthly') d.setUTCMonth(d.getUTCMonth() + sign); else d.setUTCFullYear(d.getUTCFullYear() + sign);
   return iso(d);
 }
 const PLANS = ['monthly', 'annual', 'plus'];
@@ -40,7 +40,7 @@ function access(f) {
 
 async function prices() {
   const s = await settings();
-  return { monthly: +s.price_monthly, annual: +s.price_annual, plus: +s.price_plus, trial_days: +s.trial_days };
+  return { monthly: +s.price_monthly, annual: +s.price_annual, plus: +s.price_plus, trial_days: +s.trial_days, guarantee_days: +s.guarantee_days || 0 };
 }
 
 // Bloqueia o app quando o teste/assinatura acabou (o próprio cadastro, a assinatura e o logout seguem livres)
@@ -150,7 +150,7 @@ router.get('/status', needSession, wrap(async (req, res) => {
   const [[f]] = await pool.query('SELECT id,email,plan,paid_until,trial_ends FROM families WHERE id=?', [req.fid]);
   if (!f) return res.status(401).json({ error: 'Faça login da família' });
   const [hist] = await pool.query("SELECT id,plan,amount,status,method,period_end,created_at,paid_at FROM payments WHERE family_id=? AND status<>'pending' ORDER BY id DESC LIMIT 12", [f.id]);
-  res.json({ access: access(f), prices: await prices(), enabled: !!mpToken(), card: cardKey(), email: f.email, payments: hist });
+  res.json({ access: access(f), prices: await prices(), enabled: !!mpToken(), card: cardKey(), email: f.email, payments: hist, guarantee: await guaranteeFor(f.id) });
 }));
 
 async function startCheckout(req, fid, planIn) {
@@ -293,7 +293,7 @@ async function guestFamily(req, res) {
     fid = old.id; mid = await members.principalId(fid);
   } else {
     if (await members.emailTaken(email)) { exists(); return null; }
-    const trial = +(await settings()).trial_days;
+    const trial = +(await settings()).trial_days || -1; // sem teste: vence ontem
     const junk = () => bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 4);
     const [f] = await pool.query('INSERT INTO families (name,email,password_hash,parent_pin_hash,trial_ends,setup_pending) VALUES (?,?,?,?,DATE_ADD(CURDATE(), INTERVAL ? DAY),1)', [name || 'Minha família', email, junk(), junk(), trial]);
     const [m] = await pool.query("INSERT INTO members (family_id,name,role,full_access,principal,pin_hash) VALUES (?,'Responsável','Responsável',1,1,?)", [f.insertId, junk()]);
@@ -345,6 +345,35 @@ router.post('/guest-free', wrap(async (req, res) => {
   await findCoupon(req.body.coupon); // confere antes de criar o cadastro
   const fid = await guestFamily(req, res); if (!fid) return;
   res.json(await grantFree(req, fid, req.body.plan));
+}));
+
+// ---------- Garantia: devolve o dinheiro sem perguntar o motivo ----------
+// Vale para a PRIMEIRA compra paga da família, até N dias depois do pagamento (N = guarantee_days, no painel do dono).
+async function guaranteeFor(fid) {
+  const days = +(await settings()).guarantee_days || 0;
+  if (!days) return null;
+  const [[p]] = await pool.query(
+    `SELECT id,plan,amount,status,mp_payment_id,DATE_FORMAT(DATE_ADD(DATE(paid_at), INTERVAL ? DAY),'%Y-%m-%d') until
+     FROM payments WHERE family_id=? AND amount>0 AND status IN ('approved','refunded') ORDER BY id LIMIT 1`, [days, fid]);
+  if (!p || p.status !== 'approved' || !p.mp_payment_id || !p.until || p.until < today()) return null;
+  return { ref: p.id, until: p.until, amount: +p.amount, plan: p.plan, days };
+}
+router.post('/refund', needSession, wrap(async (req, res) => {
+  const g = await guaranteeFor(req.fid);
+  if (!g) bad('Esta compra não está mais no prazo da garantia');
+  const [[p]] = await pool.query('SELECT * FROM payments WHERE id=?', [g.ref]);
+  await mp('POST', `/v1/payments/${encodeURIComponent(p.mp_payment_id)}/refunds`, {}, { 'X-Idempotency-Key': `gt-refund-${p.id}` });
+  const c = await pool.getConnection();
+  try {
+    await c.beginTransaction();
+    const [[f]] = await c.query('SELECT paid_until,trial_ends FROM families WHERE id=? FOR UPDATE', [req.fid]);
+    // tira do acesso o período que esta compra tinha somado
+    const back = f.paid_until ? addPeriod(f.paid_until, p.plan, -1) : null;
+    await c.query('UPDATE families SET paid_until=? WHERE id=?', [back && back > today() && back > (f.trial_ends || '') ? back : null, req.fid]);
+    await c.query("UPDATE payments SET status='refunded' WHERE id=?", [p.id]);
+    await c.commit();
+  } catch (e) { await c.rollback(); throw e; } finally { c.release(); }
+  res.json({ ok: true, amount: g.amount });
 }));
 
 // Volta do checkout: confere na hora, sem esperar o webhook
