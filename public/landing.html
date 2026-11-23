@@ -4,98 +4,133 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>GameTask: as tarefas da casa viram um jogo</title>
-<meta name="description" content="Seus filhos cumprem as missões do dia e ganham moedas, tempo de tela e prêmios. Você só aprova. Garantia de {{GARANTIA}} dias ou seu dinheiro de volta.">
+<meta name="description" content="Pare de repetir e de cobrar. As crianças cumprem missões, ganham moedas e tempo de tela, e você só aprova. Garantia de {{GARANTIA}} dias ou seu dinheiro de volta.">
 <meta property="og:title" content="GameTask: as tarefas da casa viram um jogo">
-<meta property="og:description" content="Escovar os dentes, arrumar a cama, lavar a louça: cada tarefa vira missão, com moedas e prêmios de verdade. Garantia de {{GARANTIA}} dias.">
+<meta property="og:description" content="Cada cobrança vira uma missão na tela da criança. Você para de ser o chato da casa. Garantia de {{GARANTIA}} dias.">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#2a6cf0">
+<meta name="theme-color" content="#0d1b4c">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/sites-incriveis.css">
 <link rel="stylesheet" href="/css/landing.css">
+<script src="/js/sites-incriveis.js" defer></script>
 </head>
 <body>
 
 <header class="nav">
   <div class="in">
-    <a class="brand" href="/" aria-label="GameTask, início"><img src="/img/3d/game.png" alt=""><span class="d stroke-sm">GameTask</span></a>
+    <a class="brand" href="/" aria-label="GameTask, início"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></a>
     <nav class="links" aria-label="Seções">
       <a href="#como">Como funciona</a><a href="#precos">Preços</a><a href="#duvidas">Dúvidas</a>
     </nav>
     <a class="btn ghost sm" href="/app#/login">Entrar</a>
-    <a class="btn sm hide-sm" href="#precos">Ver preços</a>
+    <a class="btn green sm hide-sm" href="#precos">Quero o GameTask</a>
   </div>
 </header>
 
 <main>
-  <!-- HERO -->
-  <section class="hero">
-    <div class="rays" aria-hidden="true"></div>
-    <div class="in hero-grid">
-      <div class="hero-copy">
-        <p class="eyebrow"><img src="/img/3d/shield.png" alt="">Garantia de {{GARANTIA}} dias ou seu dinheiro de volta</p>
-        <h1 class="d stroke">Pela décima vez: “já escovou os dentes?”</h1>
-        <p class="sub">O GameTask transforma a rotina da casa num jogo. Seus filhos cumprem missões e ganham moedas, tempo de videogame e prêmios que você escolhe. Você para de repetir e passa a só aprovar.</p>
-        <div class="cta-row">
-          <a class="btn green big" href="#precos">Quero o GameTask</a>
-          <a class="btn ghost big" href="#como">Ver como funciona</a>
-        </div>
-        <p class="fine">R$ {{ANUAL_MES}} por mês no plano anual. Funciona no tablet, no celular e no computador.</p>
-      </div>
 
-      <div class="stage-mock" aria-hidden="true">
-        <img class="float f1" src="/img/3d/coin.png" alt="">
-        <img class="float f2" src="/img/3d/trophy.png" alt="">
-        <img class="float f3" src="/img/3d/sparkles.png" alt="">
-        <img class="float f4" src="/img/3d/ferris.png" alt="">
-        <div class="phone">
-          <div class="screen">
-            <div class="m-top"><span class="d stroke-sm">Eva</span><span class="m-pill"><img src="/img/3d/coin.png" alt=""><b class="d" id="mcoins">42</b></span></div>
-            <div class="m-stage">
-              <img src="/img/3d/unicorn.png" alt="" class="m-av">
-              <div><b class="d stroke-sm">Faltam 2!</b><small><img src="/img/3d/coin.png" alt="">Ainda dá para ganhar <em>+3</em></small></div>
-            </div>
-            <div class="m-segs"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
-            <div class="m-time"><img src="/img/3d/game.png" alt=""><span><b>Videogame</b><i><s style="width:66%"></s></i></span><em>20 min</em></div>
-            <div class="m-card done"><span class="m-tile"><img src="/img/3d/bed.png" alt=""></span><span class="m-t">Arrumar a cama<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span></div>
-            <div class="m-card done"><span class="m-tile"><img src="/img/3d/toothbrush.png" alt=""></span><span class="m-t">Escovar os dentes<small><img src="/img/3d/coin.png" alt="">+0,5</small></span><span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span></div>
-            <div class="m-card" id="mlive"><span class="m-tile"><img src="/img/3d/soap.png" alt=""></span><span class="m-t">Lavar a louça<small><img src="/img/3d/coin.png" alt="">+2</small></span><span class="m-go">Concluí!</span></div>
-            <div class="m-card"><span class="m-tile"><img src="/img/3d/openbook.png" alt=""></span><span class="m-t">Ler as escrituras<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-go">Concluí!</span></div>
-          </div>
-        </div>
+  <!-- CENA 1 · BARULHO -->
+  <section class="noise" data-fx-fundo="#0d1b4c" data-fx-tinta="#ffffff">
+    <div class="bubbles" aria-hidden="true">
+      <span class="bb p" style="--x:6%;--y:14%;--r:-6deg;--d:.1s">Já escovou os dentes?</span>
+      <span class="bb p" style="--x:62%;--y:8%;--r:4deg;--d:.5s">Desliga esse videogame!</span>
+      <span class="bb k" style="--x:78%;--y:30%;--r:-3deg;--d:.9s">Só mais cinco minutinhos…</span>
+      <span class="bb p" style="--x:4%;--y:70%;--r:3deg;--d:1.3s">Cadê a mochila?</span>
+      <span class="bb p" style="--x:80%;--y:64%;--r:-5deg;--d:1.7s">Arruma essa cama!</span>
+      <span class="bb p" style="--x:12%;--y:88%;--r:2deg;--d:2.1s">Vai tomar banho!</span>
+      <span class="bb k" style="--x:5%;--y:42%;--r:5deg;--d:2.5s">Ninguém me avisou!</span>
+      <span class="bb p" style="--x:82%;--y:84%;--r:-2deg;--d:2.9s">Já fez o dever?</span>
+      <span class="bb p" style="--x:30%;--y:4%;--r:-3deg;--d:3.3s">Eu não vou repetir!</span>
+      <span class="bb p" style="--x:77%;--y:47%;--r:4deg;--d:3.7s">Quem largou a toalha aqui?</span>
+    </div>
+    <div class="in noise-copy">
+      <p class="tag">Para pais e mães cansados de repetir</p>
+      <h1 class="d" data-fx="palavras" data-fx-duracao="900">Pela décima vez: “já escovou os dentes?”</h1>
+      <p class="sub">Você repete, cobra, lembra de tudo e, no fim do dia, ainda é o chato da casa. O GameTask transforma a rotina num jogo: as crianças cumprem missões, ganham moedas e tempo de videogame, e você só aprova.</p>
+      <div class="cta-row">
+        <a class="btn green big" href="#precos">Quero o GameTask</a>
+        <a class="btn ghost big" href="#como">Ver como funciona</a>
       </div>
+      <p class="fine">R$ {{ANUAL_MES}} por mês no plano anual · Garantia de {{GARANTIA}} dias</p>
     </div>
   </section>
 
-  <!-- DOR -> GANHO -->
-  <section class="band">
-    <div class="in">
-      <h2 class="d">Toda casa com criança tem as mesmas três batalhas</h2>
-      <div class="trio">
-        <article><img src="/img/3d/clipboard.png" alt=""><h3>O disco arranhado</h3><p>Escova, cama, mochila, banho. Você repete a lista o dia inteiro e, à noite, alguém ainda jura que ninguém avisou.</p></article>
-        <article><img src="/img/3d/tv.png" alt=""><h3>O “só mais cinco minutinhos”</h3><p>Os cinco minutinhos de videogame viram quarenta. E quem manda desligar vira o vilão da casa.</p></article>
-        <article><img src="/img/3d/people.png" alt=""><h3>Cada adulto, uma regra</h3><p>O pai cobra, a mãe libera, a avó dá doce. Em uma semana a criança já sabe exatamente para quem pedir.</p></article>
+  <!-- CENA 2 · O PESO -->
+  <section class="weight" data-fx-fundo="#1b1236" data-fx-tinta="#ffffff">
+    <div class="in weight-grid">
+      <div class="battles">
+        <p class="kicker">O peso</p>
+        <h2 class="d" data-fx="subir">Toda casa com criança tem as mesmas três batalhas</h2>
+        <ol>
+          <li data-fx="esquerda"><img src="/img/3d/clipboard.png" alt=""><div><h3>O disco arranhado</h3><p>Escova, cama, mochila, banho. Você repete a lista o dia inteiro e, à noite, alguém ainda jura que ninguém avisou.</p></div></li>
+          <li data-fx="esquerda" data-fx-atraso="120"><img src="/img/3d/tv.png" alt=""><div><h3>O “só mais cinco minutinhos”</h3><p>Os cinco minutinhos de videogame viram quarenta. E quem manda desligar vira o vilão da casa.</p></div></li>
+          <li data-fx="esquerda" data-fx-atraso="240"><img src="/img/3d/people.png" alt=""><div><h3>Cada adulto, uma regra</h3><p>O pai cobra, a mãe libera, a avó dá doce. Em uma semana a criança já sabe exatamente para quem pedir.</p></div></li>
+        </ol>
       </div>
       <div class="load">
-        <img src="/img/3d/memo.png" alt="">
-        <div>
-          <h3>E tem a quarta batalha, a que ninguém vê: a carga mental</h3>
-          <p>Carga mental é o nome de ser a pessoa que lembra de tudo. A escova, a mochila, a natação de terça, o que falta no armário e, às vezes, até a agenda do outro adulto da casa. É um trabalho de gerente em tempo integral que ninguém enxerga e ninguém agradece.</p>
-          <p><b>O GameTask tira essa lista da sua cabeça e põe na tela das crianças.</b></p>
+        <h3 class="d" data-fx="subir">E a quarta, que ninguém vê: a carga mental</h3>
+        <p data-fx="surgir">Carga mental é ser a pessoa que lembra de tudo. Um trabalho de gerente em tempo integral, que ninguém enxerga e ninguém agradece.</p>
+        <div class="headlist" id="headlist">
+          <p class="hl-title">Na sua cabeça, agora mesmo:</p>
+          <ul>
+            <li>Escova de dentes, de novo</li>
+            <li>Mochila de amanhã</li>
+            <li>Natação, terça, 18h</li>
+            <li>Dever de matemática</li>
+            <li>Acabou o leite</li>
+            <li>Toalha molhada na cama</li>
+            <li>Quanto tempo de videogame hoje?</li>
+            <li>A agenda do outro adulto da casa</li>
+            <li>Lembrar de lembrar</li>
+          </ul>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- COMO FUNCIONA -->
-  <section class="how" id="como">
+  <!-- CENA 3 · A VIRADA (pico) -->
+  <section class="turn" id="virada" data-fx-fixa data-fx-altura="5" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+    <div class="fx-palco turn-stage" id="turnStage">
+      <div class="turn-head">
+        <h2 class="d t-ask">E se quem cobrasse fosse o jogo?</h2>
+        <div class="t-done">
+          <h2 class="d">Silêncio. Quem cobra agora é o jogo.</h2>
+          <p>Cada cobrança vira uma missão na tela da criança. Ela vê o que falta, faz e ganha moedas. Você não precisa dizer nada.</p>
+        </div>
+      </div>
+      <div class="turn-bubbles" aria-hidden="true">
+        <span class="bb p" data-i="0" style="--x:6%;--y:36%;--r:-6deg">Já escovou os dentes?</span>
+        <span class="bb p" data-i="1" style="--x:70%;--y:34%;--r:5deg">Arruma essa cama!</span>
+        <span class="bb p" data-i="2" style="--x:4%;--y:60%;--r:4deg">Cadê a mochila?</span>
+        <span class="bb p" data-i="3" style="--x:72%;--y:58%;--r:-4deg">Já fez o dever?</span>
+        <span class="bb p" data-i="4" style="--x:8%;--y:84%;--r:-3deg">Vai tomar banho!</span>
+        <span class="bb p" data-i="5" style="--x:68%;--y:86%;--r:3deg">Desliga esse videogame!</span>
+      </div>
+      <div class="phone" id="turnPhone" aria-label="Tela do GameTask da criança com as missões do dia">
+        <div class="screen">
+          <div class="m-top"><span class="d stroke-sm">Eva</span><span class="m-pill" id="tpill"><img src="/img/3d/coin.png" alt=""><b class="d" id="tcoins">40</b></span></div>
+          <div class="m-card" data-m="0"><span class="m-tile"><img src="/img/3d/toothbrush.png" alt=""></span><span class="m-t">Escovar os dentes<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-st"></span></div>
+          <div class="m-card" data-m="1"><span class="m-tile"><img src="/img/3d/bed.png" alt=""></span><span class="m-t">Arrumar a cama<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-st"></span></div>
+          <div class="m-card" data-m="2"><span class="m-tile"><img src="/img/3d/backpack.png" alt=""></span><span class="m-t">Arrumar a mochila<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-st"></span></div>
+          <div class="m-card" data-m="3"><span class="m-tile"><img src="/img/3d/pencil.png" alt=""></span><span class="m-t">Dever de casa<small><img src="/img/3d/coin.png" alt="">+2</small></span><span class="m-st"></span></div>
+          <div class="m-card" data-m="4"><span class="m-tile"><img src="/img/3d/shower.png" alt=""></span><span class="m-t">Tomar banho<small><img src="/img/3d/coin.png" alt="">+1</small></span><span class="m-st"></span></div>
+          <div class="m-card" data-m="5"><span class="m-tile"><img src="/img/3d/game.png" alt=""></span><span class="m-t">Videogame: 20 min<small><img src="/img/3d/stopwatch.png" alt="">o relógio avisa</small></span><span class="m-st"></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CENA 4 · COMO FUNCIONA -->
+  <section class="how" id="como" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
     <div class="in">
-      <p class="kicker">A virada</p>
-      <h2 class="d stroke">Três passos, e a casa entra no modo jogo</h2>
+      <p class="kicker dark">Como funciona</p>
+      <h2 class="d" data-fx="subir">Três passos, e a casa entra no modo jogo</h2>
       <ol class="steps">
-        <li>
+        <li data-fx="subir">
           <span class="n d">1</span>
-          <h3>Monte tudo em 2 minutos</h3>
+          <h3>Monte a rotina da casa</h3>
           <p>Cadastre os filhos e escolha as missões de um catálogo pronto. Depois ajuste à sua casa: tire, inclua e adapte à idade de cada um.</p>
           <div class="chips">
             <span><img src="/img/3d/toothbrush.png" alt="">Escovar os dentes</span><span><img src="/img/3d/bed.png" alt="">Arrumar a cama</span>
@@ -103,19 +138,19 @@
             <span><img src="/img/3d/teddy.png" alt="">Catar os brinquedos</span><span><img src="/img/3d/soap.png" alt="">Lavar a louça</span>
           </div>
         </li>
-        <li>
+        <li data-fx="subir" data-fx-atraso="140">
           <span class="n d">2</span>
           <h3>A criança joga</h3>
           <p>Escolhe o personagem, toca em <b>Concluí!</b> e vê as moedas voarem até o contador. Prepare-se para ouvir “já fiz!” antes de perguntar.</p>
           <div class="play" id="play">
-            <div class="play-top"><img class="play-av" src="/img/3d/fox.png" alt=""><b class="d">Eva</b><span class="play-pill" id="ppill"><img src="/img/3d/coin.png" alt=""><b class="d" id="pcoins">42</b></span></div>
-            <div class="play-card"><span class="play-tile"><img src="/img/3d/bed.png" alt=""></span><span class="play-t">Arrumar a cama<small><img src="/img/3d/coin.png" alt="">+3</small></span><button type="button" class="play-go" id="pgo">Concluí!</button></div>
+            <div class="play-top"><img class="play-av" src="/img/3d/fox.png" alt=""><b class="d">Eva</b><span class="play-pill" id="ppill"><img src="/img/3d/coin.png" alt=""><b class="d" id="pcoins">46</b></span></div>
+            <div class="play-card"><span class="play-tile"><img src="/img/3d/soap.png" alt=""></span><span class="play-t">Lavar a louça<small><img src="/img/3d/coin.png" alt="">+3</small></span><button type="button" class="play-go" id="pgo">Concluí!</button></div>
             <p class="play-hint">Toque em <b>Concluí!</b> para testar</p>
           </div>
         </li>
-        <li>
+        <li data-fx="subir" data-fx-atraso="280">
           <span class="n d">3</span>
-          <h3>Você aprova e paga</h3>
+          <h3>Você só aprova</h3>
           <p>No painel dos pais, protegido por PIN, você confere o que foi feito. A cama ficou pela metade? Um toque em Rejeitar e a missão volta para a lista. Pai, mãe e avó entram cada um com o seu acesso, e a regra é a mesma para todos.</p>
           <div class="approve"><span><img src="/img/3d/soap.png" alt="">Lavar a louça · Eva</span><b>Aprovar</b></div>
         </li>
@@ -123,132 +158,111 @@
     </div>
   </section>
 
-  <!-- TEMPO DE TELA -->
-  <section class="split">
-    <div class="in split-grid">
-      <div>
-        <p class="kicker dark">Tempo de tela</p>
-        <h2 class="d">O fim do “só mais cinco minutinhos”</h2>
-        <p>Você define quanto tempo de tela a criança pode ganhar por dia, e o GameTask reparte esse total entre as missões. Com 30 minutos e 15 missões, cada uma vale 2 minutos.</p>
-        <p>Na hora de jogar, ela mesma dá play no cronômetro. Quando zera, o alarme toca e o app avisa em voz alta: “O tempo de Videogame de Bernardo acabou”. Quem encerra a partida é o relógio, e você sai do papel de vilão.</p>
-        <p>O tempo não acumula: amanhã começa do zero.</p>
-      </div>
-      <div class="calc" aria-label="Exemplo: 30 minutos divididos por 15 missões dão 2 minutos cada">
-        <div class="calc-row"><img src="/img/3d/game.png" alt=""><b class="d">30 min</b><span>÷</span><b class="d">15 missões</b><span>=</span><b class="d hl">2 min cada</b></div>
-        <div class="calc-bar">
-          <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+  <!-- CENA 5 · TEMPO DE TELA -->
+  <section class="clock" data-fx-fixa data-fx-altura="2.6" data-fx-fundo="#e4efdf" data-fx-tinta="#0d1b4c">
+    <div class="fx-palco">
+      <div class="in clock-grid">
+        <div class="clock-copy">
+          <p class="kicker dark">Tempo de tela</p>
+          <h2 class="d">O fim do “só mais cinco minutinhos”</h2>
+          <p>Você define quanto tempo de tela a criança pode ganhar por dia, e o GameTask reparte esse total entre as missões. Com 30 minutos e 15 missões, cada uma vale 2 minutos.</p>
+          <p>Na hora de jogar, ela mesma dá play no cronômetro. Quando zera, o alarme toca e o app avisa em voz alta. Quem encerra a partida é o relógio, e você sai do papel de vilão.</p>
         </div>
-        <p class="calc-note"><img src="/img/3d/stopwatch.png" alt=""><span>9 missões feitas = <b>18 minutos</b> de videogame hoje</span></p>
+        <div class="timer" id="timer" aria-label="Cronômetro de videogame chegando a zero">
+          <div class="timer-top"><img src="/img/3d/game.png" alt=""><b class="d">Videogame</b></div>
+          <div class="timer-num d" id="tnum">20:00</div>
+          <div class="timer-bar"><s id="tbar"></s></div>
+          <div class="timer-alarm"><img src="/img/3d/alarm.png" alt=""><span>“O tempo de Videogame de Bernardo acabou.”</span></div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- RECURSOS -->
-  <section class="features">
-    <div class="in">
-      <p class="kicker">Semanas depois</p>
-      <h2 class="d stroke">Aos poucos, a rotina entra no lugar</h2>
-      <p class="lede f-lede">A novidade passa em uma semana. É isto que mantém o jogo de pé depois dela:</p>
-      <div class="grid">
-        <article class="wide goal">
-          <div><h3><img src="/img/3d/ferris.png" alt="">Metas que valem a pena</h3><p>Parque de diversão depois de 150 missões. Sorvete por 20 moedas. A criança acompanha o caminho até o prêmio, passo a passo.</p></div>
-          <div class="road" aria-hidden="true"><i class="rail"></i><i class="fill"></i><i class="node on" style="left:25%"></i><i class="node on" style="left:50%"></i><i class="node" style="left:75%"></i><img class="me" src="/img/3d/fox.png" alt=""><img class="prize" src="/img/3d/ferris.png" alt=""></div>
-        </article>
-        <article><h3><img src="/img/3d/gift.png" alt="">Roleta do dia</h3><p>Fez todas as missões? Gira a roleta e ganha uma surpresa que você escolheu, como 50 moedas caindo na conta com barulho de cofre cheio.</p></article>
-        <article><h3><img src="/img/3d/shield.png" alt="">Roleta da correção</h3><p>Dia de implicância com o irmão ou de desobediência? Você gira a roleta e a consequência combinada sai dela, sem sermão no calor da hora.</p></article>
-        <article><h3><img src="/img/3d/headphone.png" alt="">Missões que falam</h3><p>Quem ainda não lê toca na missão e ouve o nome dela. O caçula entra no jogo junto com os irmãos.</p></article>
-        <article><h3><img src="/img/3d/stopwatch.png" alt="">Cronômetro na missão</h3><p>Ler por 45 minutos: a criança dá play, pode pausar e continuar, e a missão se conclui quando o tempo acaba.</p></article>
-        <article><h3><img src="/img/3d/coin.png" alt="">Mesada que ensina</h3><p>Você decide quanto vale cada moeda em reais. Elas acumulam até o dia de pagar, e a criança aprende a juntar para a meta.</p></article>
-        <article><h3><img src="/img/3d/lock.png" alt="">Painel dos pais escondido</h3><p>Só você aprova, paga e muda as regras. Dá para instalar o painel no seu celular com cara de outro app, como Banco ou Notas.</p></article>
+  <!-- CENA 6 · SEMANAS DEPOIS -->
+  <section class="later" data-fx-fundo="#fff8e6" data-fx-tinta="#0d1b4c">
+    <div class="in later-grid">
+      <div class="later-head">
+        <p class="kicker dark">Semanas depois</p>
+        <h2 class="d" data-fx="subir">Aos poucos, a rotina entra no lugar</h2>
+        <p>A novidade passa em uma semana. É isto que mantém o jogo de pé depois dela.</p>
       </div>
+      <ul class="feats">
+        <li data-fx="surgir"><img src="/img/3d/ferris.png" alt=""><div><h3>Metas que valem a pena</h3><p>Parque de diversão depois de 150 missões. Sorvete por 20 moedas. A criança acompanha o caminho até o prêmio.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/gift.png" alt=""><div><h3>Roleta do dia</h3><p>Fez todas as missões? Gira a roleta e ganha uma surpresa que você escolheu, como 50 moedas na conta.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/shield.png" alt=""><div><h3>Roleta da correção</h3><p>Dia de implicância com o irmão ou de desobediência? Você gira a roleta e a consequência combinada sai dela, sem sermão no calor da hora.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/headphone.png" alt=""><div><h3>Missões que falam</h3><p>Quem ainda não lê toca na missão e ouve o nome dela. O caçula entra no jogo junto com os irmãos.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/stopwatch.png" alt=""><div><h3>Cronômetro na missão</h3><p>Ler por 45 minutos: a criança dá play, pode pausar e continuar, e a missão se conclui quando o tempo acaba.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/coin.png" alt=""><div><h3>Mesada que ensina</h3><p>Você decide quanto vale cada moeda em reais. Elas acumulam até o dia de pagar, e a criança aprende a juntar para a meta.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/lock.png" alt=""><div><h3>Painel dos pais escondido</h3><p>Só você aprova, paga e muda as regras. Dá para instalar o painel no seu celular com cara de outro app, como Banco ou Notas.</p></div></li>
+        <li data-fx="surgir"><img src="/img/3d/phone.png" alt=""><div><h3>Avisos no celular</h3><p>“Bernardo, hora da escola!” e um aviso para você sempre que uma missão espera aprovação. No plano anual.</p></div></li>
+      </ul>
     </div>
-  </section>
 
-  <!-- QUEM FEZ (no lugar dos depoimentos, enquanto não há) -->
-  <section class="founder">
-    <div class="in f-grid">
-      <div class="f-story">
+    <div class="in founder">
+      <div class="f-story" data-fx="esquerda">
         <p class="kicker dark">Quem fez</p>
         <h2 class="d">Feito por um pai de três, testado todo dia em casa</h2>
         <p>Eu criei o GameTask para os meus três filhos. Cada um de uma idade, cada um com o seu jeito de fingir que não ouviu.</p>
         <p>O GameTask continua sendo usado e ajustado aqui em casa. O que você assina é o mesmo app que os meus filhos usam.</p>
         <p class="sign">Pai de três e criador do GameTask</p>
       </div>
-      <div class="f-origins">
+      <div class="f-origins" data-fx="direita">
         <p class="f-lead">Quase tudo nesta página saiu de uma briga de verdade aqui de casa:</p>
         <ul class="origins">
-          <li class="o-blue"><span class="ic"><img src="/img/3d/stopwatch.png" alt=""></span><b>O cronômetro com alarme</b><span>Veio do videogame que não desligava na hora combinada.</span></li>
-          <li class="o-pink"><span class="ic"><img src="/img/3d/headphone.png" alt=""></span><b>As missões que falam</b><span>Vieram de quem ainda não sabe ler e queria jogar igual aos irmãos.</span></li>
-          <li class="o-green"><span class="ic"><img src="/img/3d/shield.png" alt=""></span><b>A roleta da correção</b><span>Veio da implicância entre irmãos, aquela que começa com “ele me olhou”.</span></li>
-          <li class="o-yellow"><span class="ic"><img src="/img/3d/lock.png" alt=""></span><b>O painel escondido</b><span>Veio de uma criança curiosa demais com o celular do pai.</span></li>
+          <li><b>O cronômetro com alarme</b><span>Veio do videogame que não desligava na hora combinada.</span></li>
+          <li><b>As missões que falam</b><span>Vieram de quem ainda não sabe ler e queria jogar igual aos irmãos.</span></li>
+          <li><b>A roleta da correção</b><span>Veio da implicância entre irmãos, aquela que começa com “ele me olhou”.</span></li>
+          <li><b>O painel escondido</b><span>Veio de uma criança curiosa demais com o celular do pai.</span></li>
         </ul>
       </div>
     </div>
   </section>
 
-  <!-- PREÇOS -->
-  <section class="pricing" id="precos">
-    <div class="rays" aria-hidden="true"></div>
+  <!-- CENA 7 · PAZ -->
+  <section class="peace" id="precos" data-fx-fundo="#eef5ea" data-fx-tinta="#0d1b4c">
     <div class="in">
-      <p class="kicker">Preços</p>
-      <h2 class="d stroke">Assine com garantia de {{GARANTIA}} dias</h2>
-      <p class="lede">Use com a família inteira. Se ninguém se animar em até {{GARANTIA}} dias, você pede o dinheiro de volta pelo próprio app, sem explicar o motivo.</p>
+      <h2 class="d peace-h" data-fx="palavras" data-fx-duracao="1100">Amanhã cedo, quem vai perguntar “o que falta fazer?” são eles.</h2>
+      <p class="peace-sub" data-fx="surgir" data-fx-atraso="400">E você volta a ser só pai ou mãe.</p>
       <div class="plans">
-        <article class="plan best">
+        <article class="plan best" data-fx="crescer">
           <span class="ribbon">Melhor preço · economize {{ECONOMIA}}%</span>
           <h3 class="d">Anual</h3>
           <div class="price"><small>R$</small><b class="d">{{ANUAL_MES}}</b><small>/mês</small></div>
           <p class="bill">Pagamento único de <b>R$ {{ANUAL}}</b> por ano</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
-          <a class="btn green" href="/app#/comprar/annual">Assinar anual</a>
+          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/phone.png" alt="">Avisos no celular e no tablet</li><li><img src="/img/3d/check.png" alt="">Pix, cartão ou boleto</li></ul>
+          <a class="btn green big" href="/app#/comprar/annual">Assinar o anual</a>
         </article>
-        <article class="plan plus">
-          <span class="ribbon violet">Completo</span>
-          <h3 class="d">Plus</h3>
-          <div class="price"><small>R$</small><b class="d">{{PLUS_MES}}</b><small>/mês</small></div>
-          <p class="bill">Pagamento único de <b>R$ {{PLUS}}</b> por ano</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/phone.png" alt="">Avisos no celular e no tablet</li><li><img src="/img/3d/clock.png" alt="">"Bernardo, hora da escola!"</li><li><img src="/img/3d/lock.png" alt="">Aviso para os pais aprovarem</li></ul>
-          <a class="btn violet" href="/app#/comprar/plus">Assinar Plus</a>
-        </article>
-        <article class="plan">
+        <article class="plan" data-fx="crescer" data-fx-atraso="120">
           <h3 class="d">Mensal</h3>
           <div class="price"><small>R$</small><b class="d">{{MENSAL}}</b><small>/mês</small></div>
           <p class="bill">Pago mês a mês, sem fidelidade</p>
-          <ul><li><img src="/img/3d/check.png" alt="">Tudo do plano anual</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
-          <a class="btn ghost" href="/app#/comprar/monthly">Assinar mensal</a>
+          <ul><li><img src="/img/3d/check.png" alt="">Filhos e missões ilimitados</li><li><img src="/img/3d/check.png" alt="">Todos os aparelhos da família</li><li><img src="/img/3d/check.png" alt="">Pare quando quiser</li></ul>
+          <a class="btn ghost big" href="/app#/comprar/monthly">Assinar o mensal</a>
         </article>
       </div>
-      <p class="guarantee"><img src="/img/3d/shield.png" alt=""><span><b>Garantia de {{GARANTIA}} dias.</b> Não serviu para a sua casa? Um toque em “Quero meu dinheiro de volta” e o Mercado Pago devolve o valor. Sem perguntas.</span></p>
+      <p class="guarantee"><img src="/img/3d/shield.png" alt=""><span><b>Garantia de {{GARANTIA}} dias.</b> Use com a família inteira. Não serviu para a sua casa? Um toque em “Quero meu dinheiro de volta” e o Mercado Pago devolve o valor. Sem perguntas.</span></p>
     </div>
-  </section>
 
-  <!-- DÚVIDAS -->
-  <section class="faq" id="duvidas">
-    <div class="in narrow">
+    <div class="in narrow faq" id="duvidas">
       <p class="kicker dark">Dúvidas</p>
       <h2 class="d">Perguntas frequentes</h2>
       <details><summary>Como funciona a garantia?</summary><p>Você assina e usa com a família. Se não gostar em até {{GARANTIA}} dias depois do pagamento, toque em “Quero meu dinheiro de volta” em Ajustes, no painel dos pais. Não pedimos o motivo. O estorno sai pelo Mercado Pago: no Pix volta na hora; no cartão, aparece na fatura conforme o banco. A garantia vale para a primeira compra.</p></details>
       <details><summary>Por que não tem teste grátis?</summary><p>Porque a garantia funciona melhor para você: o app fica liberado por completo desde o primeiro dia, e se não servir, o dinheiro volta inteiro.</p></details>
       <details><summary>Como eu pago?</summary><p>Pelo Mercado Pago, com Pix, cartão de crédito ou boleto. O acesso é liberado assim que o pagamento é confirmado.</p></details>
       <details><summary>A cobrança é automática?</summary><p>Não. Você paga o período que escolheu (um ano ou um mês) e o app avisa quando estiver perto de vencer. Nada é cobrado sem você confirmar.</p></details>
-      <details><summary>O que o plano Plus tem a mais?</summary><p>Avisos que tocam no celular e no tablet: lembretes antes das tarefas com horário (natação às 18h, por exemplo), alarmes como "Bernardo, hora de ir para a escola" e um aviso no seu celular sempre que uma criança conclui uma missão. No iPhone e no iPad, é só adicionar o GameTask à Tela de Início.</p></details>
+      <details><summary>O que o plano anual tem a mais?</summary><p>Além de sair bem mais barato por mês, ele traz os avisos que tocam no celular e no tablet: lembretes antes das tarefas com horário (natação às 18h, por exemplo), alarmes como "Bernardo, hora de ir para a escola" e um aviso no seu celular sempre que uma criança conclui uma missão. No iPhone e no iPad, é só adicionar o GameTask à Tela de Início.</p></details>
       <details><summary>Quantos filhos e aparelhos posso usar?</summary><p>Quantos quiser. A assinatura é da família: todos os filhos e todos os aparelhos da casa estão incluídos.</p></details>
       <details><summary>As moedas são dinheiro de verdade?</summary><p>Você decide quanto vale cada moeda (por exemplo, R$ 0,50) e paga quando quiser. O app guarda o saldo e o histórico de pagamentos.</p></details>
       <details><summary>Serve para crianças pequenas?</summary><p>Sim. As missões têm ícones grandes e um botão só. Quem ainda não lê se guia pelas figuras e toca na missão para ouvir o nome dela.</p></details>
       <details><summary>E se meu filho marcar que fez sem ter feito?</summary><p>Ele vai tentar, claro. Toda missão passa por você: um toque em Rejeitar e ela volta para a lista, sem as moedas.</p></details>
       <details><summary>E se ele enjoar depois de uma semana?</summary><p>A roleta do dia sorteia uma surpresa sempre que ele completa as missões. As metas grandes, como o parque, dão motivo para continuar. E você troca missões e prêmios quando quiser.</p></details>
     </div>
-  </section>
 
-  <!-- CTA FINAL -->
-  <section class="final">
-    <div class="rays" aria-hidden="true"></div>
-    <div class="in">
-      <img src="/img/3d/rocket.png" alt="" class="rocket">
-      <h2 class="d stroke">Hoje à noite, a louça pode virar uma missão.</h2>
-      <p class="final-sub">Amanhã cedo, quem vai perguntar “o que falta fazer?” são eles.</p>
+    <div class="in closing">
+      <img src="/img/3d/house.png" alt="">
+      <h2 class="d">Hoje à noite, a louça pode virar uma missão.</h2>
       <a class="btn green big" href="#precos">Quero o GameTask</a>
-      <p class="fine">Garantia de {{GARANTIA}} dias ou seu dinheiro de volta. Pronto em 2 minutos.</p>
+      <p class="fine">Garantia de {{GARANTIA}} dias ou seu dinheiro de volta.</p>
     </div>
   </section>
 </main>
@@ -261,35 +275,83 @@
 </footer>
 
 <script>
-// Demonstração no celular do topo: a louça vira "Feito!" e as moedas sobem.
 (() => {
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const card = document.getElementById('mlive'), coins = document.getElementById('mcoins');
-  if (!card) return;
-  let on = false;
-  setInterval(() => {
-    on = !on;
-    card.classList.toggle('done', on);
-    card.querySelector('.m-go, .m-ok').outerHTML = on ? '<span class="m-ok"><img src="/img/3d/check.png" alt="">Feito!</span>' : '<span class="m-go">Concluí!</span>';
-    coins.textContent = on ? '44' : '42';
-    coins.parentElement.classList.remove('bump'); void coins.offsetWidth; coins.parentElement.classList.add('bump');
-  }, 2600);
-})();
-</script>
-<script>
-// Passo 2: "Concluí!" solta as moedas até o contador, igual ao app
-(() => {
-  const go = document.getElementById('pgo'), pill = document.getElementById('ppill'), out = document.getElementById('pcoins'), box = document.getElementById('play');
-  if (!go) return;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let coins = 42, busy = false, ac = null;
-  const ding = (i) => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const prog = (el) => { const r = el.getBoundingClientRect(), run = el.offsetHeight - innerHeight; return run > 0 ? clamp(-r.top / run, 0, 1) : 1; };
+  // som curtinho de moeda (só depois de um toque do visitante)
+  let ac = null;
+  const ding = () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); const o = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime;
     o.type = 'square'; o.frequency.setValueAtTime(988, t0); o.frequency.setValueAtTime(1319, t0 + .06); g.gain.setValueAtTime(.05, t0); g.gain.exponentialRampToValueAtTime(.001, t0 + .18);
     o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + .2); } catch {} };
-  const bump = () => { pill.classList.remove('bump'); void pill.offsetWidth; pill.classList.add('bump'); };
+  const bump = (el) => { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); };
+
+  // ---------- CENA 2: a lista da cabeça enche conforme a rolagem ----------
+  const hl = document.getElementById('headlist'), items = [...hl.querySelectorAll('li')];
+  const fillList = () => {
+    if (still) { items.forEach(li => li.classList.add('on')); return; }
+    const r = hl.getBoundingClientRect(), p = clamp((innerHeight * .92 - r.top) / (innerHeight * .75), 0, 1);
+    items.forEach((li, i) => li.classList.toggle('on', p * (items.length + .5) > i + .5));
+    hl.classList.toggle('full', p > .97);
+  };
+
+  // ---------- CENA 3 (pico): cada cobrança voa para o celular e vira missão ----------
+  const turn = document.getElementById('virada'), stage = document.getElementById('turnStage'), phone = document.getElementById('turnPhone');
+  const tb = [...stage.querySelectorAll('.turn-bubbles .bb')], cards = [...phone.querySelectorAll('.m-card')], tcoins = document.getElementById('tcoins'), tpill = document.getElementById('tpill');
+  const COINS = [1, 1, 1, 2, 1, 0];
+  let lastDone = -1;
+  const runTurn = () => {
+    const p = still ? 1 : prog(turn);
+    // fundo esfria do alarme para a paz
+    const calm = clamp((p - .12) / .7, 0, 1);
+    // vinho → laranja de nascer do sol → creme (sem passar pelo marrom)
+    stage.style.setProperty('--sky', calm < .5 ? `color-mix(in oklch,#2b0b1a,#ff7a52 ${(calm * 200).toFixed(1)}%)` : `color-mix(in oklch,#ff7a52,#fff8e6 ${((calm - .5) * 200).toFixed(1)}%)`);
+    stage.classList.toggle('calm', calm > .55);
+    stage.classList.toggle('done', p > .86);
+    stage.style.setProperty('--jit', (1 - calm).toFixed(3));
+    const pr = phone.getBoundingClientRect();
+    let done = -1;
+    tb.forEach((b, i) => {
+      const a = .14 + i * .11, t = clamp((p - a) / .12, 0, 1);
+      if (t >= 1) done = i;
+      if (still) { b.style.opacity = 0; return; }
+      // posição do balão sem a viagem (para mirar no cartão certo do celular)
+      b.style.transform = 'none'; const br = b.getBoundingClientRect(), cr = cards[i].getBoundingClientRect();
+      const dx = cr.left + cr.width / 2 - (br.left + br.width / 2), dy = cr.top + cr.height / 2 - (br.top + br.height / 2);
+      const e = t * t * (3 - 2 * t);
+      b.style.transform = `translate(${dx * e}px,${dy * e}px) rotate(calc(var(--r) * ${1 - e})) scale(${1 - .55 * e})`;
+      b.style.opacity = t >= 1 ? 0 : 1 - Math.max(0, (t - .75) * 4);
+      b.classList.toggle('flying', t > 0 && t < 1);
+    });
+    cards.forEach((c, i) => c.classList.toggle('done', i <= done));
+    if (done !== lastDone) {
+      const coins = 40 + COINS.slice(0, done + 1).reduce((s, v) => s + v, 0);
+      tcoins.textContent = coins; if (done >= 0) bump(tpill);
+      lastDone = done;
+    }
+  };
+
+  // ---------- CENA 5: o cronômetro zera com a rolagem ----------
+  const clock = document.querySelector('.clock'), tnum = document.getElementById('tnum'), tbar = document.getElementById('tbar'), timer = document.getElementById('timer');
+  const runClock = () => {
+    const p = still ? 1 : prog(clock), t = clamp((p - .08) / .72, 0, 1), left = Math.round(1200 * (1 - t));
+    tnum.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+    tbar.style.transform = `scaleX(${1 - t})`;
+    timer.classList.toggle('ring', t >= 1);
+    timer.classList.toggle('low', t > .8 && t < 1);
+  };
+
+  let raf = 0;
+  const frame = () => { raf = 0; fillList(); runTurn(); runClock(); };
+  const ask = () => { if (!raf) raf = requestAnimationFrame(frame); };
+  addEventListener('scroll', ask, { passive: true }); addEventListener('resize', ask); addEventListener('load', ask); ask();
+
+  // ---------- CENA 4: "Concluí!" solta as moedas até o contador, igual ao app ----------
+  const go = document.getElementById('pgo'), pill = document.getElementById('ppill'), out = document.getElementById('pcoins'), box = document.getElementById('play');
+  let coins = 46, busy = false;
   const count = (to) => { const from = coins, t0 = performance.now(); coins = to;
-    const step = (t) => { const p = Math.min(1, (t - t0) / 600); out.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(step); };
-    requestAnimationFrame(step); bump(); };
+    const step = (t) => { const q = Math.min(1, (t - t0) / 600); out.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - q, 3))); if (q < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step); bump(pill); };
   const fly = (sound) => {
     const a = go.getBoundingClientRect(), b = pill.getBoundingClientRect();
     const fx = a.left + a.width / 2, fy = a.top + a.height / 2, tx = b.left + 14, ty = b.top + b.height / 2;
@@ -299,7 +361,7 @@
       const lift = -70 - Math.random() * 50, spread = (i - 2.5) * 16;
       c.animate([{ transform: 'translate(0,0) scale(.4)', opacity: 0 }, { transform: `translate(${spread}px,${lift}px) scale(1.15)`, opacity: 1, offset: .3 },
         { transform: `translate(${tx - fx}px,${ty - fy}px) scale(.5)`, opacity: 1 }], { duration: 850, delay: i * 70, easing: 'cubic-bezier(.55,0,.35,1)', fill: 'both' })
-        .onfinish = () => { c.remove(); if (sound) ding(i); res(); };
+        .onfinish = () => { c.remove(); if (sound) ding(); res(); };
     })));
   };
   const play = async (sound) => {
@@ -310,7 +372,6 @@
     setTimeout(() => { go.textContent = 'Concluí!'; go.classList.remove('done'); box.classList.remove('won'); busy = false; }, 2200);
   };
   go.onclick = () => play(true);
-  // mostra sozinho uma vez quando o cartão aparece na tela
   if (!still && 'IntersectionObserver' in window) {
     const io = new IntersectionObserver((en) => { if (en[0].isIntersecting) { io.disconnect(); setTimeout(() => play(false), 500); } }, { threshold: .7 });
     io.observe(box);

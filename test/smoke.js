@@ -416,6 +416,8 @@ const step = (m) => console.log('✔', m);
     // avisos: plano mensal não tem; Plus tem
     assert.equal((await ok('GET', '/api/admin/push')).plus, false);
     assert.equal((await api('POST', '/api/admin/alarms', { title: 'Hora da escola', time: '06:40' })).status, 403);
+    await db.query("UPDATE families SET plan='annual' WHERE email='c@d.co'"); // o anual inclui os avisos
+    assert.equal((await ok('GET', '/api/admin/push')).plus, true);
     await db.query("UPDATE families SET plan='plus' WHERE email='c@d.co'");
     const pk = await ok('GET', '/api/admin/push'); assert.equal(pk.plus, true); assert.ok(pk.key.length > 40);
     assert.equal((await api('POST', '/api/admin/alarms', { title: 'Hora da escola', time: '25:00' })).status, 400);

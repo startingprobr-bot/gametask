@@ -1322,16 +1322,11 @@ async function viewPaywall() {
       <article class="plan best"><span class="ribbon">Melhor preço${save ? ` · economize ${save}%` : ''}</span>
         <h2 class="d">Anual</h2><div class="price"><small>R$</small><b class="d num">${money(perMonth)}</b><small>/mês</small></div>
         <p class="bill">Pagamento único de <b>${brl(p.annual)}</b> por ano</p>
-        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('check')}Pix, cartão ou boleto</li></ul>
+        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Todos os aparelhos da família</li><li>${im('phone')}Avisos no celular e no tablet</li></ul>
         <button class="btn green" data-plan="annual">Assinar anual</button></article>
-      <article class="plan plus"><span class="ribbon violet">Completo</span>
-        <h2 class="d">Plus</h2><div class="price"><small>R$</small><b class="d num">${money(Math.floor(p.plus / 12 * 100) / 100)}</b><small>/mês</small></div>
-        <p class="bill">Pagamento único de <b>${brl(p.plus)}</b> por ano</p>
-        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('phone')}Avisos no celular e no tablet</li><li>${im('clock')}Lembrete antes de cada horário</li><li>${im('lock')}Aviso para os pais aprovarem</li></ul>
-        <button class="btn" data-plan="plus">Assinar Plus</button></article>
       <article class="plan"><h2 class="d">Mensal</h2><div class="price"><small>R$</small><b class="d num">${money(p.monthly)}</b><small>/mês</small></div>
         <p class="bill">Pago a cada mês, sem fidelidade</p>
-        <ul><li>${im('check')}Tudo do plano anual</li><li>${im('check')}Renove quando quiser</li></ul>
+        <ul><li>${im('check')}Filhos ilimitados</li><li>${im('check')}Sem fidelidade: renove quando quiser</li></ul>
         <button class="btn ghost" data-plan="monthly">Assinar mensal</button></article>
     </div>
     <div class="cup pw-cup" id="cup"></div>
@@ -1565,7 +1560,7 @@ async function ownerPrices(pane) {
   };
 }
 
-// ---------- Avisos no celular/tablet (plano Plus) ----------
+// ---------- Avisos no celular/tablet (plano anual) ----------
 const b64key = (s) => { const p = '='.repeat((4 - s.length % 4) % 4), r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
@@ -1581,7 +1576,7 @@ async function adminAlarms(pane, refresh) {
   const sub = supported ? await mySub() : null, mine = sub && p.devices.find(d => d.endpoint === sub.endpoint);
   const when = (w) => w.length === 7 ? 'todo dia' : w === '12345' ? 'seg a sex' : [...w].map(d => DAYN[d]).join(', ');
 
-  const device = !p.plus ? `<div class="upsell">${im('phone')}<div><b>Avisos no celular e no tablet fazem parte do plano Plus.</b><p>Lembrete antes de cada tarefa com horário, alarmes como "hora de ir para a escola" e aviso para você aprovar as missões.</p></div><a class="btn sm" href="#/assinar">Conhecer o Plus</a></div>`
+  const device = !p.plus ? `<div class="upsell">${im('phone')}<div><b>Avisos no celular e no tablet fazem parte do plano anual.</b><p>Lembrete antes de cada tarefa com horário, alarmes como "hora de ir para a escola" e aviso para você aprovar as missões.</p></div><a class="btn sm" href="#/assinar">Conhecer o Plus</a></div>`
     : !supported ? (isIOS && !standalone ? `<div class="notice">${im('phone')}<p>No iPhone e no iPad, os avisos só funcionam com o GameTask instalado: toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Abra pelo ícone e volte aqui.</p></div>`
       : `<div class="notice">${im('cross')}<p>Este navegador não recebe avisos. Use o Chrome no Android ou no computador, ou o GameTask instalado no iPhone/iPad.</p></div>`)
     : Notification.permission === 'denied' ? `<div class="notice">${im('lock')}<p>Os avisos foram bloqueados neste aparelho. Libere em <b>Configurações do site → Notificações</b> do navegador e volte aqui.</p></div>`
@@ -1739,9 +1734,8 @@ function showPix(r, onPaid) {
 // ---------- Carrinho (vindo da página de vendas): paga primeiro, cria a senha depois ----------
 const trialText = (d) => { d = Math.round(+d) || 0; return d >= 30 && d % 30 === 0 ? (d === 30 ? '1 mês' : `${d / 30} meses`) : `${d} ${d === 1 ? 'dia' : 'dias'}`; };
 const CART = {
-  annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Pix, cartão ou boleto'] },
-  monthly: { t: 'Mensal', note: 'por mês', perks: ['Tudo do plano anual', 'Sem fidelidade: renove quando quiser'] },
-  plus: { t: 'Plus', note: 'por ano', perks: ['Tudo do plano anual', 'Avisos no celular e no tablet', 'Lembrete antes de cada horário'] },
+  annual: { t: 'Anual', note: 'por ano', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Avisos no celular e no tablet'] },
+  monthly: { t: 'Mensal', note: 'por mês', perks: ['Filhos ilimitados', 'Todos os aparelhos da família', 'Sem fidelidade'] },
 };
 // Cupom de desconto: "Tem um cupom?" abre o campo; aplicado, chama onChange({ code, percent }) ou onChange(null)
 const offPrice = (v, c) => c ? Math.round(v * (100 - c.percent)) / 100 : v;
@@ -1784,7 +1778,7 @@ async function viewBuy(planIn, codeIn) {
   app.innerHTML = `<div class="lobby"><div class="rays"></div><div class="auth cartwrap">
     <div class="logo">${im('game')}<h1 class="d stroke" style="font-size:40px">Seu carrinho</h1></div>
     <form class="card" id="f" novalidate>
-      <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['plus', 'Plus'], ['monthly', 'Mensal']], plan)}</div>
+      <div class="field"><span class="lab">Plano</span>${seg('plan', [['annual', 'Anual'], ['monthly', 'Mensal']], plan)}</div>
       <div id="cart" class="cart"></div>
       <div class="field"><label for="e">Seu e-mail</label><input id="e" name="email" type="email" inputmode="email" autocomplete="email" required><p class="hint">Só isso por agora. Nome, senha e PIN você cria logo depois do pagamento.</p></div>
       <div class="err" id="err" role="alert"></div>

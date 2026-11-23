@@ -28,12 +28,12 @@ function addPeriod(start, plan, sign = 1) {
 const PLANS = ['monthly', 'annual', 'plus'];
 const PLAN_TITLE = { monthly: 'mensal', annual: 'anual', plus: 'Plus (anual)' };
 
-// `plus`: recursos do plano Plus (avisos no celular/tablet). O teste grátis inclui tudo.
+// `plus`: avisos no celular/tablet. Vêm no plano anual (e no antigo Plus, que saiu da venda). O teste grátis inclui tudo.
 function access(f) {
   const t = today();
   if (isOwner(f)) return { status: 'owner', active: true, owner: true, plus: true };
   if (f.plan === 'free') return { status: 'free', active: true, plus: true };
-  if (f.paid_until && f.paid_until >= t) return { status: 'paid', active: true, plan: f.plan, plus: f.plan === 'plus', until: f.paid_until, days_left: daysBetween(t, f.paid_until) };
+  if (f.paid_until && f.paid_until >= t) return { status: 'paid', active: true, plan: f.plan, plus: f.plan === 'plus' || f.plan === 'annual', until: f.paid_until, days_left: daysBetween(t, f.paid_until) };
   if (f.trial_ends && f.trial_ends >= t) return { status: 'trial', active: true, plus: true, until: f.trial_ends, days_left: daysBetween(t, f.trial_ends) };
   return { status: 'expired', active: false, plus: false, plan: f.plan, until: f.paid_until || f.trial_ends };
 }

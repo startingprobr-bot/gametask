@@ -474,7 +474,7 @@ router.post('/setup/skip', wrap(async (req, res) => {
 // ---------- Avisos no celular/tablet (plano Plus) ----------
 const push = require('../push');
 const { access } = require('../billing');
-const needPlus = (req, res, next) => access(req.family).plus ? next() : res.status(403).json({ error: 'Os avisos no celular e no tablet fazem parte do plano Plus.', code: 'plus' });
+const needPlus = (req, res, next) => access(req.family).plus ? next() : res.status(403).json({ error: 'Os avisos no celular e no tablet fazem parte do plano anual.', code: 'plus' });
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 router.get('/push', wrap(async (req, res) => {
