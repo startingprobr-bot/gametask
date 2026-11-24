@@ -54,10 +54,11 @@ const step = (m) => console.log('✔', m);
   });
   await new Promise(r => mpFake.listen(3198, '127.0.0.1', r));
   // Evolution API (WhatsApp) de mentira: guarda o que o servidor mandou
-  const evoSent = []; let evoHook = null;
+  const evoSent = [], n8nGot = []; let evoHook = null;
   const evoFake = http.createServer((req, res) => {
     let b = ''; req.on('data', d => { b += d; }); req.on('end', () => {
       res.setHeader('content-type', 'application/json');
+      if (req.url.startsWith('/n8n')) { n8nGot.push({ url: req.url, body: JSON.parse(b) }); return res.end('{}'); } // o "n8n" que recebe o repasse
       if (req.headers.apikey !== 'evo-key') { res.statusCode = 401; return res.end('{"message":"Unauthorized"}'); }
       const j = b ? JSON.parse(b) : null;
       if (req.url.startsWith('/message/')) { evoSent.push({ kind: req.url.split('/')[2], ...j }); return res.end('{"key":{"id":"x"}}'); }
@@ -68,7 +69,7 @@ const step = (m) => console.log('✔', m);
     });
   });
   await new Promise(r => evoFake.listen(3197, '127.0.0.1', r));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198', EVOLUTION_URL: 'http://127.0.0.1:3197', EVOLUTION_KEY: 'evo-key', EVOLUTION_INSTANCE: 'gt', WHATSAPP_NUMBER: '5511999990000', APP_URL: '' }, stdio: 'inherit' });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198', EVOLUTION_URL: 'http://127.0.0.1:3197', EVOLUTION_KEY: 'evo-key', EVOLUTION_INSTANCE: 'gt', WHATSAPP_NUMBER: '5511999990000', WA_REPASSAR_URL: 'http://127.0.0.1:3197/n8n/', APP_URL: '' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 360; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
     { // os cenários de teste grátis abaixo precisam do teste ligado (o padrão agora é 0, com garantia)
@@ -702,11 +703,24 @@ const step = (m) => console.log('✔', m);
     assert.equal(evoSent.length, 4); assert.equal(evoSent[3].kind, 'sendMedia');
     step('WhatsApp: código recebido devolve o PDF; conversas pessoais, grupos e repetições ignorados; SAIR respeitado');
 
+    // repasse: tudo o que chegou (até conversa pessoal) foi também para o n8n, do jeito que veio
+    assert.ok(n8nGot.some(x => x.url === '/n8n' && x.body.data?.message?.conversation === 'oi amor, chego às 7'), 'repasse: ' + n8nGot.length);
+    await fetch(BASE + '/api/public/wa/' + secret, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"event":"connection.update","data":{"state":"open"}}' });
+    await fetch(BASE + '/api/public/wa/' + secret + '/messages-upsert', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"event":"messages.upsert","data":{}}' });
+    for (let i = 0; i < 30 && !n8nGot.some(x => x.url === '/n8n/messages-upsert'); i++) await new Promise(r => setTimeout(r, 100));
+    assert.ok(n8nGot.some(x => x.body.event === 'connection.update') && n8nGot.some(x => x.url === '/n8n/messages-upsert'));
+
     let ws = await ok('GET', '/api/owner/whatsapp');
-    assert.ok(ws.configured && ws.state === 'open' && ws.number === '5511999990000' && !ws.hookOk);
+    assert.ok(ws.configured && ws.state === 'open' && ws.number === '5511999990000' && !ws.hookOk && ws.forward);
+    // a instância já avisa outro sistema que não é o repasse: o botão NÃO troca
+    evoHook = { url: 'https://n8n.exemplo/webhook/outro', enabled: true, events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'] };
+    const rh = await api('POST', '/api/owner/whatsapp/webhook');
+    assert.equal(rh.status, 502); assert.equal(evoHook.url, 'https://n8n.exemplo/webhook/outro');
+    // é o endereço do repasse: troca e mantém os eventos que o outro sistema usava
+    evoHook.url = 'http://127.0.0.1:3197/n8n';
     ws = await ok('POST', '/api/owner/whatsapp/webhook');
-    assert.ok(ws.hookOk && evoHook.url.endsWith('/api/public/wa/' + secret) && evoHook.events.includes('MESSAGES_UPSERT'));
-    step('painel do dono: status da Evolution e ligar o recebimento das mensagens');
+    assert.ok(ws.hookOk && evoHook.url.endsWith('/api/public/wa/' + secret) && evoHook.events.includes('MESSAGES_UPSERT') && evoHook.events.includes('CONNECTION_UPDATE'));
+    step('painel do dono: status da Evolution, ligar o recebimento sem derrubar o n8n e repassar as mensagens');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');

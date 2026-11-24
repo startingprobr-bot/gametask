@@ -1525,7 +1525,8 @@ async function ownerLeads(pane) {
     : `<p>Instância <b>${esc(wa.instance || '')}</b> ${tag(ST, wa.state || 'close')}${wa.number ? ` · número ${esc(fone(wa.number))}` : ''}</p>
       ${wa.error ? `<p class="err">${esc(wa.error)}</p>` : ''}
       <p class="hint">${wa.hookOk ? 'Recebimento das mensagens ligado: quem mandar o código recebe o PDF na hora.'
-        : `Recebimento das mensagens <b>desligado</b>.${wa.hook?.url ? ` Hoje a instância avisa outro endereço (${esc(wa.hook.url.slice(0, 60))}…); ligar aqui troca por este.` : ''}`}</p>
+        : `Recebimento das mensagens <b>desligado</b>.${wa.hook?.url ? ` Hoje a instância avisa outro endereço: <b>${esc(wa.hook.url)}</b>. Para os dois funcionarem, coloque esse endereço na variável WA_REPASSAR_URL do EasyPanel antes de ligar.` : ''}`}</p>
+      ${wa.forward ? `<p class="hint">Repassando todas as mensagens também para <b>${esc(wa.forward)}</b>.</p>` : ''}
       ${wa.hookOk ? '' : '<button class="btn sm" id="hook">Ligar recebimento das mensagens</button>'}
       <details class="hint" style="margin-top:8px"><summary>Configurar à mão na Evolution</summary><p>Webhook com o evento MESSAGES_UPSERT para:</p><input readonly value="${esc(wa.hookUrl || '')}" onfocus="this.select()"></details>`;
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">WhatsApp</h2></div>${waBox}</section>

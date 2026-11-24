@@ -86,10 +86,16 @@ async function handle(d, host) {
 }
 
 const router = express.Router();
-router.post('/api/public/wa/:secret', express.json({ limit: '25mb' }), (req, res) => {
+// A Evolution só tem um webhook por instância. Se outro sistema (ex.: n8n) também precisa das mensagens,
+// o endereço dele vai em WA_REPASSAR_URL e o GameTask repassa tudo, do jeito que chegou.
+const fwd = () => (process.env.WA_REPASSAR_URL || '').trim();
+router.post('/api/public/wa/:secret/:ev?', express.json({ limit: '50mb' }), (req, res) => {
   if (!on() || req.params.secret !== hookSecret()) return res.status(404).json({ error: 'Não encontrado' });
   res.json({ ok: true }); // responde logo; o envio do PDF acontece em seguida
   const b = req.body || {};
+  if (fwd()) fetch(fwd().replace(/\/$/, '') + (req.params.ev ? '/' + req.params.ev : ''), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b), signal: AbortSignal.timeout(20000) })
+    .then(r => { if (!r.ok) console.error('repasse WhatsApp', r.status); }).catch(e => console.error('repasse WhatsApp', e.message));
   if (!/messages[._]upsert/i.test(b.event || '')) return;
   const host = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/^https?:\/\//, '').replace(/\/$/, '');
   for (const d of (Array.isArray(b.data) ? b.data : [b.data])) {
@@ -102,7 +108,7 @@ router.post('/api/public/wa/:secret', express.json({ limit: '25mb' }), (req, res
 const hookUrl = (req) => `${(process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')}/api/public/wa/${hookSecret()}`;
 async function status(req) {
   if (!on()) return { configured: false };
-  const out = { configured: true, instance: cfg().inst, number: await number(), hookUrl: hookUrl(req) };
+  const out = { configured: true, instance: cfg().inst, number: await number(), hookUrl: hookUrl(req), forward: fwd() };
   try { const s = await evo('GET', '/instance/connectionState/{i}'); out.state = s?.instance?.state || s?.state || 'desconhecido'; }
   catch (e) { out.error = e.message; }
   try { const w = await evo('GET', '/webhook/find/{i}'); out.hook = w ? { url: w.url || '', enabled: !!w.enabled, events: w.events || [] } : null; }
@@ -110,6 +116,15 @@ async function status(req) {
   out.hookOk = !!(out.hook?.enabled && out.hook.url === out.hookUrl && (!out.hook.events?.length || out.hook.events.some(e => /MESSAGES_UPSERT/i.test(e))));
   return out;
 }
-const setHook = (req) => evo('POST', '/webhook/set/{i}', { webhook: { enabled: true, url: hookUrl(req), byEvents: false, base64: false, events: ['MESSAGES_UPSERT'] } });
+// liga o webhook sem derrubar outro sistema: se a instância já avisa outro endereço que não é o repasse, não troca.
+// Mantém os eventos e opções que já estavam (o sistema repassado continua recebendo tudo o que recebia).
+async function setHook(req) {
+  const cur = await evo('GET', '/webhook/find/{i}').catch(() => null);
+  const url = hookUrl(req), old = (cur?.url || '').replace(/\/$/, '');
+  if (cur?.enabled && old && old !== url && old !== fwd().replace(/\/$/, ''))
+    throw new Error(`A instância já manda as mensagens para ${old}. Para não desligar esse sistema, coloque esse endereço na variável WA_REPASSAR_URL do EasyPanel, faça o Deploy e clique de novo.`);
+  const events = [...new Set([...(cur?.enabled && cur.events?.length ? cur.events : []), 'MESSAGES_UPSERT'])];
+  return evo('POST', '/webhook/set/{i}', { webhook: { enabled: true, url, byEvents: !!cur?.webhookByEvents, base64: !!cur?.webhookBase64, events } });
+}
 
 module.exports = { router, on, number, newCode, status, setHook, sendText };
