@@ -82,12 +82,14 @@
       <div class="step gate">
         <h2 class="d"><span class="n">3</span><span class="if-wa">Receba no WhatsApp</span><span class="no-wa">Gere o seu quadro</span></h2>
         <p class="hint if-wa">O PDF com o quadro chega no seu WhatsApp, pronto para imprimir toda semana.</p>
-        <p class="hint no-wa">Você imprime agora e, se deixar o e-mail, recebe o link para imprimir de novo.</p>
+        <p class="hint no-wa">Deixe o seu WhatsApp e imprima o quadro na hora.</p>
         <label class="f" for="name">Seu nome</label>
         <input type="text" id="name" name="name" maxlength="80" autocomplete="given-name" required>
+        <span class="no-wa"><label class="f" for="wa">Seu WhatsApp com DDD</label>
+        <input type="tel" id="wa" name="wa" maxlength="20" autocomplete="tel-national" inputmode="tel" placeholder="(11) 91234-5678"></span>
         <label class="f" for="email">Seu e-mail <small>(opcional)</small></label>
         <input type="email" id="email" name="email" maxlength="160" autocomplete="email" inputmode="email">
-        <label class="consent"><input type="checkbox" id="consent"> <span><span class="if-wa">Quero receber o quadro e dicas de rotina do GameTask no WhatsApp (e no e-mail, se eu informar). Posso sair quando quiser respondendo SAIR.</span><span class="no-wa">Quero receber o quadro e dicas de rotina do GameTask por e-mail. Posso sair quando quiser.</span> <a href="/privacidade" target="_blank">Privacidade</a></span></label>
+        <label class="consent"><input type="checkbox" id="consent"> <span><span class="if-wa">Quero receber o quadro e dicas de rotina do GameTask no WhatsApp (e no e-mail, se eu informar). Posso sair quando quiser respondendo SAIR.</span><span class="no-wa">Quero receber dicas de rotina do GameTask no WhatsApp (e no e-mail, se eu informar). Posso sair quando quiser.</span> <a href="/privacidade" target="_blank">Privacidade</a></span></label>
         <button class="btn green block" id="go"><img class="if-wa wa-ic" src="/img/wa.svg" alt=""><span class="if-wa">Receber no WhatsApp</span><span class="no-wa">Gerar meu quadro</span></button>
         <p class="err" id="err" role="alert"></p>
       </div>
@@ -277,17 +279,18 @@
     if (!S.kids.length) { $('#kidIn').focus(); return flash('Escreva o nome de pelo menos uma criança'); }
     if (!S.tasks.length) return flash('Escolha pelo menos uma tarefa');
     if (!$('#name').value.trim()) { $('#name').focus(); return flash('Digite o seu nome'); }
+    const wa = $('#wa').value.replace(/\D/g, '');
+    if (!WA && (wa.length < 10 || wa.length > 13)) { $('#wa').focus(); return flash('Digite o seu WhatsApp com DDD'); }
     if (!$('#consent').checked) return flash('Marque a caixinha para receber o quadro');
     const go = $('#go'), label = go.innerHTML; go.disabled = true; go.textContent = 'Preparando…';
     try {
       const r = await fetch('/api/public/leads', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: $('#name').value, email: $('#email').value, consent: true, kids: S.kids, tasks: S.tasks, source: 'quadro' }) });
+        body: JSON.stringify({ name: $('#name').value, whatsapp: WA ? '' : wa, email: $('#email').value, consent: true, kids: S.kids, tasks: S.tasks, source: 'quadro' }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'Não deu certo. Tente de novo.');
       store.set('gt-lead', j.token);
       unlock(j); render();
       if (j.wa) { if (!open(j.wa, '_blank')) location.href = j.wa; } // navegador bloqueou a aba nova: abre na mesma
-      else setTimeout(() => print(), 350);
     } catch (err) { flash(err.message); }
     finally { go.disabled = false; go.innerHTML = label; }
   };
