@@ -69,7 +69,7 @@ const step = (m) => console.log('✔', m);
     });
   });
   await new Promise(r => evoFake.listen(3197, '127.0.0.1', r));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198', EVOLUTION_URL: 'http://127.0.0.1:3197', EVOLUTION_KEY: 'evo-key', EVOLUTION_INSTANCE: 'gt', WHATSAPP_NUMBER: '5511999990000', WA_REPASSAR_URL: 'http://127.0.0.1:3197/n8n/', APP_URL: '' }, stdio: 'inherit' });
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198', EVOLUTION_URL: 'http://127.0.0.1:3197', EVOLUTION_KEY: 'evo-key', EVOLUTION_INSTANCE: 'gt', WHATSAPP_NUMBER: '5511999990000', WA_REPASSAR_URL: 'http://127.0.0.1:3197/n8n/', WA_FLOW_ANYTIME: '1', WA_FLOW_GAP_MS: '0', WA_FLOW_EVERY_MS: '300', APP_URL: '' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 360; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
     { // os cenários de teste grátis abaixo precisam do teste ligado (o padrão agora é 0, com garantia)
@@ -721,6 +721,35 @@ const step = (m) => console.log('✔', m);
     ws = await ok('POST', '/api/owner/whatsapp/webhook');
     assert.ok(ws.hookOk && evoHook.url.endsWith('/api/public/wa/' + secret) && evoHook.events.includes('MESSAGES_UPSERT') && evoHook.events.includes('CONNECTION_UPDATE'));
     step('painel do dono: status da Evolution, ligar o recebimento sem derrubar o n8n e repassar as mensagens');
+
+    // Fluxos: o do quadro nasce pausado com as 2 mensagens aprovadas
+    let fls = await ok('GET', '/api/owner/flows');
+    const fq = fls.flows[0];
+    assert.ok(fls.flows.length === 1 && fq.source === 'quadro' && !fq.active && fq.steps.map(s => s.day).join() === '3,7');
+    // pausado: a Bia confirmou há 3 dias e não recebe nada
+    await db.query('UPDATE leads SET wa_confirmed_at = NOW() - INTERVAL 3 DAY - INTERVAL 1 HOUR WHERE code=?', [outro.code]);
+    const before = evoSent.length;
+    await new Promise(r => setTimeout(r, 1200));
+    assert.equal(evoSent.length, before, 'fluxo pausado não envia');
+    // ativa: sai a mensagem do dia 3 só para ela (o lead da Ana saiu; os outros estão no dia 0)
+    await ok('PUT', `/api/owner/flows/${fq.id}`, { ...fq, active: true });
+    for (let i = 0; i < 40 && evoSent.length === before; i++) await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 1200));
+    const fsent = evoSent.slice(before);
+    assert.equal(fsent.length, 1, 'fluxo: ' + JSON.stringify(fsent.map(x => x.number)));
+    assert.ok(fsent[0].kind === 'sendText' && fsent[0].number === '5521977776666' && fsent[0].text.startsWith('Oi, Bia!'));
+    fls = await ok('GET', '/api/owner/flows');
+    assert.equal(fls.flows[0].steps[0].sent, 1);
+    // editar o texto mantém a mensagem (quem recebeu não recebe de novo); dia 7 usa a garantia
+    const f2 = fls.flows[0]; f2.steps[0].body += ' 🙂';
+    await ok('PUT', `/api/owner/flows/${f2.id}`, f2);
+    fls = await ok('GET', '/api/owner/flows');
+    assert.ok(fls.flows[0].steps[0].id === f2.steps[0].id && fls.flows[0].steps[0].sent === 1);
+    assert.equal((await api('PUT', `/api/owner/flows/${f2.id}`, { ...f2, steps: [{ day: 0, body: 'x' }] })).status, 400);
+    await ok('POST', '/api/owner/flows/test', { body: fls.flows[0].steps[1].body });
+    const t7 = evoSent.at(-1);
+    assert.ok(t7.number === '5511999990000' && t7.text.startsWith('[TESTE] Ana, a real') && t7.text.includes('garantia de 14 dias') && !/\{\w+\}/.test(t7.text));
+    step('fluxos de WhatsApp: pausado não envia, ativo manda no dia certo uma vez, edição não reenvia, teste para o dono');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');

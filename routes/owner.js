@@ -101,6 +101,64 @@ router.get('/leads', wrap(async (req, res) => {
 }));
 
 // WhatsApp (Evolution): conexão e recebimento das mensagens com o código das iscas
+// ---------- Fluxos de WhatsApp (mensagens automáticas para os leads) ----------
+router.get('/flows', wrap(async (req, res) => {
+  const fl = require('../flows');
+  const [flows] = await pool.query('SELECT id,name,source,active FROM wa_flows ORDER BY id');
+  const [steps] = await pool.query('SELECT s.id,s.flow_id,s.day,s.body,(SELECT COUNT(*) FROM wa_sends w WHERE w.step_id=s.id) sent FROM wa_steps s ORDER BY s.day,s.id');
+  const [ppl] = await pool.query('SELECT source, COUNT(*) n FROM leads WHERE wa_confirmed_at IS NOT NULL AND opt_out_at IS NULL GROUP BY source');
+  res.json({ sources: fl.SOURCES, vars: fl.VARS, openNow: fl.openHours(),
+    flows: flows.map(f => ({ ...f, active: !!f.active, people: ppl.find(p => p.source === f.source)?.n || 0, steps: steps.filter(s => s.flow_id === f.id) })) });
+}));
+const flowIn = (b) => {
+  const name = String(b.name || '').trim().slice(0, 80), source = String(b.source || '');
+  if (!name) throw Object.assign(new Error('Dê um nome ao fluxo'), { status: 400 });
+  if (!require('../flows').SOURCES[source]) throw Object.assign(new Error('Escolha de onde vêm os leads'), { status: 400 });
+  const steps = (Array.isArray(b.steps) ? b.steps : []).slice(0, 20).map(s => ({ id: +s.id || null, day: Math.round(+s.day), body: String(s.body || '').trim().slice(0, 4000) }));
+  if (steps.some(s => !s.body)) throw Object.assign(new Error('Tem mensagem sem texto'), { status: 400 });
+  if (steps.some(s => !(s.day >= 1 && s.day <= 365))) throw Object.assign(new Error('O dia de cada mensagem vai de 1 a 365'), { status: 400 });
+  return { name, source, active: !!b.active, steps };
+};
+const flowErr = (fn) => wrap(async (req, res) => { try { await fn(req, res); } catch (e) { if (!e.status) throw e; res.status(e.status).json({ error: e.message }); } });
+router.post('/flows', flowErr(async (req, res) => {
+  const f = flowIn({ steps: [], ...req.body });
+  const [r] = await pool.query('INSERT INTO wa_flows (name,source,active) VALUES (?,?,0)', [f.name, f.source]);
+  res.json({ id: r.insertId });
+}));
+// salva nome, origem, ativo e as mensagens. Mensagem que já existia mantém o id (quem já recebeu não recebe de novo).
+router.put('/flows/:id', flowErr(async (req, res) => {
+  const id = +req.params.id, f = flowIn(req.body);
+  const [[ex]] = await pool.query('SELECT id FROM wa_flows WHERE id=?', [id]);
+  if (!ex) return res.status(404).json({ error: 'Fluxo não encontrado' });
+  await pool.query('UPDATE wa_flows SET name=?, source=?, active=? WHERE id=?', [f.name, f.source, f.active ? 1 : 0, id]);
+  const [old] = await pool.query('SELECT id FROM wa_steps WHERE flow_id=?', [id]);
+  const keep = new Set(f.steps.filter(s => s.id).map(s => s.id));
+  for (const o of old) if (!keep.has(o.id)) { await pool.query('DELETE FROM wa_steps WHERE id=?', [o.id]); await pool.query('DELETE FROM wa_sends WHERE step_id=?', [o.id]); }
+  for (const s of f.steps) {
+    if (s.id && old.some(o => o.id === s.id)) await pool.query('UPDATE wa_steps SET day=?, body=? WHERE id=?', [s.day, s.body, s.id]);
+    else await pool.query('INSERT INTO wa_steps (flow_id,day,body) VALUES (?,?,?)', [id, s.day, s.body]);
+  }
+  res.json({ ok: true });
+}));
+router.delete('/flows/:id', wrap(async (req, res) => {
+  const [st] = await pool.query('SELECT id FROM wa_steps WHERE flow_id=?', [+req.params.id]);
+  if (st.length) await pool.query('DELETE FROM wa_sends WHERE step_id IN (?)', [st.map(s => s.id)]);
+  await pool.query('DELETE FROM wa_steps WHERE flow_id=?', [+req.params.id]);
+  await pool.query('DELETE FROM wa_flows WHERE id=?', [+req.params.id]);
+  res.json({ ok: true });
+}));
+// manda uma mensagem de teste para o número do próprio dono, com dados de exemplo
+router.post('/flows/test', wrap(async (req, res) => {
+  const w = require('../whatsapp'), fl = require('../flows');
+  if (!w.on()) return res.status(400).json({ error: 'WhatsApp não configurado no servidor' });
+  const num = await w.number(), body = String(req.body?.body || '').trim().slice(0, 4000);
+  if (!num) return res.status(400).json({ error: 'Não achei o número do WhatsApp (variável WHATSAPP_NUMBER)' });
+  if (!body) return res.status(400).json({ error: 'A mensagem está vazia' });
+  try { await w.sendText(num, '[TESTE] ' + await fl.render(body, { name: 'Ana', kids: '["Eva","Ester"]', code: 'GT-TEST' })); }
+  catch (e) { return res.status(502).json({ error: e.message }); }
+  res.json({ ok: true, to: num });
+}));
+
 router.get('/whatsapp', wrap(async (req, res) => res.json(await require('../whatsapp').status(req))));
 router.post('/whatsapp/webhook', wrap(async (req, res) => {
   const w = require('../whatsapp');

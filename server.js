@@ -212,6 +212,7 @@ if (require.main === module) {
     await ensureDatabase();
     await migrate();
     require('./push').start();
+    require('./flows').start();
     app.listen(port, '0.0.0.0', () => console.log(`GameTask rodando em http://localhost:${port}`));
   })().catch(e => { console.error('Falha ao iniciar:', e.message); process.exit(1); });
 }

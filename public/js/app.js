@@ -1443,7 +1443,7 @@ async function viewSetup() {
 
 // ---------- Painel do dono do sistema ----------
 let otab = 'overview';
-const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['leads', 'memo', 'Leads'], ['coupons', 'gift', 'Cupons'], ['prices', 'gear', 'Preços']];
+const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['leads', 'memo', 'Leads'], ['flows', 'calendar', 'Fluxos'], ['coupons', 'gift', 'Cupons'], ['prices', 'gear', 'Preços']];
 const STATUS = { trial: ['Teste', 'wait'], paid: ['Pago', 'ok'], free: ['Cortesia', 'ok'], expired: ['Vencido', 'no'], owner: ['Dono', 'ok'] };
 const PAY = { approved: ['Aprovado', 'ok'], pending: ['Aguardando', 'wait'], in_process: ['Em análise', 'wait'], rejected: ['Recusado', 'no'], cancelled: ['Cancelado', 'no'], refunded: ['Estornado', 'no'], charged_back: ['Contestado', 'no'], invalid: ['Valor divergente', 'no'] };
 const tag = (m, k) => { const [l, c] = m[k] || [k, 'wait']; return `<span class="tag ${c}">${esc(l)}</span>`; };
@@ -1454,7 +1454,7 @@ async function viewOwner() {
     <nav class="tabs" aria-label="Seções">${OTABS.map(([k, ic, l]) => `<button class="tab ${k === otab ? 'on' : ''}" data-tab="${k}" ${k === otab ? 'aria-current="page"' : ''}>${im(ic)}${l}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
   $$('[data-tab]').forEach(b => b.onclick = () => { otab = b.dataset.tab; sfx.tap(); viewOwner().catch(e => toast(e.message, true)); });
-  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, leads: ownerLeads, coupons: ownerCoupons, prices: ownerPrices })[otab]($('#pane'));
+  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, leads: ownerLeads, flows: ownerFlows, coupons: ownerCoupons, prices: ownerPrices })[otab]($('#pane'));
 }
 async function ownerOverview(pane) {
   const s = await api('GET', '/owner/summary'), c = s.counts, r = s.revenue;
@@ -1546,6 +1546,56 @@ async function ownerLeads(pane) {
     const x = Object.assign(document.createElement('a'), { href: u, download: `leads-gametask-${new Date().toISOString().slice(0, 10)}.csv` });
     document.body.append(x); x.click(); x.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
   };
+}
+async function ownerFlows(pane) {
+  const d = await api('GET', '/owner/flows');
+  const opts = (sel) => Object.entries(d.sources).map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const stepHtml = (s, n) => `<div class="fstep" data-sid="${s.id || ''}">
+      <div class="fstep-h"><div class="field fday"><label for="fd${n}">Dia</label><input id="fd${n}" class="sday" type="number" min="1" max="365" step="1" value="${s.day}" inputmode="numeric"></div>
+        <span class="s">${s.id ? `Enviada para ${s.sent || 0} pessoa${s.sent === 1 ? '' : 's'}` : 'Mensagem nova'}</span>
+        <div class="btns"><button type="button" class="btn ghost sm" data-test>Mandar teste pra mim</button><button type="button" class="btn ghost sm" data-rm>Tirar</button></div></div>
+      <textarea class="sbody" rows="${Math.max(6, String(s.body).split('\n').length + 4)}" maxlength="4000" aria-label="Texto da mensagem do dia ${s.day}">${esc(s.body)}</textarea></div>`;
+  let n = 0;
+  const box = (f) => `<form class="box flow" data-fid="${f.id}" novalidate>
+      <div class="box-h"><h2 class="d">${esc(f.name)}</h2>${f.active ? '<span class="tag ok">Ativo</span>' : '<span class="tag wait">Pausado</span>'}</div>
+      <p class="lead" style="margin:0 0 12px">${f.people} pessoa${f.people === 1 ? '' : 's'} confirmaram pelo WhatsApp nesta origem.</p>
+      <div class="grid2"><div class="field"><label>Nome do fluxo</label><input name="name" maxlength="80" value="${esc(f.name)}"></div>
+        <div class="field"><label>Para quem veio de</label><select name="source">${opts(f.source)}</select></div></div>
+      <label class="check"><input type="checkbox" name="active" ${f.active ? 'checked' : ''}>Fluxo ativo (as mensagens saem sozinhas)</label>
+      <div class="fstep zero-day"><b>Dia 0</b> · a pessoa manda o código e recebe o material (PDF) na hora.</div>
+      <div class="fsteps">${f.steps.map(s => stepHtml(s, n++)).join('')}</div>
+      <button type="button" class="btn ghost sm" data-add>+ Mensagem</button>
+      <div class="err" role="alert"></div>
+      <div class="actions"><button type="button" class="btn ghost sm" data-del>Apagar fluxo</button><button class="btn green">Salvar fluxo</button></div></form>`;
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Fluxos de WhatsApp</h2><button class="btn sm" id="fnew">Novo fluxo</button></div>
+      <p class="lead" style="margin:0">Mensagens que saem sozinhas, contando os dias a partir do dia em que a pessoa recebeu o material.
+        Só saem de segunda a sábado, das 9h às 20h (horário de Brasília), uma pessoa por vez. Quem respondeu SAIR não recebe.</p>
+      <p class="hint">No texto, use ${d.vars.map(v => `<b>{${v}}</b>`).join(' ')}: viram o nome, as crianças, o código, o link do GameTask, o link do quadro e os dias de garantia. No WhatsApp, *assim* fica em negrito.
+        Mudar o texto de uma mensagem não reenvia para quem já recebeu.</p></section>
+    ${d.flows.map(box).join('') || zero('calendar', 'Nenhum fluxo ainda.')}`;
+  const read = (fm) => ({ name: fm.name.value, source: fm.source.value, active: fm.active.checked,
+    steps: $$('.fstep[data-sid]', fm).map(x => ({ id: +x.dataset.sid || null, day: +$('.sday', x).value, body: $('.sbody', x).value })) });
+  $$('form.flow', pane).forEach(fm => {
+    const id = +fm.dataset.fid;
+    fm.onclick = guard(async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      const st = b.closest('.fstep');
+      if (b.hasAttribute('data-add')) {
+        const last = $$('.sday', fm).map(x => +x.value).reduce((a, c) => Math.max(a, c), 0);
+        $('.fsteps', fm).insertAdjacentHTML('beforeend', stepHtml({ day: last + 3, body: '' }, n++));
+        $$('.sbody', fm).at(-1).focus();
+      } else if (b.hasAttribute('data-rm')) st.remove();
+      else if (b.hasAttribute('data-test')) { const r = await api('POST', '/owner/flows/test', { body: $('.sbody', st).value }); toast('Teste enviado para o seu WhatsApp'); }
+      else if (b.hasAttribute('data-del')) sheet(`Apagar o fluxo ${esc(fm.name.value)}?`, '<p class="lead" style="margin-top:6px">As mensagens programadas deixam de sair. O que já foi enviado continua no WhatsApp das pessoas.</p>',
+        async () => { await api('DELETE', `/owner/flows/${id}`); await ownerFlows(pane); }, { saveLabel: 'Apagar', danger: true });
+    });
+    fm.onsubmit = async (e) => {
+      e.preventDefault();
+      try { await api('PUT', `/owner/flows/${id}`, read(fm)); sfx.win(); toast('Fluxo salvo'); await ownerFlows(pane); }
+      catch (er) { $('.err', fm).textContent = er.message; sfx.bad(); }
+    };
+  });
+  $('#fnew').onclick = guard(async () => { await api('POST', '/owner/flows', { name: 'Novo fluxo', source: Object.keys(d.sources)[0] }); await ownerFlows(pane); pane.querySelector('form.flow:last-of-type input[name=name]')?.select(); });
 }
 async function ownerCoupons(pane) {
   const rows = await api('GET', '/owner/coupons');

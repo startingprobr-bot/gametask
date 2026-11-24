@@ -876,3 +876,14 @@ button.meter:active{transform:scale(.98)}
 .wiz-steps{text-align:left;counter-reset:w;list-style:none;display:grid;gap:10px;width:100%;margin:4px 0 6px}
 .wiz-steps li{counter-increment:w;display:flex;gap:10px;align-items:flex-start;font-weight:700;line-height:1.4}
 .wiz-steps li::before{content:counter(w);flex:0 0 auto;width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--yellow,#ffd21f);border:2px solid var(--navy,#0d1b4c);font-weight:900}
+
+/* Painel do dono: fluxos de WhatsApp */
+.flow .fsteps{display:grid;gap:12px;margin:12px 0}
+.flow .fstep{border:2px solid var(--mist-2);border-radius:18px;padding:12px;background:#fff}
+.flow .fstep.zero-day{margin-top:14px;background:var(--mist);font-weight:700}
+.flow .fstep-h{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 14px;margin-bottom:10px}
+.flow .fday{width:96px;margin:0}
+.flow .fstep-h .s{flex:1;min-width:140px;padding-bottom:12px}
+.flow .fstep-h .btns{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:4px}
+.flow textarea{font-weight:600;font-size:16px;line-height:1.45}
+.flow .actions{justify-content:space-between}

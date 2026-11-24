@@ -82,7 +82,7 @@ async function handle(d, host) {
   const first = String(l.name).split(' ')[0];
   const who = kids.length > 1 ? kids.slice(0, -1).join(', ') + ' e ' + kids.at(-1) : kids[0] || 'sua casa';
   await sendPdf(to, pdf, 'quadro-de-tarefas.pdf',
-    `Oi, ${first}! Aqui está o quadro de tarefas de ${who}. 🎉\n\nImprima toda segunda-feira e cole na altura dos olhos da criança, com uma caneta presa do lado: quem marca é ela.\n\nVou te mandar de vez em quando umas dicas curtas de rotina. Se não quiser, é só responder SAIR.`);
+    `Oi, ${first}! Aqui está o quadro de tarefas de ${who}. 🎉\n\nImprima toda segunda-feira e cole na altura dos olhos da criança, com uma caneta presa do lado: quem marca é ela.\n\nDaqui uns dias passo aqui pra saber como está indo. Se não quiser receber, é só responder SAIR.`);
 }
 
 const router = express.Router();

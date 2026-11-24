@@ -122,6 +122,15 @@ const SCHEMA = [
   source VARCHAR(40) NOT NULL, kids TEXT NULL, tasks TEXT NULL, token CHAR(32) NOT NULL, downloads INT NOT NULL DEFAULT 1,
   consent_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL,
   UNIQUE KEY u (email), UNIQUE KEY t (token))`,
+// Fluxos de WhatsApp para os leads: mensagens que saem N dias depois que a pessoa recebeu o material (dia 0).
+`CREATE TABLE IF NOT EXISTS wa_flows (
+  id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, source VARCHAR(40) NOT NULL, active TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`,
+`CREATE TABLE IF NOT EXISTS wa_steps (
+  id INT AUTO_INCREMENT PRIMARY KEY, flow_id INT NOT NULL, day INT NOT NULL, body TEXT NOT NULL, INDEX(flow_id))`,
+// o que já saiu para cada lead (nunca manda a mesma mensagem duas vezes)
+`CREATE TABLE IF NOT EXISTS wa_sends (
+  lead_id INT NOT NULL, step_id INT NOT NULL, sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (lead_id, step_id), INDEX(step_id))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)
@@ -170,6 +179,12 @@ async function migrate() {
   await pool.query('ALTER TABLE leads MODIFY email VARCHAR(160) NULL');
   const [[ci]] = await pool.query("SELECT COUNT(*) n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='leads' AND INDEX_NAME='c'");
   if (!ci.n) await pool.query('ALTER TABLE leads ADD UNIQUE KEY c (code)');
+  // primeiro fluxo: o do quadro de tarefas, com os textos aprovados (nasce pausado; o dono ativa no painel)
+  const [[fl]] = await pool.query('SELECT COUNT(*) n FROM wa_flows');
+  if (!fl.n) {
+    const [r] = await pool.query("INSERT INTO wa_flows (name,source,active) VALUES ('Quadro de tarefas','quadro',0)");
+    for (const [day, body] of require('./flows').SEED) await pool.query('INSERT INTO wa_steps (flow_id,day,body) VALUES (?,?,?)', [r.insertId, day, body]);
+  }
   // Chaves VAPID das notificações: geradas uma vez e guardadas no banco (dispensa configurar variável)
   if (!(await getSetting('vapid_public'))) {
     const keys = require('web-push').generateVAPIDKeys();
