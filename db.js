@@ -118,7 +118,7 @@ const SCHEMA = [
   spent INT NOT NULL DEFAULT 0, started_at TIMESTAMP NULL, PRIMARY KEY (kid_id, task_id, day), INDEX(family_id))`,
 // Leads das iscas do site (ex.: quadro de tarefas para imprimir). kids/tasks guardam o quadro montado (JSON) para refazer pelo link do e-mail.
 `CREATE TABLE IF NOT EXISTS leads (
-  id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, email VARCHAR(160) NOT NULL, whatsapp VARCHAR(20) NULL,
+  id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, email VARCHAR(160) NULL, whatsapp VARCHAR(20) NULL,
   source VARCHAR(40) NOT NULL, kids TEXT NULL, tasks TEXT NULL, token CHAR(32) NOT NULL, downloads INT NOT NULL DEFAULT 1,
   consent_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL,
   UNIQUE KEY u (email), UNIQUE KEY t (token))`,
@@ -142,7 +142,10 @@ const COLUMNS = [
   ['wheel_spins', 'coins', 'INT NOT NULL DEFAULT 0'],
   ['rewards', 'kid_id', 'INT NULL'],
   ['tasks', 'minutes', 'INT NOT NULL DEFAULT 0'],
-  ['payments', 'coupon', 'VARCHAR(30) NULL'],              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
+  ['payments', 'coupon', 'VARCHAR(30) NULL'],
+  ['leads', 'code', 'VARCHAR(12) NULL'],                 // código da mensagem pronta do WhatsApp (GT-XXXX)
+  ['leads', 'wa_confirmed_at', 'TIMESTAMP NULL'],        // a pessoa mandou o código pelo WhatsApp (número confirmado)
+  ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)
 const DEFAULTS = { price_monthly: '8.00', price_annual: '47.00', price_plus: '67.00', trial_days: '0', guarantee_days: '14' };
@@ -163,6 +166,10 @@ async function migrate() {
   if (hadTrial && !hadG) await pool.query("UPDATE app_settings SET v='0' WHERE k='trial_days'");
   for (const [k, v] of Object.entries(DEFAULTS)) await pool.query('INSERT IGNORE INTO app_settings (k,v) VALUES (?,?)', [k, v]);
   await pool.query("ALTER TABLE payments MODIFY plan ENUM('monthly','annual','plus') NOT NULL");
+  // leads: e-mail virou opcional (a entrega é pelo WhatsApp) e o código é único
+  await pool.query('ALTER TABLE leads MODIFY email VARCHAR(160) NULL');
+  const [[ci]] = await pool.query("SELECT COUNT(*) n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='leads' AND INDEX_NAME='c'");
+  if (!ci.n) await pool.query('ALTER TABLE leads ADD UNIQUE KEY c (code)');
   // Chaves VAPID das notificações: geradas uma vez e guardadas no banco (dispensa configurar variável)
   if (!(await getSetting('vapid_public'))) {
     const keys = require('web-push').generateVAPIDKeys();

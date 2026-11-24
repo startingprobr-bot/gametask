@@ -1512,24 +1512,36 @@ async function ownerPayments(pane) {
     : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
 }
 async function ownerLeads(pane) {
-  const rows = await api('GET', '/owner/leads');
+  const [rows, wa] = await Promise.all([api('GET', '/owner/leads'), api('GET', '/owner/whatsapp').catch(e => ({ configured: true, error: e.message }))]);
   const SRC = { quadro: 'Quadro de tarefas' };
-  const fone = (w) => w ? w.replace(/^(d{2})(d{4,5})(d{4})$/, '($1) $2-$3') : '';
+  const fone = (w) => w ? w.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3').replace(/^(\d{2})(\d{4,5})(\d{4})$/, '($1) $2-$3') : '';
   const zap = (w) => `https://wa.me/${w.length <= 11 ? '55' + w : w}`;
-  const novos = rows.filter(l => !l.cliente).length;
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Leads (${rows.length})</h2>${rows.length ? '<button class="btn ghost sm" id="csv">Baixar planilha</button>' : ''}</div>
-    <p class="lead" style="margin:0 0 12px">Quem baixou uma isca do site. ${rows.length ? `${rows.length - novos} já virou cliente, ${novos} ainda não.` : ''}</p>
+  const sit = (l) => l.cliente ? '<span class="tag ok">Cliente</span>' : l.opt_out_at ? '<span class="tag no">Saiu</span>'
+    : l.wa_confirmed_at ? '<span class="tag ok">WhatsApp confirmado</span>' : l.email ? '<span class="tag wait">Só e-mail</span>' : '<span class="tag wait">Não enviou no WhatsApp</span>';
+  const conf = rows.filter(l => l.wa_confirmed_at).length, cli = rows.filter(l => l.cliente).length;
+  const ST = { open: ['Conectado', 'ok'], connecting: ['Conectando', 'wait'], close: ['Desconectado', 'no'] };
+  const waBox = !wa.configured
+    ? `<p class="hint">Para mandar o quadro pelo WhatsApp, coloque no servidor (EasyPanel) as variáveis <b>EVOLUTION_URL</b>, <b>EVOLUTION_KEY</b> e <b>EVOLUTION_INSTANCE</b>. Sem elas, a pessoa imprime direto na página.</p>`
+    : `<p>Instância <b>${esc(wa.instance || '')}</b> ${tag(ST, wa.state || 'close')}${wa.number ? ` · número ${esc(fone(wa.number))}` : ''}</p>
+      ${wa.error ? `<p class="err">${esc(wa.error)}</p>` : ''}
+      <p class="hint">${wa.hookOk ? 'Recebimento das mensagens ligado: quem mandar o código recebe o PDF na hora.'
+        : `Recebimento das mensagens <b>desligado</b>.${wa.hook?.url ? ` Hoje a instância avisa outro endereço (${esc(wa.hook.url.slice(0, 60))}…); ligar aqui troca por este.` : ''}`}</p>
+      ${wa.hookOk ? '' : '<button class="btn sm" id="hook">Ligar recebimento das mensagens</button>'}
+      <details class="hint" style="margin-top:8px"><summary>Configurar à mão na Evolution</summary><p>Webhook com o evento MESSAGES_UPSERT para:</p><input readonly value="${esc(wa.hookUrl || '')}" onfocus="this.select()"></details>`;
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">WhatsApp</h2></div>${waBox}</section>
+    <section class="box"><div class="box-h"><h2 class="d">Leads (${rows.length})</h2>${rows.length ? '<button class="btn ghost sm" id="csv">Baixar planilha</button>' : ''}</div>
+    <p class="lead" style="margin:0 0 12px">Quem montou um quadro no site.${rows.length ? ` ${conf} confirmaram pelo WhatsApp · ${cli} já viraram clientes.` : ''}</p>
     ${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Data</th><th>Nome</th><th>Contato</th><th>Crianças</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${rows.map(l => `<tr>
-      <td>${dmy(l.created_at)}</td><td>${esc(l.name)}${l.downloads > 1 ? `<div class="s">baixou ${l.downloads} vezes</div>` : ''}</td>
-      <td><a href="mailto:${esc(l.email)}">${esc(l.email)}</a>${l.whatsapp ? `<div class="s"><a href="${zap(l.whatsapp)}" target="_blank" rel="noopener">${fone(l.whatsapp)}</a></div>` : ''}</td>
-      <td>${esc(l.kids.join(', '))}</td><td>${esc(SRC[l.source] || l.source)}</td>
-      <td>${l.cliente ? '<span class="tag ok">Cliente</span>' : '<span class="tag wait">Lead</span>'}</td></tr>`).join('')}</tbody></table></div>`
-    : zero('memo', 'Ninguém baixou o quadro de tarefas ainda. A página fica em /quadro-de-tarefas-infantil.')}</section>`;
+      <td>${dmy(l.created_at)}</td><td>${esc(l.name)}<div class="s">${esc(l.code || '')}${l.downloads > 1 ? ` · montou ${l.downloads} vezes` : ''}</div></td>
+      <td>${l.whatsapp ? `<a href="${zap(l.whatsapp)}" target="_blank" rel="noopener">${fone(l.whatsapp)}</a>` : ''}${l.email ? `<div class="s"><a href="mailto:${esc(l.email)}">${esc(l.email)}</a></div>` : ''}</td>
+      <td>${esc(l.kids.join(', '))}</td><td>${esc(SRC[l.source] || l.source)}</td><td>${sit(l)}</td></tr>`).join('')}</tbody></table></div>`
+    : zero('memo', 'Ninguém montou o quadro de tarefas ainda. A página fica em /quadro-de-tarefas-infantil.')}</section>`;
+  const h = $('#hook'); if (h) h.onclick = guard(async () => { await api('POST', '/owner/whatsapp/webhook'); toast('Recebimento ligado'); await ownerLeads(pane); });
   const b = $('#csv'); if (b) b.onclick = () => {
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const lines = [['Data', 'Nome', 'E-mail', 'WhatsApp', 'Crianças', 'Origem', 'Downloads', 'Cliente'].map(q).join(';'),
-      ...rows.map(l => [dmy(l.created_at), l.name, l.email, l.whatsapp, l.kids.join(', '), SRC[l.source] || l.source, l.downloads, l.cliente ? 'sim' : 'não'].map(q).join(';'))];
-    const u = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    const lines = [['Data', 'Nome', 'WhatsApp', 'E-mail', 'Crianças', 'Origem', 'Código', 'WhatsApp confirmado', 'Saiu', 'Cliente'].map(q).join(';'),
+      ...rows.map(l => [dmy(l.created_at), l.name, l.whatsapp, l.email, l.kids.join(', '), SRC[l.source] || l.source, l.code, l.wa_confirmed_at ? 'sim' : 'não', l.opt_out_at ? 'sim' : 'não', l.cliente ? 'sim' : 'não'].map(q).join(';'))];
+    const u = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
     const x = Object.assign(document.createElement('a'), { href: u, download: `leads-gametask-${new Date().toISOString().slice(0, 10)}.csv` });
     document.body.append(x); x.click(); x.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
   };

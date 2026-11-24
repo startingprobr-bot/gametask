@@ -93,11 +93,20 @@ router.post('/families/:id/reset-link', wrap(async (req, res) => {
 // "cliente" = o e-mail do lead já virou uma família cadastrada
 router.get('/leads', wrap(async (req, res) => {
   const [rows] = await pool.query(
-    `SELECT l.id,l.name,l.email,l.whatsapp,l.source,l.kids,l.downloads,l.created_at,l.updated_at,
+    `SELECT l.id,l.name,l.email,l.whatsapp,l.source,l.kids,l.downloads,l.created_at,l.updated_at,l.code,l.wa_confirmed_at,l.opt_out_at,
       EXISTS(SELECT 1 FROM families f WHERE f.email=l.email) cliente
      FROM leads l ORDER BY l.id DESC LIMIT 5000`);
   rows.forEach(r => { r.kids = JSON.parse(r.kids || '[]'); r.cliente = !!r.cliente; });
   res.json(rows);
+}));
+
+// WhatsApp (Evolution): conexão e recebimento das mensagens com o código das iscas
+router.get('/whatsapp', wrap(async (req, res) => res.json(await require('../whatsapp').status(req))));
+router.post('/whatsapp/webhook', wrap(async (req, res) => {
+  const w = require('../whatsapp');
+  if (!w.on()) return res.status(400).json({ error: 'Configure EVOLUTION_URL, EVOLUTION_KEY e EVOLUTION_INSTANCE no servidor' });
+  try { await w.setHook(req); } catch (e) { return res.status(502).json({ error: e.message }); }
+  res.json(await w.status(req));
 }));
 
 // ---------- Cupons de desconto ----------

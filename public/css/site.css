@@ -185,3 +185,13 @@ label.f small{font-weight:700;color:var(--ink-soft)}
   body:not(.unlocked) .stage{display:none}
   body:not(.unlocked) .preview::after{content:'Preencha o formulário da página para imprimir o seu quadro.';font:700 18px var(--body)}
 }
+
+/* ---------- entrega pelo WhatsApp ---------- */
+body:not([data-wa="1"]) .if-wa{display:none!important}
+body[data-wa="1"] .no-wa{display:none!important}
+body:not(.sent) .if-sent{display:none}
+body.sent .no-sent{display:none}
+.wa-ic{width:24px;height:24px;flex:none}
+.done #code{font-family:var(--display);font-weight:400;letter-spacing:.04em;background:var(--yellow);border:2px solid var(--navy);border-radius:8px;padding:0 6px}
+.alt-print{font-size:15px;font-weight:700;color:var(--ink-soft);margin-top:14px}
+button.link{background:none;border:0;padding:0;font:inherit;font-weight:900;color:var(--navy);text-decoration:underline;cursor:pointer}

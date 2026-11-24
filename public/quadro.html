@@ -32,11 +32,11 @@
  {"@type":"FAQPage","mainEntity":[
   {"@type":"Question","name":"Com que idade dá para começar um quadro de tarefas?","acceptedAnswer":{"@type":"Answer","text":"Por volta dos 3 anos já dá, com duas ou três tarefas bem simples e figuras no lugar de palavras. O que muda com a idade é a quantidade de tarefas e quanta ajuda a criança precisa."}},
   {"@type":"Question","name":"Devo pagar mesada pelas tarefas do quadro?","acceptedAnswer":{"@type":"Answer","text":"Muitas famílias separam: o cuidado consigo mesmo (escovar os dentes, arrumar a mochila) vale estrela, e as tarefas que ajudam a casa podem valer um pouco de dinheiro ou tempo de tela. Combine antes e mantenha a regra igual para todos."}},
-  {"@type":"Question","name":"O quadro é grátis mesmo?","acceptedAnswer":{"@type":"Answer","text":"Sim. Pedimos o seu e-mail para mandar o link do quadro, assim você imprime uma folha nova toda semana sem montar de novo. Dá para sair da lista quando quiser."}}]}
+  {"@type":"Question","name":"O quadro é grátis mesmo?","acceptedAnswer":{"@type":"Answer","text":"Sim. O quadro chega em PDF no seu WhatsApp, assim você imprime uma folha nova toda semana sem montar de novo. Se não quiser mais receber mensagens, é só responder SAIR."}}]}
 ]}
 </script>
 </head>
-<body>
+<body data-wa="{{WA_ON}}">
 
 <header class="nav">
   <div class="in">
@@ -80,23 +80,31 @@
       </div>
 
       <div class="step gate">
-        <h2 class="d"><span class="n">3</span>Para onde mando o link?</h2>
-        <p class="hint">Você imprime agora e recebe o link para imprimir de novo toda semana.</p>
+        <h2 class="d"><span class="n">3</span><span class="if-wa">Receba no WhatsApp</span><span class="no-wa">Gere o seu quadro</span></h2>
+        <p class="hint if-wa">O PDF com o quadro chega no seu WhatsApp, pronto para imprimir toda semana.</p>
+        <p class="hint no-wa">Você imprime agora e, se deixar o e-mail, recebe o link para imprimir de novo.</p>
         <label class="f" for="name">Seu nome</label>
         <input type="text" id="name" name="name" maxlength="80" autocomplete="given-name" required>
-        <label class="f" for="email">Seu e-mail</label>
-        <input type="email" id="email" name="email" maxlength="160" autocomplete="email" inputmode="email" required>
-        <label class="f" for="wa">WhatsApp <small>(opcional)</small></label>
-        <input type="tel" id="wa" name="whatsapp" maxlength="20" autocomplete="tel" inputmode="tel" placeholder="(11) 91234-5678">
-        <label class="consent"><input type="checkbox" id="consent"> <span>Quero receber o quadro e dicas de rotina do GameTask por e-mail. Posso sair quando quiser. <a href="/privacidade" target="_blank">Privacidade</a></span></label>
-        <button class="btn green block" id="go">Gerar meu quadro</button>
+        <label class="f" for="email">Seu e-mail <small>(opcional)</small></label>
+        <input type="email" id="email" name="email" maxlength="160" autocomplete="email" inputmode="email">
+        <label class="consent"><input type="checkbox" id="consent"> <span><span class="if-wa">Quero receber o quadro e dicas de rotina do GameTask no WhatsApp (e no e-mail, se eu informar). Posso sair quando quiser respondendo SAIR.</span><span class="no-wa">Quero receber o quadro e dicas de rotina do GameTask por e-mail. Posso sair quando quiser.</span> <a href="/privacidade" target="_blank">Privacidade</a></span></label>
+        <button class="btn green block" id="go"><img class="if-wa wa-ic" src="/img/wa.svg" alt=""><span class="if-wa">Receber no WhatsApp</span><span class="no-wa">Gerar meu quadro</span></button>
         <p class="err" id="err" role="alert"></p>
       </div>
 
       <div class="step done" aria-live="polite">
-        <div class="ok d"><img src="/img/3d/trophy.png" alt="">Seu quadro está pronto!</div>
-        <p>Na janela de impressão, escolha <b>Salvar como PDF</b> se quiser guardar no celular. O link para imprimir de novo também foi para o seu e-mail.</p>
-        <button type="button" class="btn green block" id="print">Imprimir ou salvar em PDF</button>
+        <div class="if-sent">
+          <div class="ok d"><img src="/img/3d/rocket.png" alt="">Falta só apertar enviar!</div>
+          <p>O WhatsApp abriu com a mensagem pronta e o seu código <b id="code"></b>. Aperte <b>enviar</b> e o PDF do quadro chega em segundos.</p>
+          <a class="btn green block" id="waGo" href="#" target="_blank" rel="noopener"><img class="wa-ic" src="/img/wa.svg" alt="">Abrir o WhatsApp</a>
+          <p class="alt-print">Está num computador sem WhatsApp? <button type="button" class="link" data-print>Imprimir aqui mesmo</button></p>
+        </div>
+        <div class="no-sent">
+          <div class="ok d"><img src="/img/3d/trophy.png" alt="">Seu quadro está pronto!</div>
+          <p>Na janela de impressão, escolha <b>Salvar como PDF</b> se quiser guardar no celular.</p>
+          <button type="button" class="btn green block" data-print>Imprimir ou salvar em PDF</button>
+        </div>
+        <p class="alt-print">Mudou as crianças ou as tarefas? <button type="button" class="link" id="again">Pedir o quadro novo</button></p>
       </div>
     </form>
 
@@ -154,7 +162,7 @@
       <div class="faq">
         <details><summary>Com que idade dá para começar um quadro de tarefas?</summary><p>Por volta dos 3 anos já dá, com duas ou três tarefas bem simples e figuras no lugar de palavras. O que muda com a idade é a quantidade de tarefas e quanta ajuda a criança precisa.</p></details>
         <details><summary>Devo pagar mesada pelas tarefas do quadro?</summary><p>Muitas famílias separam: o cuidado consigo mesmo (escovar os dentes, arrumar a mochila) vale estrela, e as tarefas que ajudam a casa podem valer um pouco de dinheiro ou tempo de tela. Combine antes e mantenha a regra igual para todos.</p></details>
-        <details><summary>O quadro é grátis mesmo?</summary><p>Sim. Pedimos o seu e-mail para mandar o link do quadro, assim você imprime uma folha nova toda semana sem montar de novo. Dá para sair da lista quando quiser.</p></details>
+        <details><summary>O quadro é grátis mesmo?</summary><p>Sim. O quadro chega em PDF no seu WhatsApp, assim você imprime uma folha nova toda semana sem montar de novo. Se não quiser mais receber mensagens, é só responder SAIR.</p></details>
       </div>
     </div>
   </article>
@@ -256,26 +264,36 @@
   // ---------- passo 3: lead ----------
   let msgT = 0;
   const flash = (m) => { $('#err').textContent = m; clearTimeout(msgT); msgT = setTimeout(() => $('#err').textContent = '', 4000); };
-  const unlock = () => { document.body.classList.add('unlocked'); };
+  const B = document.body, WA = B.dataset.wa === '1';
+  // com WhatsApp: mostra o código e o botão que abre a conversa com a mensagem pronta
+  const unlock = (d) => {
+    B.classList.add('unlocked');
+    B.classList.toggle('sent', !!d?.wa);
+    if (d?.wa) { $('#code').textContent = d.code; $('#waGo').href = d.wa; }
+  };
   $('#form').onsubmit = async (e) => {
     e.preventDefault();
     if ($('#kidIn').value.trim()) addKid();
     if (!S.kids.length) { $('#kidIn').focus(); return flash('Escreva o nome de pelo menos uma criança'); }
     if (!S.tasks.length) return flash('Escolha pelo menos uma tarefa');
+    if (!$('#name').value.trim()) { $('#name').focus(); return flash('Digite o seu nome'); }
     if (!$('#consent').checked) return flash('Marque a caixinha para receber o quadro');
-    const go = $('#go'); go.disabled = true; go.textContent = 'Gerando…';
+    const go = $('#go'), label = go.innerHTML; go.disabled = true; go.textContent = 'Preparando…';
     try {
       const r = await fetch('/api/public/leads', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: $('#name').value, email: $('#email').value, whatsapp: $('#wa').value, consent: true, kids: S.kids, tasks: S.tasks, source: 'quadro' }) });
+        body: JSON.stringify({ name: $('#name').value, email: $('#email').value, consent: true, kids: S.kids, tasks: S.tasks, source: 'quadro' }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || 'Não deu certo. Tente de novo.');
       store.set('gt-lead', j.token);
-      unlock(); render();
-      setTimeout(() => print(), 350);
+      unlock(j); render();
+      if (j.wa) { if (!open(j.wa, '_blank')) location.href = j.wa; } // navegador bloqueou a aba nova: abre na mesma
+      else setTimeout(() => print(), 350);
     } catch (err) { flash(err.message); }
-    finally { go.disabled = false; go.textContent = 'Gerar meu quadro'; }
+    finally { go.disabled = false; go.innerHTML = label; }
   };
-  $('#print').onclick = () => print();
+  document.querySelectorAll('[data-print]').forEach(b => b.onclick = () => print());
+  // mudou as crianças ou as tarefas depois de pedir: volta ao formulário para pedir o quadro novo
+  $('#again').onclick = () => { B.classList.remove('unlocked', 'sent'); $('#name').focus(); };
 
   // quem volta pelo link do e-mail (ou já deixou o e-mail neste aparelho) não preenche de novo
   const q = new URLSearchParams(location.search).get('q') || store.get('gt-lead');
@@ -283,7 +301,7 @@
     if (!d) return;
     store.set('gt-lead', q);
     if (new URLSearchParams(location.search).get('q')) { S.kids = d.kids; S.tasks = d.tasks; }
-    unlock(); renderGroups(); renderKids(); render();
+    unlock(d); renderGroups(); renderKids(); render();
   }).catch(() => {});
 
   renderGroups(); renderKids(); render();

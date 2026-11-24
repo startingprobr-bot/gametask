@@ -147,6 +147,7 @@ const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHE
 
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ v: VERSION }));
 app.use(site.router); // robots.txt, sitemap.xml, páginas de conteúdo e leads
+app.use(require('./whatsapp').router); // mensagens que chegam no WhatsApp (Evolution) com o código das iscas
 app.get('/api/public/pricing', wrap(async (req, res) => res.json({ ...await billing.prices(), card: billing.cardKey() })));
 app.use('/api/auth', members.auth);
 app.post(['/api/billing/checkout', '/api/billing/pix', '/api/billing/card', '/api/billing/free', '/api/billing/refund'], needFamily, needParent, needFull);

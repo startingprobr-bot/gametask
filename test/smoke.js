@@ -53,7 +53,22 @@ const step = (m) => console.log('✔', m);
     });
   });
   await new Promise(r => mpFake.listen(3198, '127.0.0.1', r));
-  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198' }, stdio: 'inherit' });
+  // Evolution API (WhatsApp) de mentira: guarda o que o servidor mandou
+  const evoSent = []; let evoHook = null;
+  const evoFake = http.createServer((req, res) => {
+    let b = ''; req.on('data', d => { b += d; }); req.on('end', () => {
+      res.setHeader('content-type', 'application/json');
+      if (req.headers.apikey !== 'evo-key') { res.statusCode = 401; return res.end('{"message":"Unauthorized"}'); }
+      const j = b ? JSON.parse(b) : null;
+      if (req.url.startsWith('/message/')) { evoSent.push({ kind: req.url.split('/')[2], ...j }); return res.end('{"key":{"id":"x"}}'); }
+      if (req.url === '/instance/connectionState/gt') return res.end('{"instance":{"instanceName":"gt","state":"open"}}');
+      if (req.url === '/webhook/find/gt') return res.end(JSON.stringify(evoHook));
+      if (req.url === '/webhook/set/gt') { evoHook = { url: j.webhook.url, enabled: j.webhook.enabled, events: j.webhook.events }; return res.end(JSON.stringify(evoHook)); }
+      res.statusCode = 404; res.end('{}');
+    });
+  });
+  await new Promise(r => evoFake.listen(3197, '127.0.0.1', r));
+  const srv = spawn('node', ['server.js'], { env: { ...process.env, DB_NAME: 'gametask_test', PORT, DATABASE_URL: '', OWNER_EMAILS: 'a@b.co', MP_ACCESS_TOKEN: 'tok', MP_PUBLIC_KEY: 'APP_USR-pub', MP_API: 'http://127.0.0.1:3198', EVOLUTION_URL: 'http://127.0.0.1:3197', EVOLUTION_KEY: 'evo-key', EVOLUTION_INSTANCE: 'gt', WHATSAPP_NUMBER: '5511999990000', APP_URL: '' }, stdio: 'inherit' });
   try {
     for (let i = 0; i < 360; i++) { try { await fetch(BASE + '/api/auth/me'); break; } catch { await new Promise(r => setTimeout(r, 250)); } }
     { // os cenários de teste grátis abaixo precisam do teste ligado (o padrão agora é 0, com garantia)
@@ -637,7 +652,7 @@ const step = (m) => console.log('✔', m);
     assert.equal((await pub({ ...lead, email: 'nao-e-email' })).status, 400);
     assert.equal((await pub({ ...lead, kids: [] })).status, 400);
     const l1 = await (await pub(lead)).json(), l2 = await (await pub({ ...lead, kids: ['Bernardo'] })).json();
-    assert.ok(/^[a-f0-9]{32}$/.test(l1.token)); assert.equal(l1.token, l2.token);
+    assert.ok(/^[a-f0-9]{32}$/.test(l1.token), JSON.stringify(l1)); assert.equal(l1.token, l2.token);
     const back = await (await fetch(BASE + '/api/public/leads/' + l1.token)).json();
     assert.deepEqual(back.kids, ['Bernardo']); assert.equal(back.tasks[1].i, 'star'); // ícone inválido vira estrela
     assert.equal((await fetch(BASE + '/api/public/leads/' + 'f'.repeat(32))).status, 404);
@@ -646,8 +661,49 @@ const step = (m) => console.log('✔', m);
     const lm = ls.find(x => x.email === 'mae@teste.com');
     assert.ok(lm && lm.whatsapp === '11912345678' && lm.downloads === 2 && lm.cliente === false);
     step('isca: lead do quadro de tarefas guardado, validado e listado no painel do dono');
+
+    // WhatsApp: a pessoa manda o código e recebe o PDF; o resto das mensagens do número é ignorado
+    assert.ok((await (await fetch(BASE + '/quadro-de-tarefas-infantil')).text()).includes('data-wa="1"'));
+    const semEmail = await (await pub({ name: 'Ana Souza', consent: true, kids: ['Eva', 'Ester'], tasks: [{ t: 'Arrumar a cama', i: 'bed' }] })).json();
+    assert.ok(/^GT-[A-Z0-9]{4}$/.test(semEmail.code), 'código ' + semEmail.code);
+    assert.ok(semEmail.wa.startsWith('https://wa.me/5511999990000?text=') && decodeURIComponent(semEmail.wa).includes(semEmail.code));
+    const secret = require('crypto').createHash('sha256').update('gt-wa:evo-key').digest('hex').slice(0, 32);
+    const hook = (data, s = secret) => fetch(BASE + '/api/public/wa/' + s, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ event: 'messages.upsert', instance: 'gt', data }) });
+    const msg = (id, jid, text, extra = {}) => ({ key: { id, remoteJid: jid, fromMe: false, ...extra }, pushName: 'Ana', message: { conversation: text } });
+    const waitSent = async (n) => { for (let i = 0; i < 80 && evoSent.length < n; i++) await new Promise(r => setTimeout(r, 100)); };
+    assert.equal((await hook(msg('m0', '5511988887777@s.whatsapp.net', 'Oi! ' + semEmail.code), 'errado')).status, 404);
+    await hook(msg('m1', '5511944443333@s.whatsapp.net', 'oi amor, chego às 7'));        // conversa pessoal: ignorada
+    await hook({ key: { id: 'm2', remoteJid: '5511988887777@s.whatsapp.net', fromMe: true }, message: { conversation: semEmail.code } }); // enviada por mim: ignorada
+    await hook(msg('m3', '120363@g.us', semEmail.code));                                   // grupo: ignorado
+    await hook(msg('m4', '5511988887777@s.whatsapp.net', 'Oi! Quero meu quadro de tarefas 📋 Código: ' + semEmail.code.toLowerCase()));
+    await hook(msg('m4', '5511988887777@s.whatsapp.net', 'repetido ' + semEmail.code));   // mesmo id: não manda duas vezes
+    await waitSent(1); await new Promise(r => setTimeout(r, 300));
+    assert.equal(evoSent.length, 1, 'só uma mensagem enviada: ' + JSON.stringify(evoSent.map(s => s.number)));
+    const pdfMsg = evoSent[0];
+    assert.equal(pdfMsg.kind, 'sendMedia'); assert.equal(pdfMsg.number, '5511988887777'); assert.equal(pdfMsg.mediatype, 'document');
+    assert.ok(Buffer.from(pdfMsg.media, 'base64').subarray(0, 4).toString() === '%PDF' && pdfMsg.caption.includes('Eva e Ester') && pdfMsg.caption.startsWith('Oi, Ana!'));
+    // conta com @lid: o número de verdade vem em remoteJidAlt
+    const outro = await (await pub({ name: 'Bia', consent: true, kids: ['Leo'], tasks: [{ t: 'Ler', i: 'openbook' }] })).json();
+    await hook(msg('m5', '99887766@lid', outro.code, { remoteJidAlt: '5521977776666@s.whatsapp.net' }));
+    await waitSent(2);
+    assert.equal(evoSent[1].number, '5521977776666');
+    // SAIR: só vale para lead confirmado; conversa pessoal com "sair" não responde
+    await hook(msg('m6', '5511944443333@s.whatsapp.net', 'sair'));
+    await hook(msg('m7', '5511988887777@s.whatsapp.net', 'SAIR'));
+    await waitSent(3); await new Promise(r => setTimeout(r, 300));
+    assert.equal(evoSent.length, 3); assert.equal(evoSent[2].kind, 'sendText'); assert.equal(evoSent[2].number, '5511988887777');
+    const ls2 = await ok('GET', '/api/owner/leads'), lAna = ls2.find(x => x.code === semEmail.code);
+    assert.ok(lAna.whatsapp === '5511988887777' && lAna.wa_confirmed_at && lAna.opt_out_at && lAna.email === null);
+    assert.ok(ls2.find(x => x.code === outro.code).wa_confirmed_at);
+    step('WhatsApp: código recebido devolve o PDF; conversas pessoais, grupos e repetições ignorados; SAIR respeitado');
+
+    let ws = await ok('GET', '/api/owner/whatsapp');
+    assert.ok(ws.configured && ws.state === 'open' && ws.number === '5511999990000' && !ws.hookOk);
+    ws = await ok('POST', '/api/owner/whatsapp/webhook');
+    assert.ok(ws.hookOk && evoHook.url.endsWith('/api/public/wa/' + secret) && evoHook.events.includes('MESSAGES_UPSERT'));
+    step('painel do dono: status da Evolution e ligar o recebimento das mensagens');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');
-  } finally { srv.kill(); mpFake.close(); }
+  } finally { srv.kill(); mpFake.close(); evoFake.close(); }
 })().catch(e => { console.error('\n✘ FALHOU:', e.message); process.exit(1); });
