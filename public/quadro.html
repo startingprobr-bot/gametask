@@ -73,10 +73,20 @@
         <p class="hint">Comece com poucas. Dá para trocar na semana que vem.</p>
         <div class="groups" id="groups"></div>
         <div class="row" style="margin-top:14px">
+          <button type="button" class="ic-btn" id="newIc" aria-label="Escolher o desenho da tarefa nova" title="Escolher o desenho"><img src="/img/3d/star.png" alt=""></button>
           <input type="text" id="taskIn" maxlength="40" placeholder="Outra tarefa (ex.: Treino de futebol)" aria-label="Escrever outra tarefa" autocomplete="off">
           <button type="button" class="btn ghost sm" id="taskAdd">Incluir</button>
         </div>
         <p class="count" id="count" aria-live="polite"></p>
+        <div class="order-box">
+          <b>Ordem na folha</b>
+          <p class="hint">Arraste para mudar a ordem. Toque no desenho para trocar.</p>
+          <ol class="order" id="order"></ol>
+        </div>
+        <dialog class="picker" id="picker" aria-label="Escolher o desenho">
+          <div class="picker-h"><b class="d">Escolha o desenho</b><button type="button" class="x" id="pickX" aria-label="Fechar">×</button></div>
+          <div class="ics" id="ics"></div>
+        </dialog>
       </div>
 
       <div class="step gate">
@@ -97,16 +107,15 @@
       <div class="step done" aria-live="polite">
         <div class="if-sent">
           <div class="ok d"><img src="/img/3d/rocket.png" alt="">Falta só apertar enviar!</div>
-          <p>O WhatsApp abriu com a mensagem pronta e o seu código <b id="code"></b>. Aperte <b>enviar</b> e o PDF do quadro chega em segundos.</p>
+          <p>O WhatsApp vai abrir com a mensagem pronta e o seu código <b id="code"></b>. Aperte <b>enviar</b> e o PDF do quadro chega em segundos.</p>
           <a class="btn green block" id="waGo" href="#" target="_blank" rel="noopener"><img class="wa-ic" src="/img/wa.svg" alt="">Abrir o WhatsApp</a>
-          <p class="alt-print">Está num computador sem WhatsApp? <button type="button" class="link" data-print>Imprimir aqui mesmo</button></p>
         </div>
         <div class="no-sent">
           <div class="ok d"><img src="/img/3d/trophy.png" alt="">Seu quadro está pronto!</div>
           <p>Na janela de impressão, escolha <b>Salvar como PDF</b> se quiser guardar no celular.</p>
           <button type="button" class="btn green block" data-print>Imprimir ou salvar em PDF</button>
         </div>
-        <p class="alt-print">Mudou as crianças ou as tarefas? <button type="button" class="link" id="again">Pedir o quadro novo</button></p>
+        <p class="alt-print">Quer outro quadro, com outras crianças ou tarefas? <button type="button" class="link" id="again">Montar outro quadro</button></p>
       </div>
     </form>
 
@@ -201,7 +210,56 @@
       `<div class="group"><b>${g}</b><div class="chips">${list.map(([t, i]) =>
         `<button type="button" class="chip" aria-pressed="${has(t)}" data-t="${esc(t)}" data-i="${i}"><img src="/img/3d/${i}.png" alt="">${esc(t)}</button>`).join('')}</div></div>`).join('');
     $('#count').textContent = `${S.tasks.length} de ${MAX} tarefas escolhidas`;
+    renderOrder();
   };
+  // ordem na folha: arrastar (mouse pela linha toda; no toque, pela alça ⠿) e trocar o desenho
+  const renderOrder = () => {
+    $('#order').innerHTML = S.tasks.map((x, n) => `<li data-n="${n}"><span class="grip" aria-hidden="true">⠿</span>
+      <button type="button" class="ic-btn" data-ic="${n}" aria-label="Trocar o desenho de ${esc(x.t)}"><img src="/img/3d/${x.i}.png" alt=""></button>
+      <span class="tt">${esc(x.t)}</span>
+      <button type="button" class="mv" data-up="${n}" aria-label="Subir ${esc(x.t)}"${n ? '' : ' disabled'}>↑</button>
+      <button type="button" class="x" data-del="${n}" aria-label="Tirar ${esc(x.t)}">×</button></li>`).join('');
+  };
+  $('#order').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.ic) return pickFor(+b.dataset.ic);
+    if (b.dataset.del) S.tasks.splice(+b.dataset.del, 1);
+    if (b.dataset.up) { const n = +b.dataset.up; [S.tasks[n - 1], S.tasks[n]] = [S.tasks[n], S.tasks[n - 1]]; }
+    renderGroups(); render();
+  });
+  let drag = null;
+  $('#order').addEventListener('pointerdown', (e) => {
+    const li = e.target.closest('li');
+    if (!li || e.target.closest('button') || (e.pointerType !== 'mouse' && !e.target.closest('.grip'))) return;
+    e.preventDefault(); drag = li; li.classList.add('drag'); li.setPointerCapture(e.pointerId);
+  });
+  $('#order').addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const list = $('#order'), next = [...list.children].find(li => li !== drag && e.clientY < li.getBoundingClientRect().top + li.offsetHeight / 2);
+    if (next !== drag.nextElementSibling) list.insertBefore(drag, next || null);
+  });
+  const drop = () => {
+    if (!drag) return;
+    drag = null; S.tasks = [...$('#order').children].map(li => S.tasks[+li.dataset.n]);
+    renderGroups(); render();
+  };
+  $('#order').addEventListener('pointerup', drop);
+  $('#order').addEventListener('pointercancel', drop);
+
+  // desenhos: os mesmos da folha e do PDF
+  const ICONS = {{ICONS}};
+  let picking = null, newIc = 'star';
+  $('#ics').innerHTML = ICONS.map(i => `<button type="button" data-i="${i}" aria-label="${i}"><img src="/img/3d/${i}.png" alt="" loading="lazy"></button>`).join('');
+  const pickFor = (who) => { picking = who; $('#picker').showModal(); };
+  $('#newIc').onclick = () => pickFor('new');
+  $('#pickX').onclick = () => $('#picker').close();
+  $('#picker').addEventListener('click', (e) => { if (e.target === $('#picker')) $('#picker').close(); }); // clique fora fecha
+  $('#ics').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (picking === 'new') { newIc = b.dataset.i; $('#newIc img').src = `/img/3d/${newIc}.png`; $('#taskIn').focus(); }
+    else if (S.tasks[picking]) { S.tasks[picking].i = b.dataset.i; renderGroups(); render(); }
+    $('#picker').close();
+  });
   $('#groups').addEventListener('click', (e) => {
     const b = e.target.closest('.chip'); if (!b) return;
     const t = b.dataset.t;
@@ -213,7 +271,8 @@
   const addTask = () => {
     const t = $('#taskIn').value.trim(); if (!t) return;
     if (S.tasks.length >= MAX) return flash(`Máximo de ${MAX} tarefas por folha`);
-    if (!has(t)) S.tasks.push({ t, i: 'star' });
+    if (!has(t)) S.tasks.push({ t, i: newIc });
+    newIc = 'star'; $('#newIc img').src = '/img/3d/star.png';
     $('#taskIn').value = ''; renderGroups(); render();
   };
   $('#taskAdd').onclick = addTask;
@@ -296,7 +355,7 @@
   };
   document.querySelectorAll('[data-print]').forEach(b => b.onclick = () => print());
   // mudou as crianças ou as tarefas depois de pedir: volta ao formulário para pedir o quadro novo
-  $('#again').onclick = () => { B.classList.remove('unlocked', 'sent'); $('#name').focus(); };
+  $('#again').onclick = () => { try { localStorage.removeItem('gt-lead'); } catch {} history.replaceState(null, '', location.pathname + '#montar'); location.reload(); };
 
   // quem volta pelo link do e-mail (ou já deixou o e-mail neste aparelho) não preenche de novo
   const q = new URLSearchParams(location.search).get('q') || store.get('gt-lead');

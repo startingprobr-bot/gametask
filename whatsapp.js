@@ -53,9 +53,13 @@ function sender(d) {
   return { phone: pn ? pn.split('@')[0].replace(/\D/g, '') : null, to: pn ? pn.split('@')[0] : k.remoteJid };
 }
 
+// celular brasileiro com ou sem o 9 extra é o mesmo número (o WhatsApp às vezes informa sem o 9)
+const br = (n) => String(n || '').replace(/^(55\d\d)9(\d{8})$/, '$1$2');
 async function handle(d, host) {
   const k = d?.key || {};
-  if (!k.remoteJid || k.fromMe || /@g\.us$|@broadcast$|@newsletter$/.test(k.remoteJid)) return;
+  if (!k.remoteJid || /@g\.us$|@broadcast$|@newsletter$/.test(k.remoteJid)) return;
+  // mensagem minha só conta na conversa "eu comigo mesmo" (para o dono testar); nas conversas com outras pessoas, ignora
+  if (k.fromMe && (!sender(d).phone || br(sender(d).phone) !== br(await number()))) return;
   const text = textOf(d.message).trim();
   const code = text.toUpperCase().match(/GT-[A-Z0-9]{4}/)?.[0];
   const { phone, to } = sender(d);

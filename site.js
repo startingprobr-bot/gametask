@@ -25,6 +25,7 @@ const page = (file) => (req, res) => {
     .replaceAll('{{SITE}}', site(req))
     .replaceAll('{{CONTATO}}', process.env.CONTACT_EMAIL || process.env.MAIL_FROM?.match(/[^<\s]+@[^>\s]+/)?.[0] || 'o e-mail que enviou a mensagem para você')
     .replaceAll('{{WA_ON}}', wapp.on() ? '1' : '')
+    .replaceAll('{{ICONS}}', JSON.stringify([...ICONS].sort()))
     .replace('/css/site.css"', `/css/site.css?v=${SITE_CSS_V}"`);
   res.set('cache-control', 'no-cache').type('html').send(html);
 };
@@ -42,7 +43,7 @@ router.get('/sitemap.xml', (req, res) => {
 
 // ---------- Leads ----------
 // link que abre o WhatsApp com a mensagem pronta (a pessoa só aperta enviar)
-const waLink = (num, code) => `https://wa.me/${num}?text=${encodeURIComponent(`Oi! Quero meu quadro de tarefas 📋 Código: ${code}`)}`;
+const waLink = (num, code) => `https://wa.me/${num}?text=${encodeURIComponent(`Oi! Quero meu quadro de tarefas. Código: ${code}`)}`;
 const hits = new Map();
 const tooMany = (ip) => { const now = Date.now(), r = (hits.get(ip) || []).filter(t => now - t < 60000); r.push(now); hits.set(ip, r); return r.length > 8; };
 const ICONS = new Set(fs.readdirSync(path.join(PUB, 'img/3d')).map(f => f.replace(/\.png$/, '')));

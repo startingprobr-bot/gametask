@@ -695,6 +695,11 @@ const step = (m) => console.log('✔', m);
     const ls2 = await ok('GET', '/api/owner/leads'), lAna = ls2.find(x => x.code === semEmail.code);
     assert.ok(lAna.whatsapp === '5511988887777' && lAna.wa_confirmed_at && lAna.opt_out_at && lAna.email === null);
     assert.ok(ls2.find(x => x.code === outro.code).wa_confirmed_at);
+    // o dono testando na conversa "eu comigo mesmo" (fromMe, número sem o 9): recebe o PDF
+    const dono = await (await pub({ name: 'Bruno', consent: true, kids: ['Eva'], tasks: [{ t: 'Ler', i: 'openbook' }] })).json();
+    await hook({ key: { id: 'm8', remoteJid: '551199990000@s.whatsapp.net', fromMe: true }, message: { conversation: 'Quero meu quadro. Código: ' + dono.code } });
+    await waitSent(4);
+    assert.equal(evoSent.length, 4); assert.equal(evoSent[3].kind, 'sendMedia');
     step('WhatsApp: código recebido devolve o PDF; conversas pessoais, grupos e repetições ignorados; SAIR respeitado');
 
     let ws = await ok('GET', '/api/owner/whatsapp');
