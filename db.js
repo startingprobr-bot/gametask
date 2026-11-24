@@ -116,6 +116,12 @@ const SCHEMA = [
 `CREATE TABLE IF NOT EXISTS task_runs (
   family_id INT NOT NULL, kid_id INT NOT NULL, task_id INT NOT NULL, day DATE NOT NULL,
   spent INT NOT NULL DEFAULT 0, started_at TIMESTAMP NULL, PRIMARY KEY (kid_id, task_id, day), INDEX(family_id))`,
+// Leads das iscas do site (ex.: quadro de tarefas para imprimir). kids/tasks guardam o quadro montado (JSON) para refazer pelo link do e-mail.
+`CREATE TABLE IF NOT EXISTS leads (
+  id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(80) NOT NULL, email VARCHAR(160) NOT NULL, whatsapp VARCHAR(20) NULL,
+  source VARCHAR(40) NOT NULL, kids TEXT NULL, tasks TEXT NULL, token CHAR(32) NOT NULL, downloads INT NOT NULL DEFAULT 1,
+  consent_at TIMESTAMP NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL,
+  UNIQUE KEY u (email), UNIQUE KEY t (token))`,
 ];
 
 // Colunas acrescentadas depois da primeira versão (MySQL 8 não tem ADD COLUMN IF NOT EXISTS)

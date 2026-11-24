@@ -8,6 +8,7 @@ const { pool, migrate, ensureDatabase, getSetting } = require('./db');
 const billing = require('./billing');
 const mail = require('./mail');
 const members = require('./members');
+const site = require('./site');
 
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
@@ -145,6 +146,7 @@ const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHE
   .then(([[f]]) => billing.isOwner(f) ? next() : res.status(403).json({ error: 'Área do dono do sistema' }), next);
 
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ v: VERSION }));
+app.use(site.router); // robots.txt, sitemap.xml, páginas de conteúdo e leads
 app.get('/api/public/pricing', wrap(async (req, res) => res.json({ ...await billing.prices(), card: billing.cardKey() })));
 app.use('/api/auth', members.auth);
 app.post(['/api/billing/checkout', '/api/billing/pix', '/api/billing/card', '/api/billing/free', '/api/billing/refund'], needFamily, needParent, needFull);
@@ -165,7 +167,8 @@ const VERSION = require('crypto').createHash('sha1')
 const LANDING_CSS_V = require('crypto').createHash('sha1').update(fs.readFileSync(path.join(PUB, 'css/landing.css'))).digest('hex').slice(0, 10);
 const INDEX = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8')
   .replace('/js/app.js"', `/js/app.js?v=${VERSION}"`).replace('/css/game.css"', `/css/game.css?v=${VERSION}"`);
-const sendApp = (req, res) => res.set('cache-control', 'no-cache').type('html').send(INDEX);
+// o app (e o painel disfarçado) não entra no Google: só a página de vendas e as páginas de conteúdo
+const sendApp = (req, res) => res.set({ 'cache-control': 'no-cache', 'x-robots-tag': 'noindex' }).type('html').send(INDEX);
 app.get('/', wrap(async (req, res) => {
   if (req.session?.fid) return sendApp(req, res);
   const p = await billing.prices();
@@ -174,7 +177,8 @@ app.get('/', wrap(async (req, res) => {
     .replaceAll('{{ANUAL_MES}}', brl(Math.floor(p.annual / 12 * 100) / 100))
     .replaceAll('{{PLUS_MES}}', brl(Math.floor(p.plus / 12 * 100) / 100)).replaceAll('{{PLUS}}', brl(p.plus))
     .replaceAll('{{ECONOMIA}}', String(Math.max(0, Math.round((1 - p.annual / (p.monthly * 12)) * 100))))
-    .replaceAll('{{GARANTIA}}', String(p.guarantee_days))
+    .replaceAll('{{GARANTIA}}', String(p.guarantee_days)).replaceAll('{{SITE}}', site.site(req))
+    .replaceAll('{{ANUAL_NUM}}', (+p.annual).toFixed(2)).replaceAll('{{MENSAL_NUM}}', (+p.monthly).toFixed(2))
     .replace('/css/landing.css"', `/css/landing.css?v=${LANDING_CSS_V}"`);
   res.set('cache-control', 'no-cache').type('html').send(html);
 }));
@@ -188,7 +192,7 @@ app.get('/painel', (req, res) => {
     .replace('href="/manifest.json"', `href="/painel/manifest.json?i=${k}"`)
     .replace('href="/icons/icon-192.png"', `href="/icons/d/${k}-180.png"`)
     .replace('<meta name="theme-color" content="#2a6cf0">', `<meta name="theme-color" content="${color}">`);
-  res.set('cache-control', 'no-cache').type('html').send(html);
+  res.set({ 'cache-control': 'no-cache', 'x-robots-tag': 'noindex' }).type('html').send(html);
 });
 app.get('/painel/manifest.json', (req, res) => {
   const k = disguise(req.query.i), [name, color] = DISGUISES[k];

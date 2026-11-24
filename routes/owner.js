@@ -89,6 +89,17 @@ router.post('/families/:id/reset-link', wrap(async (req, res) => {
   res.json({ link: await require('../mail').createResetLink(req, f.id, 24) });
 }));
 
+// ---------- Leads das iscas do site (quadro de tarefas etc.) ----------
+// "cliente" = o e-mail do lead já virou uma família cadastrada
+router.get('/leads', wrap(async (req, res) => {
+  const [rows] = await pool.query(
+    `SELECT l.id,l.name,l.email,l.whatsapp,l.source,l.kids,l.downloads,l.created_at,l.updated_at,
+      EXISTS(SELECT 1 FROM families f WHERE f.email=l.email) cliente
+     FROM leads l ORDER BY l.id DESC LIMIT 5000`);
+  rows.forEach(r => { r.kids = JSON.parse(r.kids || '[]'); r.cliente = !!r.cliente; });
+  res.json(rows);
+}));
+
 // ---------- Cupons de desconto ----------
 router.get('/coupons', wrap(async (req, res) => {
   const [rows] = await pool.query('SELECT * FROM coupons ORDER BY active DESC, id DESC');

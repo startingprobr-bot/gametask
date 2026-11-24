@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quadro de tarefas infantil para imprimir grátis | GameTask</title>
+<meta name="description" content="Monte o quadro de tarefas da sua casa com o nome dos seus filhos e as tarefas de cada um, e imprima grátis em A4. Com dicas para o quadro durar mais de uma semana.">
+<link rel="canonical" href="{{SITE}}/quadro-de-tarefas-infantil">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="GameTask">
+<meta property="og:url" content="{{SITE}}/quadro-de-tarefas-infantil">
+<meta property="og:title" content="Quadro de tarefas infantil para imprimir grátis">
+<meta property="og:description" content="Coloque o nome dos seus filhos, escolha as tarefas e imprima em A4, uma folha por criança.">
+<meta property="og:image" content="{{SITE}}/img/og-quadro.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#fff8e6">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"Article","headline":"Quadro de tarefas infantil: monte o da sua casa e imprima grátis","datePublished":"2026-11-23","dateModified":"2026-11-23",
+  "image":"{{SITE}}/img/og-quadro.png","mainEntityOfPage":"{{SITE}}/quadro-de-tarefas-infantil",
+  "author":{"@type":"Organization","name":"GameTask","url":"{{SITE}}/"},"publisher":{"@type":"Organization","name":"GameTask","logo":{"@type":"ImageObject","url":"{{SITE}}/icons/icon-512.png"}}},
+ {"@type":"BreadcrumbList","itemListElement":[
+  {"@type":"ListItem","position":1,"name":"GameTask","item":"{{SITE}}/"},
+  {"@type":"ListItem","position":2,"name":"Quadro de tarefas infantil","item":"{{SITE}}/quadro-de-tarefas-infantil"}]},
+ {"@type":"FAQPage","mainEntity":[
+  {"@type":"Question","name":"Com que idade dá para começar um quadro de tarefas?","acceptedAnswer":{"@type":"Answer","text":"Por volta dos 3 anos já dá, com duas ou três tarefas bem simples e figuras no lugar de palavras. O que muda com a idade é a quantidade de tarefas e quanta ajuda a criança precisa."}},
+  {"@type":"Question","name":"Devo pagar mesada pelas tarefas do quadro?","acceptedAnswer":{"@type":"Answer","text":"Muitas famílias separam: o cuidado consigo mesmo (escovar os dentes, arrumar a mochila) vale estrela, e as tarefas que ajudam a casa podem valer um pouco de dinheiro ou tempo de tela. Combine antes e mantenha a regra igual para todos."}},
+  {"@type":"Question","name":"O quadro é grátis mesmo?","acceptedAnswer":{"@type":"Answer","text":"Sim. Pedimos o seu e-mail para mandar o link do quadro, assim você imprime uma folha nova toda semana sem montar de novo. Dá para sair da lista quando quiser."}}]}
+]}
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="in">
+    <a class="brand" href="/" aria-label="GameTask, página inicial"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></a>
+    <a class="txt hide-sm" href="/">Conheça o app</a>
+    <a class="btn ghost sm" href="/app#/login">Entrar</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="in">
+      <nav class="crumbs" aria-label="Você está em"><a href="/">GameTask</a> › Quadro de tarefas infantil</nav>
+      <span class="kicker">Grátis para imprimir</span>
+      <h1 class="d">Quadro de tarefas infantil: monte o da sua casa e imprima grátis</h1>
+      <p class="lead">Coloque o nome dos seus filhos, escolha as tarefas de cada dia e imprima em uma folha A4. Uma folha por criança, com bolinhas para marcar a semana inteira.</p>
+    </div>
+  </section>
+
+  <section class="in tool" id="montar" aria-label="Montar o quadro">
+    <form class="panel" id="form" novalidate>
+      <div class="step">
+        <h2 class="d"><span class="n">1</span>Quem vai usar?</h2>
+        <p class="hint">Cada criança ganha uma folha com o nome dela.</p>
+        <div class="row">
+          <input type="text" id="kidIn" maxlength="30" placeholder="Nome da criança" aria-label="Nome da criança" autocomplete="off">
+          <button type="button" class="btn ghost sm" id="kidAdd">Adicionar</button>
+        </div>
+        <div class="kids" id="kids" aria-live="polite"></div>
+      </div>
+
+      <div class="step">
+        <h2 class="d"><span class="n">2</span>Quais tarefas?</h2>
+        <p class="hint">Comece com poucas. Dá para trocar na semana que vem.</p>
+        <div class="groups" id="groups"></div>
+        <div class="row" style="margin-top:14px">
+          <input type="text" id="taskIn" maxlength="40" placeholder="Outra tarefa (ex.: Treino de futebol)" aria-label="Escrever outra tarefa" autocomplete="off">
+          <button type="button" class="btn ghost sm" id="taskAdd">Incluir</button>
+        </div>
+        <p class="count" id="count" aria-live="polite"></p>
+      </div>
+
+      <div class="step gate">
+        <h2 class="d"><span class="n">3</span>Para onde mando o link?</h2>
+        <p class="hint">Você imprime agora e recebe o link para imprimir de novo toda semana.</p>
+        <label class="f" for="name">Seu nome</label>
+        <input type="text" id="name" name="name" maxlength="80" autocomplete="given-name" required>
+        <label class="f" for="email">Seu e-mail</label>
+        <input type="email" id="email" name="email" maxlength="160" autocomplete="email" inputmode="email" required>
+        <label class="f" for="wa">WhatsApp <small>(opcional)</small></label>
+        <input type="tel" id="wa" name="whatsapp" maxlength="20" autocomplete="tel" inputmode="tel" placeholder="(11) 91234-5678">
+        <label class="consent"><input type="checkbox" id="consent"> <span>Quero receber o quadro e dicas de rotina do GameTask por e-mail. Posso sair quando quiser. <a href="/privacidade" target="_blank">Privacidade</a></span></label>
+        <button class="btn green block" id="go">Gerar meu quadro</button>
+        <p class="err" id="err" role="alert"></p>
+      </div>
+
+      <div class="step done" aria-live="polite">
+        <div class="ok d"><img src="/img/3d/trophy.png" alt="">Seu quadro está pronto!</div>
+        <p>Na janela de impressão, escolha <b>Salvar como PDF</b> se quiser guardar no celular. O link para imprimir de novo também foi para o seu e-mail.</p>
+        <button type="button" class="btn green block" id="print">Imprimir ou salvar em PDF</button>
+      </div>
+    </form>
+
+    <div class="preview">
+      <div class="preview-h"><h2 class="d">Como vai ficar</h2><div class="tabs" id="tabs"></div></div>
+      <div class="stage" id="stage"></div>
+    </div>
+  </section>
+
+  <article class="article">
+    <div class="in prose">
+      <h2 class="d">Como fazer o quadro durar mais de uma semana</h2>
+      <p>Quase todo quadro de tarefas começa bem. Na segunda-feira todo mundo marca, na quarta a caneta sumiu e no domingo ninguém lembra que ele existe. Estes cuidados ajudam a passar dessa primeira semana:</p>
+      <ol>
+        <li><strong>Poucas tarefas no começo.</strong> Quatro ou cinco bastam. É melhor a criança completar tudo e pedir mais do que olhar para uma lista que nunca termina.</li>
+        <li><strong>Deixe a criança escolher uma ou duas.</strong> Quando ela ajuda a montar o quadro, ele deixa de ser uma ordem sua e vira um combinado.</li>
+        <li><strong>Na altura dos olhos dela, com a caneta presa do lado.</strong> Quem marca é a criança, não você. Se ela precisa pedir a caneta, o quadro morre.</li>
+        <li><strong>Marque na hora, não no fim do dia.</strong> Escovou os dentes, marcou. Deixar para a noite vira mais uma cobrança.</li>
+        <li><strong>Combine o prêmio da semana antes de começar.</strong> Escrever o prêmio no rodapé da folha deixa claro o que ela está juntando.</li>
+        <li><strong>Domingo é dia de contar junto.</strong> Somem as bolinhas, entreguem o prêmio e imprimam a folha da semana seguinte.</li>
+      </ol>
+
+      <h2 class="d">Quantas tarefas por idade</h2>
+      <p>Não existe número certo. Esta é a sugestão que usamos como ponto de partida, e você ajusta conforme a sua criança:</p>
+      <div class="ages">
+        <div class="age"><b>3 a 5 anos</b><small>2 a 4 tarefas, com figura</small><ul><li>Guardar os brinquedos</li><li>Escovar os dentes</li><li>Colocar a roupa no cesto</li></ul></div>
+        <div class="age"><b>6 a 8 anos</b><small>4 a 6 tarefas</small><ul><li>Arrumar a cama</li><li>Arrumar a mochila</li><li>Tirar o prato da mesa</li></ul></div>
+        <div class="age"><b>9 a 12 anos</b><small>5 a 8 tarefas, com casa</small><ul><li>Dever de casa sem lembrar</li><li>Lavar a louça</li><li>Levar o lixo</li></ul></div>
+      </div>
+      <p>Repare que a criança pequena precisa de ajuda até nas tarefas simples. O que conta no quadro é ela tentar sozinha, não o resultado perfeito.</p>
+
+      <h2 class="d">Que prêmio dar</h2>
+      <p>O prêmio funciona melhor quando é pequeno, frequente e escolhido junto. Algumas ideias que não pesam no bolso:</p>
+      <ul>
+        <li>Escolher o jantar de sexta ou o filme da família</li>
+        <li>Meia hora a mais de videogame ou celular no fim de semana</li>
+        <li>Dormir um pouco mais tarde no sábado</li>
+        <li>Um passeio só com você</li>
+      </ul>
+      <p>Prêmios grandes, como um brinquedo caro, funcionam melhor como meta de várias semanas do que como prêmio semanal.</p>
+
+      <h2 class="d">Por que o quadro de papel costuma parar</h2>
+      <p>O quadro ajuda a criança a lembrar, mas quem confere, conta as bolinhas, lembra do prêmio e imprime a folha nova ainda é você. Com dois ou três filhos, isso vira mais um trabalho no fim do dia. E a cobrança volta para a mesma pessoa de sempre.</p>
+
+      <div class="cta">
+        <img src="/img/3d/game.png" alt="">
+        <div>
+          <h2 class="d">O mesmo quadro, sem você precisar conferir</h2>
+          <p>No GameTask, as tarefas viram missões no celular ou tablet. A criança marca, ganha moedas e tempo de tela, e você só aprova com um toque. A conta das bolinhas é feita sozinha.</p>
+          <a class="btn" href="/">Conhecer o GameTask</a>
+        </div>
+      </div>
+
+      <h2 class="d">Perguntas frequentes</h2>
+      <div class="faq">
+        <details><summary>Com que idade dá para começar um quadro de tarefas?</summary><p>Por volta dos 3 anos já dá, com duas ou três tarefas bem simples e figuras no lugar de palavras. O que muda com a idade é a quantidade de tarefas e quanta ajuda a criança precisa.</p></details>
+        <details><summary>Devo pagar mesada pelas tarefas do quadro?</summary><p>Muitas famílias separam: o cuidado consigo mesmo (escovar os dentes, arrumar a mochila) vale estrela, e as tarefas que ajudam a casa podem valer um pouco de dinheiro ou tempo de tela. Combine antes e mantenha a regra igual para todos.</p></details>
+        <details><summary>O quadro é grátis mesmo?</summary><p>Sim. Pedimos o seu e-mail para mandar o link do quadro, assim você imprime uma folha nova toda semana sem montar de novo. Dá para sair da lista quando quiser.</p></details>
+      </div>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="in">
+    <a class="brand" href="/"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></a>
+    <nav aria-label="Rodapé"><a href="/">O app</a><a href="/quadro-de-tarefas-infantil">Quadro de tarefas</a><a href="/privacidade">Privacidade</a><a href="/app#/login">Entrar</a></nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const MAX = 12;
+  const GROUPS = [
+    ['Manhã', [['Escovar os dentes', 'toothbrush'], ['Arrumar a cama', 'bed'], ['Trocar de roupa', 'shirt'], ['Tomar café da manhã', 'milk']]],
+    ['Escola', [['Dever de casa', 'pencil'], ['Arrumar a mochila', 'backpack'], ['Ler 20 minutos', 'openbook']]],
+    ['Casa', [['Guardar os brinquedos', 'teddy'], ['Roupa suja no cesto', 'basket'], ['Tirar o prato da mesa', 'plate'], ['Lavar a louça', 'sponge'], ['Dar comida ao pet', 'paw'], ['Levar o lixo', 'trash'], ['Regar as plantas', 'plant']]],
+    ['Noite', [['Tomar banho', 'shower'], ['Escovar os dentes à noite', 'tooth'], ['Desligar a tela no horário', 'nophone'], ['Dormir no horário', 'sleep']]],
+  ];
+  const START = ['Escovar os dentes', 'Arrumar a cama', 'Dever de casa', 'Guardar os brinquedos', 'Tirar o prato da mesa', 'Tomar banho'];
+  const DAYS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM'];
+  const S = { kids: [], tasks: GROUPS.flatMap(g => g[1]).filter(t => START.includes(t[0])).map(([t, i]) => ({ t, i })), cur: 0 };
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  // ---------- passo 2: catálogo de tarefas ----------
+  const has = (t) => S.tasks.some(x => x.t === t);
+  const renderGroups = () => {
+    const custom = S.tasks.filter(x => !GROUPS.some(g => g[1].some(p => p[0] === x.t)));
+    $('#groups').innerHTML = [...GROUPS, ...(custom.length ? [['Suas tarefas', custom.map(c => [c.t, c.i])]] : [])].map(([g, list]) =>
+      `<div class="group"><b>${g}</b><div class="chips">${list.map(([t, i]) =>
+        `<button type="button" class="chip" aria-pressed="${has(t)}" data-t="${esc(t)}" data-i="${i}"><img src="/img/3d/${i}.png" alt="">${esc(t)}</button>`).join('')}</div></div>`).join('');
+    $('#count').textContent = `${S.tasks.length} de ${MAX} tarefas escolhidas`;
+  };
+  $('#groups').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    const t = b.dataset.t;
+    if (has(t)) S.tasks = S.tasks.filter(x => x.t !== t);
+    else if (S.tasks.length >= MAX) return flash(`Máximo de ${MAX} tarefas por folha`);
+    else S.tasks.push({ t, i: b.dataset.i });
+    renderGroups(); render();
+  });
+  const addTask = () => {
+    const t = $('#taskIn').value.trim(); if (!t) return;
+    if (S.tasks.length >= MAX) return flash(`Máximo de ${MAX} tarefas por folha`);
+    if (!has(t)) S.tasks.push({ t, i: 'star' });
+    $('#taskIn').value = ''; renderGroups(); render();
+  };
+  $('#taskAdd').onclick = addTask;
+  $('#taskIn').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addTask(); } };
+
+  // ---------- passo 1: crianças ----------
+  const renderKids = () => {
+    $('#kids').innerHTML = S.kids.map((k, n) => `<span class="kid">${esc(k)}<button type="button" data-n="${n}" aria-label="Tirar ${esc(k)}">×</button></span>`).join('');
+  };
+  $('#kids').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; S.kids.splice(+b.dataset.n, 1); S.cur = 0; renderKids(); render(); });
+  const addKid = () => {
+    const k = $('#kidIn').value.trim(); if (!k) return;
+    if (S.kids.length >= 6) return flash('Até 6 crianças por quadro');
+    S.kids.push(k); S.cur = S.kids.length - 1; $('#kidIn').value = ''; renderKids(); render();
+  };
+  $('#kidAdd').onclick = addKid;
+  $('#kidIn').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addKid(); } };
+  // quem digita o nome e vai direto para as tarefas não perde o nome
+  $('#kidIn').onblur = () => { if ($('#kidIn').value.trim()) addKid(); };
+
+  // ---------- a folha ----------
+  const sheet = (name, k) => {
+    const rows = S.tasks.map((x, r) => `<div class="task${r % 2 ? ' alt' : ''}"><img src="/img/3d/${x.i}.png" alt="">${esc(x.t)}</div>` +
+      DAYS.map((_, d) => `<div class="cell${d > 4 ? ' we' : ''}${r % 2 ? ' alt' : ''}"><span></span></div>`).join('')).join('');
+    return `<div class="sheet${k === S.cur ? ' cur' : ''}">
+      <div class="sh-top"><div class="who"><small>Missões da semana de</small>${esc(name)}</div>
+        <div class="wk">Semana de ____/____ a ____/____</div>
+        <div class="logo"><img src="/img/3d/game.png" alt="">GameTask</div></div>
+      <div class="sh-grid" style="grid-template-rows:11mm repeat(${S.tasks.length},1fr)"><div class="hd">Tarefa</div>${DAYS.map(d => `<div class="hd">${d}</div>`).join('')}${rows}</div>
+      <div class="sh-foot"><div class="line">Bolinhas da semana:<i></i></div><div class="line" style="flex:2">Prêmio combinado:<i></i></div></div>
+      <p class="sh-note">Quadro grátis em ${esc(location.host)}/quadro-de-tarefas-infantil · No app GameTask a criança marca no celular e você só aprova.</p>
+    </div>`;
+  };
+  const fit = () => {
+    const st = $('#stage'), w = st.clientWidth, sh = st.querySelector('.sheet.cur'); if (!sh) return;
+    const s = w / sh.offsetWidth; st.querySelectorAll('.sheet').forEach(x => x.style.transform = `scale(${s})`);
+    st.style.height = sh.offsetHeight * s + 'px';
+  };
+  const render = () => {
+    const names = S.kids.length ? S.kids : ['Nome da criança'];
+    if (S.cur >= names.length) S.cur = 0;
+    $('#stage').innerHTML = names.map(sheet).join('');
+    $('#tabs').innerHTML = names.length > 1 ? names.map((n, k) => `<button type="button" aria-pressed="${k === S.cur}" data-k="${k}">${esc(n)}</button>`).join('') : '';
+    fit();
+  };
+  $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; S.cur = +b.dataset.k; render(); });
+  addEventListener('resize', fit);
+  document.fonts?.ready.then(fit);
+
+  // ---------- passo 3: lead ----------
+  let msgT = 0;
+  const flash = (m) => { $('#err').textContent = m; clearTimeout(msgT); msgT = setTimeout(() => $('#err').textContent = '', 4000); };
+  const unlock = () => { document.body.classList.add('unlocked'); };
+  $('#form').onsubmit = async (e) => {
+    e.preventDefault();
+    if ($('#kidIn').value.trim()) addKid();
+    if (!S.kids.length) { $('#kidIn').focus(); return flash('Escreva o nome de pelo menos uma criança'); }
+    if (!S.tasks.length) return flash('Escolha pelo menos uma tarefa');
+    if (!$('#consent').checked) return flash('Marque a caixinha para receber o quadro');
+    const go = $('#go'); go.disabled = true; go.textContent = 'Gerando…';
+    try {
+      const r = await fetch('/api/public/leads', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: $('#name').value, email: $('#email').value, whatsapp: $('#wa').value, consent: true, kids: S.kids, tasks: S.tasks, source: 'quadro' }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Não deu certo. Tente de novo.');
+      store.set('gt-lead', j.token);
+      unlock(); render();
+      setTimeout(() => print(), 350);
+    } catch (err) { flash(err.message); }
+    finally { go.disabled = false; go.textContent = 'Gerar meu quadro'; }
+  };
+  $('#print').onclick = () => print();
+
+  // quem volta pelo link do e-mail (ou já deixou o e-mail neste aparelho) não preenche de novo
+  const q = new URLSearchParams(location.search).get('q') || store.get('gt-lead');
+  if (q && /^[a-f0-9]{32}$/.test(q)) fetch('/api/public/leads/' + q).then(r => r.ok ? r.json() : null).then(d => {
+    if (!d) return;
+    store.set('gt-lead', q);
+    if (new URLSearchParams(location.search).get('q')) { S.kids = d.kids; S.tasks = d.tasks; }
+    unlock(); renderGroups(); renderKids(); render();
+  }).catch(() => {});
+
+  renderGroups(); renderKids(); render();
+})();
+</script>
+</body>
+</html>

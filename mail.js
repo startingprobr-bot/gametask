@@ -107,4 +107,19 @@ async function sendResetMail(to, name, link) {
   return true;
 }
 
-module.exports = { createResetLink, consumeReset, peekReset, sendResetMail, sendFinalizeMail, smtpOn, layout, resetMail };
+// Isca do site: o quadro de tarefas fica guardado num link para imprimir de novo quando quiser
+async function sendLeadMail(to, name, link) {
+  if (!smtpOn()) { console.log(`[lead] SMTP não configurado. Quadro de ${to}: ${link}`); return false; }
+  const from = process.env.MAIL_FROM || process.env.SMTP_USER || 'GameTask <no-reply@startingpro.com.br>';
+  const origin = (process.env.APP_URL || new URL(link).origin).replace(/\/$/, '');
+  const html = layout({ origin, preheader: 'Guarde este e-mail: o link abre o seu quadro pronto para imprimir de novo.', title: 'Seu quadro de tarefas está pronto',
+    paragraphs: [`Oi, <b style="color:#0d1b4c;">${esc(name)}</b>! O quadro que você montou ficou guardado neste link. Toda segunda-feira dá para imprimir uma folha nova, sem montar tudo de novo.`,
+      'Uma dica que faz diferença: cole o quadro na altura dos olhos da criança e deixe uma caneta presa do lado. Quem marca é ela, não você.'],
+    button: { label: 'Abrir meu quadro', url: link }, fallbackLink: link,
+    note: 'Cansou de conferir o quadro todo dia? No <b>GameTask</b> a criança marca no celular, ganha moedas e tempo de tela, e você só aprova.' });
+  const text = `Oi, ${name}!\n\nSeu quadro de tarefas ficou guardado neste link para imprimir de novo quando quiser:\n${link}\n\nGameTask`;
+  await transport().sendMail({ from, to, subject: 'Seu quadro de tarefas está pronto', text, html });
+  return true;
+}
+
+module.exports = { sendLeadMail, createResetLink, consumeReset, peekReset, sendResetMail, sendFinalizeMail, smtpOn, layout, resetMail };

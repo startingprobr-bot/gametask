@@ -1443,7 +1443,7 @@ async function viewSetup() {
 
 // ---------- Painel do dono do sistema ----------
 let otab = 'overview';
-const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['coupons', 'gift', 'Cupons'], ['prices', 'gear', 'Preços']];
+const OTABS = [['overview', 'chart', 'Visão geral'], ['families', 'people', 'Famílias'], ['payments', 'moneybag', 'Pagamentos'], ['leads', 'memo', 'Leads'], ['coupons', 'gift', 'Cupons'], ['prices', 'gear', 'Preços']];
 const STATUS = { trial: ['Teste', 'wait'], paid: ['Pago', 'ok'], free: ['Cortesia', 'ok'], expired: ['Vencido', 'no'], owner: ['Dono', 'ok'] };
 const PAY = { approved: ['Aprovado', 'ok'], pending: ['Aguardando', 'wait'], in_process: ['Em análise', 'wait'], rejected: ['Recusado', 'no'], cancelled: ['Cancelado', 'no'], refunded: ['Estornado', 'no'], charged_back: ['Contestado', 'no'], invalid: ['Valor divergente', 'no'] };
 const tag = (m, k) => { const [l, c] = m[k] || [k, 'wait']; return `<span class="tag ${c}">${esc(l)}</span>`; };
@@ -1454,7 +1454,7 @@ async function viewOwner() {
     <nav class="tabs" aria-label="Seções">${OTABS.map(([k, ic, l]) => `<button class="tab ${k === otab ? 'on' : ''}" data-tab="${k}" ${k === otab ? 'aria-current="page"' : ''}>${im(ic)}${l}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
   $$('[data-tab]').forEach(b => b.onclick = () => { otab = b.dataset.tab; sfx.tap(); viewOwner().catch(e => toast(e.message, true)); });
-  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, coupons: ownerCoupons, prices: ownerPrices })[otab]($('#pane'));
+  await ({ overview: ownerOverview, families: ownerFamilies, payments: ownerPayments, leads: ownerLeads, coupons: ownerCoupons, prices: ownerPrices })[otab]($('#pane'));
 }
 async function ownerOverview(pane) {
   const s = await api('GET', '/owner/summary'), c = s.counts, r = s.revenue;
@@ -1510,6 +1510,29 @@ async function ownerPayments(pane) {
       <td>${dmy(p.paid_at || p.created_at)}</td><td>${esc(p.family)}<div class="s">${esc(p.email)}</div></td><td>${PLAN_N[p.plan]}</td><td>${brl(p.amount)}${p.coupon ? `<div class="s">cupom ${esc(p.coupon)}</div>` : ''}</td>
       <td>${esc(METHOD[p.method] || (p.method ? 'Cartão ' + p.method : '—'))}</td><td>${tag(PAY, p.status)}</td><td>${p.period_end ? dmy(p.period_end) : '—'}</td></tr>`).join('')}</tbody></table></div>`
     : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
+}
+async function ownerLeads(pane) {
+  const rows = await api('GET', '/owner/leads');
+  const SRC = { quadro: 'Quadro de tarefas' };
+  const fone = (w) => w ? w.replace(/^(d{2})(d{4,5})(d{4})$/, '($1) $2-$3') : '';
+  const zap = (w) => `https://wa.me/${w.length <= 11 ? '55' + w : w}`;
+  const novos = rows.filter(l => !l.cliente).length;
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Leads (${rows.length})</h2>${rows.length ? '<button class="btn ghost sm" id="csv">Baixar planilha</button>' : ''}</div>
+    <p class="lead" style="margin:0 0 12px">Quem baixou uma isca do site. ${rows.length ? `${rows.length - novos} já virou cliente, ${novos} ainda não.` : ''}</p>
+    ${rows.length ? `<div class="scroll-x"><table><thead><tr><th>Data</th><th>Nome</th><th>Contato</th><th>Crianças</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${rows.map(l => `<tr>
+      <td>${dmy(l.created_at)}</td><td>${esc(l.name)}${l.downloads > 1 ? `<div class="s">baixou ${l.downloads} vezes</div>` : ''}</td>
+      <td><a href="mailto:${esc(l.email)}">${esc(l.email)}</a>${l.whatsapp ? `<div class="s"><a href="${zap(l.whatsapp)}" target="_blank" rel="noopener">${fone(l.whatsapp)}</a></div>` : ''}</td>
+      <td>${esc(l.kids.join(', '))}</td><td>${esc(SRC[l.source] || l.source)}</td>
+      <td>${l.cliente ? '<span class="tag ok">Cliente</span>' : '<span class="tag wait">Lead</span>'}</td></tr>`).join('')}</tbody></table></div>`
+    : zero('memo', 'Ninguém baixou o quadro de tarefas ainda. A página fica em /quadro-de-tarefas-infantil.')}</section>`;
+  const b = $('#csv'); if (b) b.onclick = () => {
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [['Data', 'Nome', 'E-mail', 'WhatsApp', 'Crianças', 'Origem', 'Downloads', 'Cliente'].map(q).join(';'),
+      ...rows.map(l => [dmy(l.created_at), l.name, l.email, l.whatsapp, l.kids.join(', '), SRC[l.source] || l.source, l.downloads, l.cliente ? 'sim' : 'não'].map(q).join(';'))];
+    const u = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    const x = Object.assign(document.createElement('a'), { href: u, download: `leads-gametask-${new Date().toISOString().slice(0, 10)}.csv` });
+    document.body.append(x); x.click(); x.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000);
+  };
 }
 async function ownerCoupons(pane) {
   const rows = await api('GET', '/owner/coupons');

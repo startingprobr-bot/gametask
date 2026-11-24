@@ -617,6 +617,35 @@ const step = (m) => console.log('✔', m);
     await withDev('DELETE', '/api/auth/parent/device');
     assert.equal((await withDev('GET', '/api/admin/tasks')).status, 403);
     step('app dos pais: abre direto no aparelho lembrado, sem destrancar o app das crianças');
+
+    // SEO: robots, sitemap, páginas de conteúdo; o app fica fora do Google
+    const robots = await (await fetch(BASE + '/robots.txt')).text();
+    assert.ok(robots.includes('Disallow: /app') && robots.includes('Sitemap: ' + BASE + '/sitemap.xml'));
+    const smap = await (await fetch(BASE + '/sitemap.xml')).text();
+    assert.ok(smap.includes(`<loc>${BASE}/quadro-de-tarefas-infantil</loc>`) && smap.includes(`<loc>${BASE}/</loc>`));
+    const qd = await fetch(BASE + '/quadro-de-tarefas-infantil');
+    assert.equal(qd.status, 200); assert.ok((await qd.text()).includes(`<link rel="canonical" href="${BASE}/quadro-de-tarefas-infantil">`));
+    assert.equal((await fetch(BASE + '/app')).headers.get('x-robots-tag'), 'noindex');
+    const home0 = await (await fetch(BASE + '/')).text();
+    assert.ok(home0.includes('"price":"') && !home0.includes('{{'), 'página de vendas sem marcador sobrando');
+    step('SEO: robots.txt, sitemap, canonical, app com noindex');
+
+    // isca do quadro de tarefas: guarda o lead, valida, mesmo e-mail mantém o link
+    const pub = (b) => fetch(BASE + '/api/public/leads', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
+    const lead = { name: 'Mãe Teste', email: 'Mae@Teste.com', whatsapp: '(11) 91234-5678', consent: true, kids: ['Eva', 'Ester'], tasks: [{ t: 'Arrumar a cama', i: 'bed' }, { t: 'Inventada', i: '../x' }] };
+    assert.equal((await pub({ ...lead, consent: false })).status, 400);
+    assert.equal((await pub({ ...lead, email: 'nao-e-email' })).status, 400);
+    assert.equal((await pub({ ...lead, kids: [] })).status, 400);
+    const l1 = await (await pub(lead)).json(), l2 = await (await pub({ ...lead, kids: ['Bernardo'] })).json();
+    assert.ok(/^[a-f0-9]{32}$/.test(l1.token)); assert.equal(l1.token, l2.token);
+    const back = await (await fetch(BASE + '/api/public/leads/' + l1.token)).json();
+    assert.deepEqual(back.kids, ['Bernardo']); assert.equal(back.tasks[1].i, 'star'); // ícone inválido vira estrela
+    assert.equal((await fetch(BASE + '/api/public/leads/' + 'f'.repeat(32))).status, 404);
+    await ok('POST', '/api/auth/parent', { pin: '1234' });
+    const ls = await ok('GET', '/api/owner/leads');
+    const lm = ls.find(x => x.email === 'mae@teste.com');
+    assert.ok(lm && lm.whatsapp === '11912345678' && lm.downloads === 2 && lm.cliente === false);
+    step('isca: lead do quadro de tarefas guardado, validado e listado no painel do dono');
     await db.end();
 
     console.log('\nTODOS OS TESTES PASSARAM');
