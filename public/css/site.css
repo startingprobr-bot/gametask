@@ -221,3 +221,44 @@ button.link{background:none;border:0;padding:0;font:inherit;font-weight:900;colo
 .ics button{aspect-ratio:1;border:0;border-radius:12px;background:transparent;cursor:pointer;display:grid;place-items:center}
 .ics button:hover,.ics button:focus-visible{background:var(--yellow)}
 .ics img{width:36px;height:36px}
+
+/* Guias: tabelas, calculadora, seletor de idade e "leia também" */
+.tbl{width:100%;border-collapse:separate;border-spacing:0;margin:0 0 20px;font-size:16px;border:2px solid var(--navy);border-radius:16px;overflow:hidden;background:#fff}
+.tbl th,.tbl td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid #eee3c6}
+.tbl thead th{background:var(--navy);color:#fff;font-weight:900;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
+.tbl tbody tr:nth-child(even) td{background:var(--cream)}
+.tbl tbody tr:last-child td{border-bottom:0}
+.tbl td:first-child{font-weight:900;white-space:nowrap}
+.tbl ul{margin:0 0 0 18px}.tbl li{margin:2px 0}
+.tbl-wrap{overflow-x:auto;margin:0 0 20px}.tbl-wrap .tbl{margin:0}.tbl-wrap .tbl.wide{min-width:520px}
+.calc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:20px;align-items:start;padding-bottom:56px}
+.calc .panel{background:#fff;border:2px solid var(--navy);border-radius:24px;padding:24px;box-shadow:0 4px 0 var(--navy)}
+.calc label.f{display:block;font-weight:900;margin:0 0 6px}
+.calc .fld{margin:0 0 18px}
+.calc select,.calc input[type=number]{width:100%;min-height:48px;padding:10px 14px;border-radius:14px;border:2px solid #cfc6aa;background:var(--paper);font:inherit;font-weight:800;color:var(--ink)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-height:44px;padding:6px 12px;border-radius:999px;border:2px solid #cfc6aa;background:var(--paper);font:inherit;font-weight:800;color:var(--ink);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--yellow);border-color:var(--navy);box-shadow:0 2px 0 var(--navy)}
+.result{background:var(--navy);color:#fff;border-radius:24px;padding:26px}
+.result .big{font-family:var(--display);font-size:clamp(44px,7vw,64px);line-height:1;margin:6px 0 4px;color:var(--yellow)}
+.result small{color:#c9d6ff;font-weight:700}
+.jars{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px}
+.jar{background:rgba(255,255,255,.08);border-radius:16px;padding:12px;text-align:center}
+.jar img{width:40px;height:40px}
+.jar b{display:block;font-size:20px}
+.jar span{font-size:13px;color:#c9d6ff;font-weight:700}
+.result .tipx{margin:18px 0 0;font-size:15px;color:#dfe7ff}
+.agepick{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+.agepick button{min-height:44px;padding:6px 14px;border-radius:999px;border:2px solid #cfc6aa;background:#fff;font:inherit;font-weight:900;color:var(--ink);cursor:pointer}
+.agepick button[aria-pressed=true]{background:var(--yellow);border-color:var(--navy);box-shadow:0 2px 0 var(--navy)}
+.answer{background:#fff;border:2px solid var(--navy);border-radius:20px;padding:20px 22px;margin:0 0 24px;box-shadow:0 4px 0 var(--navy)}
+.answer .big{font-family:var(--display);font-size:clamp(30px,4.6vw,44px);line-height:1.05;margin:4px 0 8px}
+.answer p{margin:0;color:var(--ink-soft);font-weight:700}
+.related{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:0 0 8px}
+.related a{display:flex;gap:12px;align-items:center;padding:14px;border-radius:18px;border:2px solid var(--line);background:#fff;text-decoration:none;font-weight:900;color:var(--ink)}
+.related a:hover{border-color:var(--navy)}
+.related img{width:40px;height:40px;flex:none}
+.src{font-size:14px;color:var(--ink-soft)}
+@media (max-width:820px){.calc{grid-template-columns:1fr}}
+@media (max-width:420px){.jars{grid-template-columns:1fr}.jar{display:flex;gap:10px;align-items:center;text-align:left}.jar b{display:inline}}
+.seg button{white-space:nowrap;padding:6px 8px}

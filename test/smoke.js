@@ -641,6 +641,14 @@ const step = (m) => console.log('✔', m);
     assert.ok(smap.includes(`<loc>${BASE}/quadro-de-tarefas-infantil</loc>`) && smap.includes(`<loc>${BASE}/</loc>`));
     const qd = await fetch(BASE + '/quadro-de-tarefas-infantil');
     assert.equal(qd.status, 200); assert.ok((await qd.text()).includes(`<link rel="canonical" href="${BASE}/quadro-de-tarefas-infantil">`));
+    // guias: no sitemap, canonical certo, um h1, dados estruturados válidos e nenhum marcador sobrando
+    for (const g of ['/tarefas-domesticas-por-idade', '/calculadora-de-mesada', '/tempo-de-tela-por-idade']) {
+      assert.ok(smap.includes(`<loc>${BASE}${g}</loc>`), 'sitemap ' + g);
+      const h = await (await fetch(BASE + g)).text();
+      assert.ok(h.includes(`<link rel="canonical" href="${BASE}${g}">`) && !h.includes('{{') && (h.match(/<h1/g) || []).length === 1, g);
+      const ld = JSON.parse(h.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+      assert.ok(ld['@graph'].some(x => x['@type'] === 'FAQPage') && ld['@graph'].some(x => x['@type'] === 'BreadcrumbList'), 'json-ld ' + g);
+    }
     assert.equal((await fetch(BASE + '/app')).headers.get('x-robots-tag'), 'noindex');
     const home0 = await (await fetch(BASE + '/')).text();
     assert.ok(home0.includes('"price":"') && !home0.includes('{{'), 'página de vendas sem marcador sobrando');

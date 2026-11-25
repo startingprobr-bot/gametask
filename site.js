@@ -18,6 +18,9 @@ const SITE_CSS_V = ver('css/site.css');
 // Páginas indexáveis: caminho → arquivo. Entram no sitemap automaticamente.
 const PAGES = {
   '/quadro-de-tarefas-infantil': 'quadro.html',
+  '/tarefas-domesticas-por-idade': 'tarefas-por-idade.html',
+  '/calculadora-de-mesada': 'mesada.html',
+  '/tempo-de-tela-por-idade': 'tempo-de-tela.html',
   '/privacidade': 'privacidade.html',
 };
 const page = (file) => (req, res) => {

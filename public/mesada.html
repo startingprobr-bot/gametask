@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Calculadora de mesada por idade: quanto dar ao seu filho | GameTask</title>
+<meta name="description" content="Calcule quanto dar de mesada pela idade da criança, por semana ou por mês, e como dividir entre gastar, guardar e doar. Com tabela de valores e dicas de educação financeira.">
+<link rel="canonical" href="{{SITE}}/calculadora-de-mesada">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="GameTask">
+<meta property="og:url" content="{{SITE}}/calculadora-de-mesada">
+<meta property="og:title" content="Calculadora de mesada por idade">
+<meta property="og:description" content="Quanto dar de mesada, por semana ou por mês, e como dividir entre gastar, guardar e doar.">
+<meta property="og:image" content="{{SITE}}/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#fff8e6">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/lilita-one.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/site.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"WebApplication","name":"Calculadora de mesada por idade","url":"{{SITE}}/calculadora-de-mesada","applicationCategory":"FinanceApplication","operatingSystem":"Qualquer navegador","inLanguage":"pt-BR","offers":{"@type":"Offer","price":"0","priceCurrency":"BRL"}},
+ {"@type":"Article","headline":"Calculadora de mesada por idade: quanto dar ao seu filho","datePublished":"2026-11-24","dateModified":"2026-11-24",
+  "image":"{{SITE}}/img/og.png","mainEntityOfPage":"{{SITE}}/calculadora-de-mesada","inLanguage":"pt-BR",
+  "author":{"@type":"Organization","name":"GameTask","url":"{{SITE}}/"},"publisher":{"@type":"Organization","name":"GameTask","logo":{"@type":"ImageObject","url":"{{SITE}}/icons/icon-512.png"}}},
+ {"@type":"BreadcrumbList","itemListElement":[
+  {"@type":"ListItem","position":1,"name":"GameTask","item":"{{SITE}}/"},
+  {"@type":"ListItem","position":2,"name":"Calculadora de mesada","item":"{{SITE}}/calculadora-de-mesada"}]},
+ {"@type":"FAQPage","mainEntity":[
+  {"@type":"Question","name":"Quanto dar de mesada por idade?","acceptedAnswer":{"@type":"Answer","text":"A regra mais usada é R$ 1 por semana para cada ano de idade: uma criança de 7 anos receberia R$ 7 por semana. É um ponto de partida; o valor certo é o que cabe no orçamento da sua família e combina com o que a criança vai pagar com ele."}},
+  {"@type":"Question","name":"Com que idade começar a dar mesada?","acceptedAnswer":{"@type":"Answer","text":"Muitos educadores financeiros sugerem por volta dos 6 anos, quando a criança já conta e entende que o dinheiro acaba. Antes disso, moedas de brincadeira ou pontos funcionam bem."}},
+  {"@type":"Question","name":"Mesada semanal ou mensal?","acceptedAnswer":{"@type":"Answer","text":"Para crianças menores, semanal: um mês é tempo demais para quem ainda está aprendendo a esperar. Por volta dos 11 ou 12 anos, a mesada mensal ajuda a treinar o planejamento."}},
+  {"@type":"Question","name":"A mesada deve depender das tarefas?","acceptedAnswer":{"@type":"Answer","text":"Uma forma comum é separar: a mesada base é fixa e ensina a lidar com dinheiro, e tarefas extras podem render um valor a mais. Assim a criança não deixa de ajudar em casa só porque não precisa do dinheiro naquela semana."}}]}
+]}
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="in">
+    <a class="brand" href="/" aria-label="GameTask, página inicial"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></a>
+    <a class="txt hide-sm" href="/">Conheça o app</a>
+    <a class="btn ghost sm" href="/app#/login">Entrar</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="in">
+      <nav class="crumbs" aria-label="Você está em"><a href="/">GameTask</a> › Calculadora de mesada</nav>
+      <span class="kicker">Calculadora grátis</span>
+      <h1 class="d">Calculadora de mesada por idade</h1>
+      <p class="lead">Coloque a idade do seu filho e veja quanto dar por semana ou por mês, e como dividir o dinheiro entre gastar, guardar e doar.</p>
+    </div>
+  </section>
+
+  <section class="in calc" aria-label="Calcular a mesada">
+    <form class="panel" id="calc" onsubmit="return false">
+      <div class="fld"><label class="f" for="age">Idade da criança</label>
+        <select id="age"><option value="7" selected>7 anos</option></select></div>
+      <div class="fld"><span class="f" id="rl" style="display:block;font-weight:900;margin:0 0 6px">Valor por ano de idade, por semana</span>
+        <div class="seg" role="group" aria-labelledby="rl" id="rate">
+          <button type="button" data-v="0.5">R$ 0,50</button><button type="button" data-v="1" aria-pressed="true">R$ 1</button><button type="button" data-v="1.5">R$ 1,50</button><button type="button" data-v="2">R$ 2</button>
+        </div></div>
+      <div class="fld"><span class="f" id="pl" style="display:block;font-weight:900;margin:0 0 6px">Pagar a mesada</span>
+        <div class="seg" role="group" aria-labelledby="pl" id="per"><button type="button" data-v="w" aria-pressed="true">Toda semana</button><button type="button" data-v="m">Todo mês</button></div></div>
+      <p class="hint" style="margin:0">A regra mais usada é R$ 1 por semana para cada ano de idade. Ajuste para o que cabe no orçamento da sua casa.</p>
+    </form>
+    <div class="result" aria-live="polite">
+      <small id="rlabel">Mesada por semana</small>
+      <div class="big" id="total">R$ 7,00</div>
+      <small id="other">Cerca de R$ 30,33 por mês</small>
+      <div class="jars">
+        <div class="jar"><img src="/img/3d/cart.png" alt=""><div><b id="j1">R$ 4,20</b><span>Gastar (60%)</span></div></div>
+        <div class="jar"><img src="/img/3d/moneybag.png" alt=""><div><b id="j2">R$ 2,10</b><span>Guardar (30%)</span></div></div>
+        <div class="jar"><img src="/img/3d/heart.png" alt=""><div><b id="j3">R$ 0,70</b><span>Doar (10%)</span></div></div>
+      </div>
+      <p class="tipx" id="tip"></p>
+    </div>
+  </section>
+
+  <article class="article">
+    <div class="in prose">
+      <h2 class="d">Tabela de mesada por idade</h2>
+      <p>Valores pela regra de R$ 1 por semana para cada ano de idade. O valor por mês considera as 52 semanas do ano divididas por 12.</p>
+      <div class="tbl-wrap"><table class="tbl wide">
+        <thead><tr><th>Idade</th><th>Por semana</th><th>Por mês</th><th>Como pagar</th></tr></thead>
+        <tbody id="tbl"></tbody>
+      </table></div>
+      <p class="note">Não existe valor certo. Bancos e educadores financeiros usam essa conta como ponto de partida, e todos lembram a mesma coisa: o valor depende da renda da família e do que a criança vai pagar com a mesada.</p>
+
+      <h2 class="d">Com que idade começar</h2>
+      <p>A maioria dos educadores financeiros sugere começar por volta dos 6 anos, quando a criança já conta, reconhece notas e moedas e entende que, quando o dinheiro acaba, acabou. Antes disso, dá para treinar com moedas de brincadeira ou pontos que viram um prêmio.</p>
+
+      <h2 class="d">Semanal ou mensal</h2>
+      <p>Para os menores, semanal. Um mês inteiro é tempo demais para quem ainda está aprendendo a esperar, e a mesada some na primeira semana. A partir dos 11 ou 12 anos, a mesada mensal ajuda a treinar o planejamento: o dinheiro precisa durar até o fim do mês.</p>
+
+      <h2 class="d">Gastar, guardar e doar</h2>
+      <p>Dividir a mesada em três potes transforma o dinheiro em aula. A calculadora usa 60% para gastar, 30% para guardar e 10% para doar ou dividir com alguém, mas a proporção é decisão da família.</p>
+      <ul>
+        <li><strong>Gastar:</strong> o que ela pode usar como quiser, inclusive errar. Comprar algo que quebrou no dia seguinte também ensina.</li>
+        <li><strong>Guardar:</strong> para um objetivo maior, combinado e de preferência escrito ou desenhado. Ver o pote enchendo é o que mantém a vontade de guardar.</li>
+        <li><strong>Doar:</strong> para uma causa, um presente para alguém ou uma vaquinha da família.</li>
+      </ul>
+
+      <h2 class="d">Mesada e tarefas de casa</h2>
+      <p>Uma forma comum é separar as duas coisas. Arrumar a cama e guardar os brinquedos fazem parte de morar na casa e não valem dinheiro. A mesada base é fixa, e tarefas extras, como lavar o carro ou ajudar numa faxina grande, podem render um valor a mais. Assim a criança não para de ajudar só porque naquela semana não precisa de dinheiro.</p>
+      <p>Não sabe quais tarefas combinar? Veja as <a href="/tarefas-domesticas-por-idade">tarefas domésticas por idade</a>.</p>
+
+      <div class="cta">
+        <img src="/img/3d/coin.png" alt="">
+        <div>
+          <h2 class="d">A mesada que a criança vê crescendo</h2>
+          <p>No GameTask, cada tarefa feita vira moedas na carteira da criança. Ela acompanha o saldo e a meta, e você decide quando as moedas viram dinheiro de verdade, com tudo registrado no histórico. Sem caderninho e sem discussão sobre quanto ela tem.</p>
+          <a class="btn" href="/">Conhecer o GameTask</a>
+        </div>
+      </div>
+
+      <h2 class="d">Perguntas frequentes</h2>
+      <div class="faq">
+        <details><summary>Quanto dar de mesada por idade?</summary><p>A regra mais usada é R$ 1 por semana para cada ano de idade: uma criança de 7 anos receberia R$ 7 por semana. É um ponto de partida; o valor certo é o que cabe no orçamento da sua família e combina com o que a criança vai pagar com ele.</p></details>
+        <details><summary>Com que idade começar a dar mesada?</summary><p>Muitos educadores financeiros sugerem por volta dos 6 anos, quando a criança já conta e entende que o dinheiro acaba. Antes disso, moedas de brincadeira ou pontos funcionam bem.</p></details>
+        <details><summary>Mesada semanal ou mensal?</summary><p>Para crianças menores, semanal: um mês é tempo demais para quem ainda está aprendendo a esperar. Por volta dos 11 ou 12 anos, a mesada mensal ajuda a treinar o planejamento.</p></details>
+        <details><summary>A mesada deve depender das tarefas?</summary><p>Uma forma comum é separar: a mesada base é fixa e ensina a lidar com dinheiro, e tarefas extras podem render um valor a mais. Assim a criança não deixa de ajudar em casa só porque não precisa do dinheiro naquela semana.</p></details>
+      </div>
+
+      <h2 class="d">Leia também</h2>
+      <div class="related">
+        <a href="/tarefas-domesticas-por-idade"><img src="/img/3d/broom.png" alt="">Tarefas domésticas por idade</a>
+        <a href="/quadro-de-tarefas-infantil"><img src="/img/3d/memo.png" alt="">Quadro de tarefas grátis para imprimir</a>
+        <a href="/tempo-de-tela-por-idade"><img src="/img/3d/hourglass.png" alt="">Tempo de tela por idade</a>
+      </div>
+    </div>
+  </article>
+</main>
+
+<footer class="foot">
+  <div class="in">
+    <a class="brand" href="/"><img src="/img/3d/game.png" alt=""><span class="d">GameTask</span></a>
+    <nav aria-label="Rodapé"><a href="/">O app</a><a href="/quadro-de-tarefas-infantil">Quadro de tarefas</a><a href="/tarefas-domesticas-por-idade">Tarefas por idade</a><a href="/calculadora-de-mesada">Calculadora de mesada</a><a href="/tempo-de-tela-por-idade">Tempo de tela</a><a href="/privacidade">Privacidade</a></nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const brl = (n) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const S = { age: 7, rate: 1, per: 'w' };
+  $('#age').innerHTML = Array.from({ length: 15 }, (_, i) => i + 3).map(a => `<option value="${a}" ${a === S.age ? 'selected' : ''}>${a} anos</option>`).join('');
+  const how = (a) => a < 6 ? 'Moedas de brincadeira ou pontos' : a < 11 ? 'Semanal, em dinheiro' : 'Mensal, com planejamento';
+  const tip = (a) => a < 6 ? 'Antes dos 6 anos, dinheiro de verdade ainda é abstrato. Experimente pontos ou moedas de brincadeira que viram um prêmio no fim da semana.'
+    : a < 11 ? 'Nessa idade, semanal funciona melhor: um mês é tempo demais para esperar. Combine com ela um objetivo para o pote de guardar.'
+    : 'A partir dos 11 ou 12 anos, a mesada mensal ensina a planejar: o dinheiro precisa durar até o fim do mês.';
+  const calc = () => {
+    const week = S.age * S.rate, month = week * 52 / 12, v = S.per === 'w' ? week : month;
+    $('#rlabel').textContent = S.per === 'w' ? 'Mesada por semana' : 'Mesada por mês';
+    $('#total').textContent = brl(v);
+    $('#other').textContent = S.per === 'w' ? `Cerca de ${brl(month)} por mês` : `Equivale a ${brl(week)} por semana`;
+    $('#j1').textContent = brl(v * .6); $('#j2').textContent = brl(v * .3); $('#j3').textContent = brl(v * .1);
+    $('#tip').textContent = tip(S.age);
+  };
+  $('#tbl').innerHTML = Array.from({ length: 12 }, (_, i) => i + 5).map(a => `<tr><td>${a} anos</td><td>${brl(a)}</td><td>${brl(a * 52 / 12)}</td><td>${how(a)}</td></tr>`).join('');
+  $('#age').onchange = (e) => { S.age = +e.target.value; calc(); };
+  const seg = (id, key, conv) => $(id).addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $(id).querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    S[key] = conv(b.dataset.v); calc();
+  });
+  seg('#rate', 'rate', Number); seg('#per', 'per', String);
+  calc();
+})();
+</script>
+</body>
+</html>
