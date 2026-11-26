@@ -35,13 +35,18 @@ public class BlockStore {
 
     static boolean paused(Context c) { return System.currentTimeMillis() < prefs(c).getLong("pause", 0); }
 
+    /** responsável liberou este app com o PIN: vale até ele sair do app */
+    static void unlock(Context c, String pkg) { prefs(c).edit().putString("unlocked", pkg == null ? "" : pkg).apply(); }
+
+    static String unlocked(Context c) { return prefs(c).getString("unlocked", ""); }
+
     static boolean hasPin(Context c) { return !prefs(c).getString("pin", "").isEmpty(); }
 
     static boolean checkPin(Context c, String pin) { return !pin.isEmpty() && sha(pin).equals(prefs(c).getString("pin", "")); }
 
     /** grupo que bloqueia este pacote agora, ou null se está livre */
     static String blockedGroup(Context c, String pkg) {
-        if (pkg == null || !enabled(c) || paused(c) || pkg.equals(c.getPackageName())) return null;
+        if (pkg == null || !enabled(c) || paused(c) || pkg.equals(c.getPackageName()) || pkg.equals(unlocked(c))) return null;
         String g = groups(c).optString(pkg, "");
         if (g.isEmpty() || g.equals("free")) return null;
         if (g.equals("always")) return g;

@@ -67,7 +67,12 @@ public class BlockService extends Service {
 
     private void check() {
         String top = foreground();
-        if (top != null) current = top;
+        if (top != null) {
+            current = top;
+            // saiu do app liberado com o PIN (foi para outro app ou para a tela inicial): bloqueia de novo
+            String un = BlockStore.unlocked(this);
+            if (!un.isEmpty() && !top.equals(un) && !top.equals(getPackageName()) && !top.equals("com.android.systemui")) BlockStore.unlock(this, "");
+        }
         String g = BlockStore.blockedGroup(this, current);
         if (g == null) return;
         long now = System.currentTimeMillis();

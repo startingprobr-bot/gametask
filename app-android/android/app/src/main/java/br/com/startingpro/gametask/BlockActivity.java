@@ -67,21 +67,75 @@ public class BlockActivity extends Activity {
         setContentView(root);
     }
 
-    // PIN de desbloqueio: libera tudo por 15 minutos
-    private void askPin(LinearLayout root) {
+    // PIN de desbloqueio com teclado grande: libera este app até o responsável sair dele
+    private final StringBuilder typed = new StringBuilder();
+    private TextView dots;
+
+    private void askPin(LinearLayout ignored) {
         if (!BlockStore.hasPin(this)) { Toast.makeText(this, "Configure o PIN de desbloqueio no GameTask", Toast.LENGTH_LONG).show(); return; }
-        EditText pin = new EditText(this);
-        pin.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        pin.setHint("PIN de desbloqueio");
-        pin.setGravity(Gravity.CENTER);
-        pin.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
-        pin.setBackgroundColor(Color.WHITE);
-        pin.setTextColor(NAVY);
-        new android.app.AlertDialog.Builder(this).setTitle("Liberar por 15 minutos").setView(pin)
-            .setPositiveButton("Liberar", (d, w) -> {
-                if (BlockStore.checkPin(this, pin.getText().toString().trim())) { BlockStore.pause(this, 15 * 60 * 1000); Toast.makeText(this, "Liberado por 15 minutos", Toast.LENGTH_SHORT).show(); finish(); }
-                else Toast.makeText(this, "PIN incorreto", Toast.LENGTH_SHORT).show();
-            }).setNegativeButton("Cancelar", null).show();
+        typed.setLength(0);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] { Color.parseColor("#4aa8ff"), Color.parseColor("#2a6cf0"), Color.parseColor("#16296b") }));
+        root.setPadding(dp(24), dp(48), dp(24), dp(40));
+        root.addView(text("Sou responsável", 28, Color.WHITE, true));
+        TextView h = text("Digite o PIN de desbloqueio. O app fica liberado até você sair dele.", 17, Color.parseColor("#d6e4ff"), false);
+        h.setPadding(0, dp(6), 0, dp(18));
+        root.addView(h);
+        dots = text("", 40, Color.WHITE, true);
+        dots.setLetterSpacing(0.3f);
+        dots.setMinHeight(dp(64));
+        root.addView(dots);
+        paintDots();
+
+        String[][] keys = { { "1", "2", "3" }, { "4", "5", "6" }, { "7", "8", "9" }, { "⌫", "0", "OK" } };
+        for (String[] row : keys) {
+            LinearLayout r = new LinearLayout(this);
+            r.setGravity(Gravity.CENTER);
+            for (String k : row) {
+                boolean ok = k.equals("OK");
+                TextView key = button(k, ok ? "#8cf28a" : "#ffffff", ok ? "#3bd15f" : "#e3ecff", NAVY);
+                key.setTextSize(TypedValue.COMPLEX_UNIT_SP, ok ? 24 : 30);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(92), dp(80));
+                lp.setMargins(dp(8), dp(8), dp(8), dp(8));
+                key.setOnClickListener(v -> press(k));
+                r.addView(key, lp);
+            }
+            root.addView(r);
+        }
+        TextView cancel = text("Cancelar", 18, Color.WHITE, true);
+        cancel.setPadding(0, dp(18), 0, 0);
+        cancel.setOnClickListener(v -> recreate());
+        root.addView(cancel);
+        setContentView(root);
+    }
+
+    private void press(String k) {
+        if (k.equals("⌫")) { if (typed.length() > 0) typed.setLength(typed.length() - 1); }
+        else if (k.equals("OK")) {
+            String pkg = getIntent().getStringExtra("pkg");
+            if (BlockStore.checkPin(this, typed.toString())) {
+                BlockStore.unlock(this, pkg);
+                Toast.makeText(this, "Liberado até você sair do app", Toast.LENGTH_SHORT).show();
+                Intent open = pkg == null ? null : getPackageManager().getLaunchIntentForPackage(pkg);
+                finish();
+                if (open != null) startActivity(open);
+                return;
+            }
+            typed.setLength(0);
+            dots.animate().translationX(dp(14)).setDuration(60).withEndAction(() -> dots.animate().translationX(-dp(14)).setDuration(60)
+                .withEndAction(() -> dots.animate().translationX(0).setDuration(60).start()).start()).start();
+            Toast.makeText(this, "PIN incorreto", Toast.LENGTH_SHORT).show();
+        } else if (typed.length() < 8) typed.append(k);
+        paintDots();
+    }
+
+    private void paintDots() {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < Math.max(4, typed.length()); i++) b.append(i < typed.length() ? "●" : "○");
+        dots.setText(b.toString());
     }
 
     // voltar não reabre o app bloqueado: vai para a tela inicial
