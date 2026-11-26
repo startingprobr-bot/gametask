@@ -13,6 +13,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (action.equals(Intent.ACTION_BOOT_COMPLETED) || action.equals("android.intent.action.MY_PACKAGE_REPLACED")
             || action.equals("android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED")) {
             AlarmScheduler.scheduleSaved(ctx);
+            BlockService.sync(ctx); // bloqueio de apps volta sozinho depois de reiniciar
             return;
         }
         Intent s = new Intent(ctx, AlarmService.class)

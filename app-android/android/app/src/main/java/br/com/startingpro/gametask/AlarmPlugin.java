@@ -70,6 +70,68 @@ public class AlarmPlugin extends Plugin {
         } catch (Exception e) { call.reject("Firebase indisponível"); }
     }
 
+    // ---------- Bloqueio de apps ----------
+    /** Permissões do bloqueio: Acesso ao uso e Sobrepor a outros apps */
+    @PluginMethod
+    public void blockCheck(PluginCall call) {
+        Context ctx = getContext();
+        JSObject r = new JSObject();
+        android.app.AppOpsManager ops = (android.app.AppOpsManager) ctx.getSystemService(Context.APP_OPS_SERVICE);
+        int mode = Build.VERSION.SDK_INT >= 29 ? ops.unsafeCheckOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), ctx.getPackageName())
+            : ops.checkOpNoThrow(android.app.AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), ctx.getPackageName());
+        r.put("usage", mode == android.app.AppOpsManager.MODE_ALLOWED);
+        r.put("overlay", Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(ctx));
+        r.put("on", BlockStore.enabled(ctx));
+        r.put("pin", BlockStore.hasPin(ctx));
+        r.put("groups", BlockStore.groups(ctx));
+        call.resolve(r);
+    }
+
+    /** Apps que aparecem na tela inicial: nome, pacote e ícone pequeno */
+    @PluginMethod
+    public void listApps(PluginCall call) {
+        android.content.pm.PackageManager pm = getContext().getPackageManager();
+        Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        JSArray out = new JSArray();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
+            String pkg = ri.activityInfo.packageName;
+            if (pkg.equals(getContext().getPackageName()) || !seen.add(pkg)) continue;
+            JSObject a = new JSObject();
+            a.put("pkg", pkg);
+            a.put("label", String.valueOf(ri.loadLabel(pm)));
+            try {
+                android.graphics.drawable.Drawable d = ri.loadIcon(pm);
+                android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(64, 64, android.graphics.Bitmap.Config.ARGB_8888);
+                android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
+                d.setBounds(0, 0, 64, 64); d.draw(cv);
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 90, bo);
+                a.put("icon", "data:image/png;base64," + android.util.Base64.encodeToString(bo.toByteArray(), android.util.Base64.NO_WRAP));
+            } catch (Exception ignored) { }
+            out.put(a);
+        }
+        JSObject r = new JSObject(); r.put("apps", out); call.resolve(r);
+    }
+
+    /** Salva as regras: on, groups {pacote: game|video|always|free}, pin (opcional) */
+    @PluginMethod
+    public void blockSave(PluginCall call) {
+        Context ctx = getContext();
+        JSObject g = call.getObject("groups", new JSObject());
+        String pin = call.getString("pin", "");
+        BlockStore.save(ctx, call.getBoolean("on", false), g.toString(), pin.isEmpty() ? null : BlockStore.sha(pin));
+        BlockService.sync(ctx);
+        call.resolve();
+    }
+
+    /** Até quando cada grupo está liberado: { game: ms, video: ms } (vem do cronômetro do tempo de tela) */
+    @PluginMethod
+    public void blockAllow(PluginCall call) {
+        BlockStore.setAllowed(getContext(), call.getObject("allowed", new JSObject()).toString());
+        call.resolve();
+    }
+
     /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
     @PluginMethod
     public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }
@@ -94,6 +156,10 @@ public class AlarmPlugin extends Plugin {
         Intent i;
         if ("exact".equals(what) && Build.VERSION.SDK_INT >= 31) {
             i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.getPackageName()));
+        } else if ("usage".equals(what)) {
+            i = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
+        } else if ("overlay".equals(what) && Build.VERSION.SDK_INT >= 23) {
+            i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + ctx.getPackageName()));
         } else if ("battery".equals(what)) {
             i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.getPackageName()));
         } else if ("autostart".equals(what)) { // Xiaomi: tela "Início automático"
@@ -104,6 +170,7 @@ public class AlarmPlugin extends Plugin {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        BlockStore.pause(ctx, 3 * 60 * 1000); // o responsável está nas configurações pelo GameTask: não bloqueia
         try { ctx.startActivity(i); }
         catch (Exception e) { // tela da marca não existe: abre os detalhes do app
             try { ctx.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }

@@ -430,6 +430,75 @@ async function nativeWizard(force) {
   paint();
 }
 
+// ---------- Bloqueio de apps (app Android, aparelho das crianças) ----------
+// Cada app é Livre, Jogo, Vídeo ou Sempre bloqueado. Jogo e Vídeo liberam enquanto o cronômetro
+// do prêmio ligado a eles corre (ex.: Videogame → Jogos). O PIN de desbloqueio libera tudo por 15 min.
+const BLOCK_SUGGEST = ['com.android.settings', 'com.android.vending', 'com.miui.securitycenter', 'com.sec.android.app.samsungapps', 'com.xiaomi.market'];
+const blockMap = () => { try { return JSON.parse(store.get('gt-block-map') || '{}'); } catch { return {}; } };
+let blockSig = '';
+function blockAllowSync() {
+  if (!GtAlarm?.blockAllow) return;
+  const map = blockMap(), allowed = {};
+  for (const [, c] of clocks) { const g = !c.kind && map[c.id]; if (g) allowed[g] = Math.max(allowed[g] || 0, Math.round(c.ends)); }
+  const sig = JSON.stringify(allowed);
+  if (sig === blockSig) return;
+  blockSig = sig; GtAlarm.blockAllow({ allowed }).catch(() => {});
+}
+setInterval(blockAllowSync, 1000);
+
+async function blockBox(box) {
+  const st = await GtAlarm.blockCheck();
+  const ready = st.usage && st.overlay;
+  const groups = st.groups || {}, counts = { game: 0, video: 0, always: 0 };
+  Object.values(groups).forEach(g => { if (counts[g] !== undefined) counts[g]++; });
+  const row = (good, text, what) => `<div class="nat-row ${good ? 'ok' : ''}">${im(good ? 'check' : 'cross')}<span class="grow">${text}</span>${good ? '' : `<button class="btn sm" data-bl="${what}">Liberar</button>`}</div>`;
+  box.dataset.sum = st.on ? `Ligado · ${counts.game} jogo(s), ${counts.video} vídeo(s), ${counts.always} sempre bloqueado(s)` : 'Desligado';
+  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Bloqueio de apps</h2></div>'}
+    <p class="lead">Jogos e vídeos só abrem enquanto o cronômetro do prêmio estiver correndo. Versão de teste: use no aparelho das crianças.</p>
+    ${row(st.usage, 'Ver qual app está aberto (Acesso ao uso)', 'usage')}
+    ${row(st.overlay, 'Mostrar a tela de bloqueio (Sobrepor a outros apps)', 'overlay')}
+    <div class="actions"><button class="btn sm" id="blApps">Escolher os apps</button><button class="btn sm" id="blMap">Prêmio que libera cada grupo</button></div>
+    <div class="field"><label for="blPin">PIN de desbloqueio ${st.pin ? '<span class="muted">(já definido; digite para trocar)</span>' : ''}</label><input id="blPin" type="password" inputmode="numeric" maxlength="8" placeholder="4 a 8 números"><p class="hint">Na tela de bloqueio, "Sou responsável" pede este PIN e libera tudo por 15 minutos.</p></div>
+    <label class="check"><input type="checkbox" id="blOn" ${st.on ? 'checked' : ''} ${ready ? '' : 'disabled'}>Bloqueio ligado neste aparelho</label>`;
+  $$('[data-bl]', box).forEach(b => b.onclick = guard(async () => { await GtAlarm.openSettings({ what: b.dataset.bl }); }));
+  $('#blOn', box).onchange = guard(async (e) => {
+    const pin = $('#blPin', box).value.trim();
+    if (e.target.checked && !st.pin && !/^\d{4,8}$/.test(pin)) { e.target.checked = false; throw new Error('Defina um PIN de desbloqueio de 4 a 8 números'); }
+    await GtAlarm.blockSave({ on: e.target.checked, groups, pin: /^\d{4,8}$/.test(pin) ? pin : '' });
+    toast(e.target.checked ? 'Bloqueio ligado' : 'Bloqueio desligado'); blockBox(box);
+  });
+  $('#blPin', box).onchange = guard(async (e) => {
+    const pin = e.target.value.trim(); if (!pin) return;
+    if (!/^\d{4,8}$/.test(pin)) throw new Error('O PIN precisa ter de 4 a 8 números');
+    await GtAlarm.blockSave({ on: st.on, groups, pin }); e.target.value = ''; toast('PIN de desbloqueio salvo'); blockBox(box);
+  });
+  $('#blApps', box).onclick = guard(async () => {
+    toast('Lendo os apps do aparelho…');
+    const { apps } = await GtAlarm.listApps();
+    apps.sort((a, b) => (BLOCK_SUGGEST.includes(b.pkg) - BLOCK_SUGGEST.includes(a.pkg)) || a.label.localeCompare(b.label, 'pt-BR'));
+    const first = !Object.keys(groups).length;
+    const opt = (pkg, v, l) => `<option value="${v}" ${(groups[pkg] || (first && BLOCK_SUGGEST.includes(pkg) ? 'always' : 'free')) === v ? 'selected' : ''}>${l}</option>`;
+    const bg = sheet('Escolher os apps', `<p class="lead" style="margin-top:6px"><b>Jogo</b> e <b>Vídeo</b> abrem só com o cronômetro correndo. <b>Sempre bloqueado</b>: só com o PIN (bom para Configurações e loja de apps).</p>
+      <input class="app-find" placeholder="Procurar app…" aria-label="Procurar app">
+      <div class="app-list">${apps.map(a => `<label class="app-row" data-n="${esc(a.label.toLowerCase())}">${a.icon ? `<img src="${a.icon}" alt="">` : ''}<span class="grow">${esc(a.label)}${BLOCK_SUGGEST.includes(a.pkg) ? ' <small class="muted">sugestão: sempre bloqueado</small>' : ''}</span>
+        <select name="${esc(a.pkg)}">${opt(a.pkg, 'free', 'Livre')}${opt(a.pkg, 'game', 'Jogo')}${opt(a.pkg, 'video', 'Vídeo')}${opt(a.pkg, 'always', 'Sempre bloqueado')}</select></label>`).join('')}</div>`,
+      async (f) => {
+        const g = {}; $$('.app-row select', f).forEach(sel => { if (sel.value !== 'free') g[sel.name] = sel.value; });
+        await GtAlarm.blockSave({ on: st.on, groups: g, pin: '' }); toast('Apps salvos'); blockBox(box);
+      }, { saveLabel: 'Salvar' });
+    $('.app-find', bg).oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.app-row', bg).forEach(r => { r.hidden = !!q && !r.dataset.n.includes(q); }); };
+  });
+  $('#blMap', box).onclick = guard(async () => {
+    const rw = (await api('GET', '/admin/rewards')).filter(r => r.kind === 'time' && r.active);
+    if (!rw.length) throw new Error('Crie um prêmio de tempo de tela primeiro (aba Prêmios)');
+    const map = blockMap();
+    sheet('Prêmio que libera cada grupo', `<p class="lead" style="margin-top:6px">Quando a criança der o play no cronômetro deste prêmio, o grupo escolhido abre até o tempo acabar.</p>
+      ${rw.map(r => `<div class="field"><label for="bm${r.id}">${im(r.icon, '', 'game')} ${esc(r.title)}</label><select id="bm${r.id}" name="r${r.id}">
+        ${[['', 'Não libera apps'], ['game', 'Libera os Jogos'], ['video', 'Libera os Vídeos']].map(([v, l]) => `<option value="${v}" ${(map[r.id] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}`,
+      async (f) => { const m = {}; rw.forEach(r => { const v = f['r' + r.id].value; if (v) m[r.id] = v; }); store.set('gt-block-map', JSON.stringify(m)); blockSig = ''; blockAllowSync(); toast('Salvo'); });
+  });
+}
+
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMessages(); });
 
@@ -1434,6 +1503,7 @@ async function adminSettings(pane, refresh) {
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     ${NATIVE && GtAlarm ? '<section class="box" id="natBox" data-sum="Alarme no silencioso"><div class="box-h"><h2 class="d">Alarme deste celular</h2></div></section>' : ''}
+    ${NATIVE && GtAlarm?.blockCheck ? '<section class="box" id="blockBox" data-sum="Desligado"><div class="box-h"><h2 class="d">Bloqueio de apps</h2></div></section>' : ''}
     ${!NATIVE ? '<section class="box" data-sum="Alarmes no silencioso e recados com o app fechado"><div class="box-h"><h2 class="d">App para Android</h2></div><p class="lead">No Android, o app toca os alarmes e os recados como despertador, mesmo no silencioso. Versão de teste.</p><div class="actions"><a class="btn green sm" href="/android" target="_blank" rel="noopener">Baixar o app Android</a></div></section>' : ''}
     <div id="alarms"></div>
     ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
@@ -1495,11 +1565,12 @@ async function adminSettings(pane, refresh) {
   if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
   await adminAlarms($('#alarms'), refresh);
   if ($('#natBox', pane)) await nativeAlarmBox($('#natBox', pane)).catch(() => {});
+  if ($('#blockBox', pane)) await blockBox($('#blockBox', pane)).catch(() => {});
   accordion(pane);
 }
 
 // Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
-const ACC_IC = { 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+const ACC_IC = { 'Bloqueio de apps': 'lock', 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
 function accordion(pane) {
   const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
   $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {
