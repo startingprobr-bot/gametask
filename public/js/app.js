@@ -446,57 +446,95 @@ function blockAllowSync() {
 }
 setInterval(blockAllowSync, 1000);
 
+const BL_COLS = [['free', 'check', 'Livre'], ['game', 'game', 'Jogo'], ['video', 'tv', 'Vídeo'], ['always', 'lock', 'Sempre bloqueado']];
 async function blockBox(box) {
   const st = await GtAlarm.blockCheck();
   const ready = st.usage && st.overlay;
   const groups = st.groups || {}, counts = { game: 0, video: 0, always: 0 };
   Object.values(groups).forEach(g => { if (counts[g] !== undefined) counts[g]++; });
-  const row = (good, text, what) => `<div class="nat-row ${good ? 'ok' : ''}">${im(good ? 'check' : 'cross')}<span class="grow">${text}</span>${good ? '' : `<button class="btn sm" data-bl="${what}">Liberar</button>`}</div>`;
-  box.dataset.sum = st.on ? `Ligado · ${counts.game} jogo(s), ${counts.video} vídeo(s), ${counts.always} sempre bloqueado(s)` : 'Desligado';
-  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Bloqueio de apps</h2></div>'}
-    <p class="lead">Jogos e vídeos só abrem enquanto o cronômetro do prêmio estiver correndo. Versão de teste: use no aparelho das crianças.</p>
-    ${row(st.usage, 'Ver qual app está aberto (Acesso ao uso)', 'usage')}
-    ${row(st.overlay, 'Mostrar a tela de bloqueio (Sobrepor a outros apps)', 'overlay')}
-    <div class="actions"><button class="btn sm" id="blApps">Escolher os apps</button><button class="btn sm" id="blMap">Prêmio que libera cada grupo</button></div>
-    <div class="field"><label for="blPin">PIN de desbloqueio ${st.pin ? '<span class="muted">(já definido; digite para trocar)</span>' : ''}</label><input id="blPin" type="password" inputmode="numeric" maxlength="8" placeholder="4 a 8 números"><p class="hint">Na tela de bloqueio, "Sou responsável" pede este PIN e libera tudo por 15 minutos.</p></div>
-    <label class="check"><input type="checkbox" id="blOn" ${st.on ? 'checked' : ''} ${ready ? '' : 'disabled'}>Bloqueio ligado neste aparelho</label>`;
-  $$('[data-bl]', box).forEach(b => b.onclick = guard(async () => { await GtAlarm.openSettings({ what: b.dataset.bl }); }));
+  const map = blockMap(), mapped = Object.keys(map).length;
+  box.dataset.sum = !ready ? 'Falta liberar 2 permissões' : st.on ? `Ligado · ${counts.game} jogo(s), ${counts.video} vídeo(s), ${counts.always} bloqueado(s)` : 'Desligado';
+  const head = box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Bloqueio de apps</h2></div>';
+  const save = (extra = {}) => GtAlarm.blockSave({ on: st.on, groups, pin: '', ...extra });
+  if (!ready) {
+    // sem as duas permissões não há bloqueio: mostra só elas, como passos obrigatórios
+    const step = (n, good, title, text, what) => `<div class="bl-step ${good ? 'ok' : ''}"><span class="wiz-n">${good ? '✓' : n}</span><span class="grow"><b>${title}</b><small>${text}</small></span>${good ? '' : `<button class="btn green sm" data-bl="${what}">Permitir</button>`}</div>`;
+    box.innerHTML = `${head}<div class="bl-need">${im('lock')}<p><b>Para o bloqueio funcionar, o Android precisa de 2 permissões.</b> Sem elas o GameTask não consegue ver nem bloquear os jogos.</p></div>
+      ${step(1, st.usage, 'Ver qual app está aberto', 'Na lista que abrir, procure GameTask e ligue a chave.', 'usage')}
+      ${step(2, st.overlay, 'Mostrar a tela de bloqueio', 'Ligue "Permitir exibição sobre outros apps" para o GameTask.', 'overlay')}
+      <p class="hint">Depois de ligar, volte para o GameTask. Os próximos passos aparecem sozinhos.</p>`;
+    $$('[data-bl]', box).forEach(btn => btn.onclick = guard(async () => { await GtAlarm.openSettings({ what: btn.dataset.bl }); }));
+    addEventListener('focus', () => blockBox(box).catch(() => {}), { once: true });
+    return;
+  }
+  const done = (n, ok) => `<span class="wiz-n">${ok ? '✓' : n}</span>`, cls = (ok) => ok ? 'ok' : '';
+  const nApps = counts.game + counts.video + counts.always;
+  box.innerHTML = `${head}<p class="lead">Jogos e vídeos só abrem enquanto o cronômetro do prêmio estiver correndo.</p>
+    <button type="button" class="bl-step act ${cls(nApps)}" id="blApps">${done(1, nApps)}<span class="grow"><b>Escolher os apps</b><small>${nApps ? `${counts.game} jogo(s), ${counts.video} vídeo(s), ${counts.always} sempre bloqueado(s)` : 'Diga quais apps são jogos e vídeos'}</small></span>${SVG.back.replace('<svg', '<svg class="chev"')}</button>
+    <button type="button" class="bl-step act ${cls(mapped)}" id="blMap">${done(2, mapped)}<span class="grow"><b>Qual prêmio libera cada grupo</b><small>${mapped ? `${mapped} prêmio(s) ligado(s)` : 'Ex.: Videogame libera os jogos'}</small></span>${SVG.back.replace('<svg', '<svg class="chev"')}</button>
+    <div class="bl-step ${cls(st.pin)}">${done(3, st.pin)}<span class="grow"><b>PIN de desbloqueio</b><small>${st.pin ? 'Definido. Digite outro para trocar.' : 'Na tela de bloqueio, "Sou responsável" pede este PIN.'}</small>
+      <input id="blPin" type="password" inputmode="numeric" maxlength="8" placeholder="4 a 8 números"></span></div>
+    <label class="bl-on"><input type="checkbox" id="blOn" ${st.on ? 'checked' : ''}><span><b>Bloqueio ligado neste aparelho</b><small>${st.on ? 'Os apps escolhidos estão protegidos.' : 'Ligue quando terminar os passos.'}</small></span></label>`;
   $('#blOn', box).onchange = guard(async (e) => {
     const pin = $('#blPin', box).value.trim();
-    if (e.target.checked && !st.pin && !/^\d{4,8}$/.test(pin)) { e.target.checked = false; throw new Error('Defina um PIN de desbloqueio de 4 a 8 números'); }
-    await GtAlarm.blockSave({ on: e.target.checked, groups, pin: /^\d{4,8}$/.test(pin) ? pin : '' });
+    if (e.target.checked && !st.pin && !/^\d{4,8}$/.test(pin)) { e.target.checked = false; throw new Error('Antes, defina o PIN de desbloqueio (passo 3)'); }
+    await save({ on: e.target.checked, pin: /^\d{4,8}$/.test(pin) ? pin : '' });
     toast(e.target.checked ? 'Bloqueio ligado' : 'Bloqueio desligado'); blockBox(box);
   });
   $('#blPin', box).onchange = guard(async (e) => {
     const pin = e.target.value.trim(); if (!pin) return;
     if (!/^\d{4,8}$/.test(pin)) throw new Error('O PIN precisa ter de 4 a 8 números');
-    await GtAlarm.blockSave({ on: st.on, groups, pin }); e.target.value = ''; toast('PIN de desbloqueio salvo'); blockBox(box);
+    await save({ pin }); toast('PIN salvo'); blockBox(box);
   });
-  $('#blApps', box).onclick = guard(async () => {
-    toast('Lendo os apps do aparelho…');
-    const { apps } = await GtAlarm.listApps();
-    apps.sort((a, b) => (BLOCK_SUGGEST.includes(b.pkg) - BLOCK_SUGGEST.includes(a.pkg)) || a.label.localeCompare(b.label, 'pt-BR'));
-    const first = !Object.keys(groups).length;
-    const opt = (pkg, v, l) => `<option value="${v}" ${(groups[pkg] || (first && BLOCK_SUGGEST.includes(pkg) ? 'always' : 'free')) === v ? 'selected' : ''}>${l}</option>`;
-    const bg = sheet('Escolher os apps', `<p class="lead" style="margin-top:6px"><b>Jogo</b> e <b>Vídeo</b> abrem só com o cronômetro correndo. <b>Sempre bloqueado</b>: só com o PIN (bom para Configurações e loja de apps).</p>
-      <input class="app-find" placeholder="Procurar app…" aria-label="Procurar app">
-      <div class="app-list">${apps.map(a => `<label class="app-row" data-n="${esc(a.label.toLowerCase())}">${a.icon ? `<img src="${a.icon}" alt="">` : ''}<span class="grow">${esc(a.label)}${BLOCK_SUGGEST.includes(a.pkg) ? ' <small class="muted">sugestão: sempre bloqueado</small>' : ''}</span>
-        <select name="${esc(a.pkg)}">${opt(a.pkg, 'free', 'Livre')}${opt(a.pkg, 'game', 'Jogo')}${opt(a.pkg, 'video', 'Vídeo')}${opt(a.pkg, 'always', 'Sempre bloqueado')}</select></label>`).join('')}</div>`,
-      async (f) => {
-        const g = {}; $$('.app-row select', f).forEach(sel => { if (sel.value !== 'free') g[sel.name] = sel.value; });
-        await GtAlarm.blockSave({ on: st.on, groups: g, pin: '' }); toast('Apps salvos'); blockBox(box);
-      }, { saveLabel: 'Salvar' });
-    $('.app-find', bg).oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.app-row', bg).forEach(r => { r.hidden = !!q && !r.dataset.n.includes(q); }); };
+  $('#blApps', box).onclick = guard(async () => { await appPicker(groups, st); blockBox(box); });
+  $('#blMap', box).onclick = guard(async () => { await rewardMapPicker(); blockBox(box); });
+}
+
+// Tela cheia para classificar os apps: cada toque já salva; só fecha pelo botão "Pronto"
+function fullPanel(title, inner) {
+  const bg = document.createElement('div'); bg.className = 'full-panel';
+  bg.innerHTML = `<div class="fp-top"><h2 class="d">${title}</h2><button class="btn green sm" data-close>Pronto</button></div><div class="fp-body">${inner}</div>`;
+  document.body.append(bg);
+  const closed = new Promise(res => { $('[data-close]', bg).onclick = () => { sfx.tap(); bg.remove(); res(); }; });
+  return { bg, closed };
+}
+async function appPicker(groups, st) {
+  toast('Lendo os apps do aparelho…');
+  const { apps } = await GtAlarm.listApps();
+  apps.sort((x, y) => (BLOCK_SUGGEST.includes(y.pkg) - BLOCK_SUGGEST.includes(x.pkg)) || x.label.localeCompare(y.label, 'pt-BR'));
+  const first = !Object.keys(groups).length;
+  if (first) apps.forEach(x => { if (BLOCK_SUGGEST.includes(x.pkg)) groups[x.pkg] = 'always'; });
+  const cur = (pkg) => groups[pkg] || 'free';
+  const { bg, closed } = fullPanel('Escolher os apps', `
+    <input class="app-find" placeholder="Procurar app…" aria-label="Procurar app">
+    <div class="app-head"><span class="grow">App</span>${BL_COLS.map(([, ic, l]) => `<span class="col" title="${l}">${im(ic)}<small>${l}</small></span>`).join('')}</div>
+    <div class="app-list">${apps.map(x => `<div class="app-row" data-n="${esc(x.label.toLowerCase())}" data-pkg="${esc(x.pkg)}">${x.icon ? `<img src="${x.icon}" alt="">` : '<i></i>'}<span class="grow">${esc(x.label)}</span>
+      ${BL_COLS.map(([v, , l]) => `<label class="col"><input type="radio" name="${esc(x.pkg)}" value="${v}" ${cur(x.pkg) === v ? 'checked' : ''} aria-label="${esc(x.label)}: ${l}"><i></i></label>`).join('')}</div>`).join('')}</div>`);
+  if (first) await GtAlarm.blockSave({ on: st.on, groups, pin: '' }).catch(() => {});
+  $('.app-find', bg).oninput = (e) => { const q = e.target.value.trim().toLowerCase(); $$('.app-row', bg).forEach(r => { r.hidden = !!q && !r.dataset.n.includes(q); }); };
+  // salva a cada toque
+  bg.addEventListener('change', async (e) => {
+    const r = e.target.closest('.app-row'); if (!r) return;
+    if (e.target.value === 'free') delete groups[r.dataset.pkg]; else groups[r.dataset.pkg] = e.target.value;
+    sfx.tap();
+    try { await GtAlarm.blockSave({ on: st.on, groups, pin: '' }); } catch { toast('Não deu para salvar. Tente de novo.', true); }
   });
-  $('#blMap', box).onclick = guard(async () => {
-    const rw = (await api('GET', '/admin/rewards')).filter(r => r.kind === 'time' && r.active);
-    if (!rw.length) throw new Error('Crie um prêmio de tempo de tela primeiro (aba Prêmios)');
-    const map = blockMap();
-    sheet('Prêmio que libera cada grupo', `<p class="lead" style="margin-top:6px">Quando a criança der o play no cronômetro deste prêmio, o grupo escolhido abre até o tempo acabar.</p>
-      ${rw.map(r => `<div class="field"><label for="bm${r.id}">${im(r.icon, '', 'game')} ${esc(r.title)}</label><select id="bm${r.id}" name="r${r.id}">
-        ${[['', 'Não libera apps'], ['game', 'Libera os Jogos'], ['video', 'Libera os Vídeos']].map(([v, l]) => `<option value="${v}" ${(map[r.id] || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`).join('')}`,
-      async (f) => { const m = {}; rw.forEach(r => { const v = f['r' + r.id].value; if (v) m[r.id] = v; }); store.set('gt-block-map', JSON.stringify(m)); blockSig = ''; blockAllowSync(); toast('Salvo'); });
+  await closed;
+}
+async function rewardMapPicker() {
+  const rw = (await api('GET', '/admin/rewards')).filter(r => r.kind === 'time' && r.active);
+  if (!rw.length) throw new Error('Crie um prêmio de tempo de tela primeiro (aba Prêmios)');
+  const map = blockMap();
+  const opts = [['', 'cross', 'Nada'], ['game', 'game', 'Jogos'], ['video', 'tv', 'Vídeos']];
+  const { bg, closed } = fullPanel('Qual prêmio libera', `<p class="lead">Quando a criança der o play no cronômetro do prêmio, o grupo escolhido abre até o tempo acabar.</p>
+    ${rw.map(r => `<div class="map-card">${im(r.icon, 'map-ic', 'game')}<div class="grow"><b>${esc(r.title)}</b><small>${num(r.total_value)} ${esc(r.unit)} por dia</small>
+      <div class="map-opts">${opts.map(([v, ic, l]) => `<label><input type="radio" name="r${r.id}" value="${v}" ${(map[r.id] || '') === v ? 'checked' : ''}><span>${im(ic)}${l}</span></label>`).join('')}</div></div></div>`).join('')}`);
+  bg.addEventListener('change', (e) => {
+    const id = e.target.name.slice(1), m = blockMap();
+    if (e.target.value) m[id] = e.target.value; else delete m[id];
+    store.set('gt-block-map', JSON.stringify(m)); blockSig = ''; blockAllowSync(); sfx.tap();
   });
+  await closed;
 }
 
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
