@@ -442,10 +442,12 @@ async function nativeWizard(force) {
 const BLOCK_SUGGEST = ['com.android.settings', 'com.android.vending', 'com.miui.securitycenter', 'com.sec.android.app.samsungapps', 'com.xiaomi.market'];
 const blockMap = () => { try { return JSON.parse(store.get('gt-block-map') || '{}'); } catch { return {}; } };
 let blockSig = '';
+// Quem está usando este aparelho: a última criança cujo perfil foi aberto aqui. Cronômetro de irmão em outro aparelho não libera este.
+const blockKid = () => +store.get('gt-block-kid') || 0;
 function blockAllowSync() {
   if (!GtAlarm?.blockAllow) return;
-  const map = blockMap(), allowed = {};
-  for (const [, c] of clocks) { const g = !c.kind && map[c.id]; if (g) allowed[g] = Math.max(allowed[g] || 0, Math.round(c.ends)); }
+  const map = blockMap(), allowed = {}, me = blockKid();
+  for (const [, c] of clocks) { const g = !c.kind && c.kid === me && map[c.id]; if (g) allowed[g] = Math.max(allowed[g] || 0, Math.round(c.ends)); }
   const sig = JSON.stringify(allowed);
   if (sig === blockSig) return;
   blockSig = sig; GtAlarm.blockAllow({ allowed }).catch(() => {});
@@ -920,6 +922,7 @@ async function viewPlayers(me = ME) {
 // ---------- Lobby da criança ----------
 // A criança vê o ganho na hora (moedas, minutos, meta). O pai confere depois; se rejeitar, o ganho sai.
 async function viewKid(id) {
+  store.set('gt-block-kid', String(id)); blockSig = ''; // este aparelho passa a ser desta criança (cronômetro dela libera os apps)
   let first = true, showDone = false, latest = null, iv = 0;
   const doneLike = (s) => s === 'approved' || s === 'pending';
   const here = () => { const [, a, b] = location.hash.split('/'); return a === 'kid' && +b === id; };
