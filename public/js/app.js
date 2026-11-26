@@ -357,7 +357,7 @@ async function nativeAlarmBox(box) {
     <label class="check"><input type="checkbox" id="natMsgs" ${store.get('gt-dev-msgs') !== '0' ? 'checked' : ''}>Tocar os recados como alarme</label>
     <label class="check"><input type="checkbox" id="natAppr" ${store.get('gt-fcm-appr') !== '0' ? 'checked' : ''}>Avisar aqui quando uma criança concluir uma missão</label>
     <p class="hint">Em reunião? Desligue os alarmes e os recados aqui e use o app normalmente.</p>
-    <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button></div>
+    <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button><button class="btn ghost sm" id="natWiz">Passo a passo</button></div>
     <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
   $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {
     if (b.dataset.nat === 'notif') await GtAlarm.askNotifications(); else await GtAlarm.openSettings({ what: b.dataset.nat });
@@ -367,8 +367,58 @@ async function nativeAlarmBox(box) {
   $('#natMsgs', box).onchange = (e) => { store.set('gt-dev-msgs', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Recados vão tocar aqui' : 'Recados não tocam mais aqui'); };
   $('#natAlarms', box).onchange = (e) => { store.set('gt-dev-alarms', e.target.checked ? '1' : '0'); alarmSig = ''; registerFcm(); syncNativeAlarms(); toast(e.target.checked ? 'Alarmes de horário ligados aqui' : 'Alarmes de horário desligados aqui'); };
   $('#natName', box).onchange = (e) => { store.set('gt-dev-label', e.target.value.trim().slice(0, 40)); registerFcm(); toast('Nome salvo'); };
+  $('#natWiz', box).onclick = () => nativeWizard(true);
   $('#natTest', box).onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
   addEventListener('focus', () => nativeAlarmBox(box).catch(() => {}), { once: true });
+}
+
+// Assistente "Preparar este aparelho": abre sozinho no app Android enquanto faltar alguma permissão do alarme.
+// Um passo de cada vez: nome do aparelho, avisos, hora exata, tela bloqueada, bateria (e início automático na Xiaomi).
+let wizOpen = false;
+async function nativeWizard(force) {
+  if (!GtAlarm || $('.wiz-bg') || !ME.family || !ME.access?.active || $('.sheet-bg,.msg-bg,.burst,.loader')) return;
+  let st; try { st = await GtAlarm.check(); } catch { return; }
+  const missing = () => !st.notifications || !st.exact || !st.fullScreen || !st.battery;
+  const later = +(store.get('gt-natwiz-later') || 0);
+  if (!force && (!missing() || Date.now() < later)) return;
+  wizOpen = true;
+  const steps = [
+    ['notifications', 'Mostrar avisos', 'Para o alarme e os recados aparecerem na tela.', 'notif', 'Permitir'],
+    ['exact', 'Tocar na hora exata', 'Sem isso, o Android atrasa o alarme.', 'exact', 'Liberar'],
+    ['fullScreen', 'Abrir por cima da tela bloqueada', 'O alarme acende a tela mesmo bloqueada.', 'fullScreen', 'Liberar'],
+    ['battery', 'Funcionar com o app fechado', 'Escolha "Permitir" para a bateria não desligar o GameTask.', 'battery', 'Liberar'],
+  ];
+  const bg = document.createElement('div'); bg.className = 'sheet-bg wiz-bg';
+  document.body.append(bg);
+  const close = () => { wizOpen = false; bg.remove(); removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); registerFcm(); syncNativeAlarms(); };
+  const paint = () => {
+    const next = steps.find(x => !st[x[0]]);
+    const done = steps.filter(x => st[x[0]]).length;
+    bg.innerHTML = `<div class="wiz-card" role="dialog" aria-label="Preparar este aparelho">
+      ${im('clock', 'wiz-ic')}<h2 class="d">Preparar este aparelho</h2>
+      <p class="wiz-sub">Para os alarmes e os recados tocarem aqui, mesmo com o app fechado e no silencioso.</p>
+      <div class="field"><label for="wzName">Nome deste aparelho</label><input id="wzName" maxlength="40" value="${esc(devLabel())}" placeholder="Tablet das crianças"></div>
+      <div class="wiz-bar"><i style="width:${done / steps.length * 100}%"></i></div>
+      <ol class="wiz-steps">${steps.map(([k, t, h, what, btn]) => `<li class="${st[k] ? 'ok' : next && next[0] === k ? 'now' : ''}">
+        <span class="wiz-n">${st[k] ? '✓' : steps.findIndex(x => x[0] === k) + 1}</span><span class="grow"><b>${t}</b>${!st[k] && next && next[0] === k ? `<small>${h}</small>` : ''}</span>
+        ${!st[k] && next && next[0] === k ? `<button class="btn green sm" data-wz="${what}">${btn}</button>` : ''}</li>`).join('')}
+      ${st.xiaomi ? `<li class="${store.get('gt-wz-auto') ? 'ok' : ''}"><span class="wiz-n">${store.get('gt-wz-auto') ? '✓' : '5'}</span><span class="grow"><b>Xiaomi: Início automático</b><small>Ligue o GameTask na lista.</small></span><button class="btn sm" data-wz="autostart">Abrir</button></li>` : ''}</ol>
+      ${missing() ? '' : `<div class="wiz-done">${im('party')}<b>Tudo pronto!</b></div><button class="btn sm" id="wzTest">Testar alarme (toca em 10 s)</button>`}
+      <div class="actions">${missing() ? '<button class="btn ghost" id="wzLater">Agora não</button>' : '<button class="btn green big" id="wzOk">Concluir</button>'}</div></div>`;
+    $('#wzName', bg).onchange = (e) => { store.set('gt-dev-label', e.target.value.trim().slice(0, 40)); };
+    $$('[data-wz]', bg).forEach(b => b.onclick = guard(async () => {
+      sfx.tap();
+      if (b.dataset.wz === 'notif') { await GtAlarm.askNotifications(); await refresh(); }
+      else { if (b.dataset.wz === 'autostart') store.set('gt-wz-auto', '1'); await GtAlarm.openSettings({ what: b.dataset.wz }); }
+    }));
+    const t = $('#wzTest', bg); if (t) t.onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
+    const l = $('#wzLater', bg); if (l) l.onclick = () => { store.set('gt-natwiz-later', String(Date.now() + 24 * 3600e3)); close(); };
+    const o = $('#wzOk', bg); if (o) o.onclick = () => { sfx.win(); store.set('gt-dev-label', $('#wzName', bg).value.trim().slice(0, 40) || devLabel()); close(); toast('Aparelho pronto para os alarmes'); };
+  };
+  // ao voltar das telas do Android, confere de novo
+  const refresh = async () => { if (document.visibilityState !== 'visible' || !bg.isConnected) return; try { st = await GtAlarm.check(); } catch {} paint(); };
+  addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
+  paint();
 }
 
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
@@ -414,11 +464,12 @@ async function route() {
   if (a === 'assinar' || !me.access.active) return viewPaywall(me);
   if (a === 'dono') return !me.parent ? viewPin() : me.owner ? viewOwner() : (location.hash = '#/');
   if (PAINEL && !me.parent && store.get('gt-pdev')) store.set('gt-pdev', ''); // lembrança apagada no servidor: pede o PIN de novo
+  if (NATIVE) setTimeout(() => nativeWizard().catch(() => {}), 1500);
   if (PAINEL && a !== 'dono') { if (me.parent) setTimeout(() => maybePushWizard().catch(() => {}), 1500); return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup(); }
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   await viewPlayers(me);
-  checkMessages(); syncAlarmsSoon();
+  checkMessages(); syncAlarmsSoon(); setTimeout(() => nativeWizard().catch(() => {}), 1200);
   paid?.();
   setTimeout(() => maybePushWizard().catch(() => {}), 1500);
 }

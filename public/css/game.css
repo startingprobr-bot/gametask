@@ -1051,3 +1051,25 @@ button.meter:active{transform:scale(.98)}
 .loader span{color:#d6e4ff;font-weight:800}
 @keyframes float{50%{transform:translateY(-8px)}}
 @media (prefers-reduced-motion:reduce){.loader img{animation:none}}
+/* ---- Assistente "Preparar este aparelho" ---- */
+.wiz-bg{align-items:center}
+.wiz-card{position:relative;width:min(460px,94vw);max-height:92vh;overflow:auto;padding:22px 20px calc(18px + env(safe-area-inset-bottom));border-radius:28px;background:#fff;border:2px solid var(--navy);box-shadow:0 6px 0 var(--navy),var(--drop);animation:zoom .45s var(--spring) both}
+.wiz-ic{width:64px;height:64px;display:block;margin:0 auto 6px}
+.wiz-card h2{text-align:center;font-size:26px}
+.wiz-sub{text-align:center;color:var(--ink-soft);font-weight:700;margin:4px 0 12px}
+.wiz-bar{height:12px;border-radius:999px;background:var(--mist);border:2px solid var(--navy);overflow:hidden;margin:6px 0 10px}
+.wiz-bar i{display:block;height:100%;background:var(--green);transition:width .4s}
+.wiz-steps{list-style:none;margin:0;padding:0}
+.wiz-steps li{display:flex;align-items:center;gap:10px;padding:10px 6px;border-top:2px solid var(--mist);color:var(--ink-soft)}
+.wiz-steps li:first-child{border-top:0}
+.wiz-steps li.now{color:var(--ink);background:#fff8d6;border-radius:14px;border-top-color:transparent}
+.wiz-steps li.ok{color:var(--ink-soft)}
+.wiz-steps li b{display:block;font-size:16px}
+.wiz-steps li small{display:block;font-weight:700;font-size:13px;margin-top:2px}
+.wiz-n{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:900;background:var(--mist);color:var(--navy)}
+.wiz-steps li.ok .wiz-n{background:var(--green);color:var(--navy)}
+.wiz-steps li.now .wiz-n{background:var(--yellow)}
+.wiz-done{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 8px;font-size:20px}
+.wiz-done img{width:36px;height:36px}
+.wiz-card #wzTest{display:block;margin:0 auto 6px}
+.wiz-card .actions{justify-content:center;margin-top:12px}
