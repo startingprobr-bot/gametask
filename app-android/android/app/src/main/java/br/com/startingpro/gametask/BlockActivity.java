@@ -20,7 +20,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /** Tela que aparece por cima de um app bloqueado. A criança volta para o GameTask; o responsável libera com o PIN. */
-public class BlockActivity extends Activity {
+public class BlockActivity extends androidx.fragment.app.FragmentActivity {
     private static final int NAVY = Color.parseColor("#0d1b4c");
 
     @Override
@@ -58,7 +58,16 @@ public class BlockActivity extends Activity {
         go.setOnClickListener(v -> { startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); finish(); });
         root.addView(go, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(76)));
 
-        TextView parent = text("Sou responsável", 18, Color.WHITE, true);
+        // responsável libera com a digital (qualquer digital cadastrada no aparelho)
+        if (Bio.available(this)) {
+            TextView fp = button("Usar digital", "#ffffff", "#e3ecff", NAVY);
+            fp.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+            fp.setOnClickListener(v -> Bio.prompt(this, "Liberar este app", "Use a digital de um responsável", this::openUnlocked, (m) -> { }));
+            LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64));
+            fl.topMargin = dp(14);
+            root.addView(fp, fl);
+        }
+        TextView parent = text(Bio.available(this) ? "Usar o PIN" : "Sou responsável", 18, Color.WHITE, true);
         parent.setPadding(0, dp(20), 0, dp(6));
         parent.setOnClickListener(v -> askPin(root));
         root.addView(parent);
@@ -114,20 +123,23 @@ public class BlockActivity extends Activity {
         if (k.equals("⌫")) { if (typed.length() > 0) typed.setLength(typed.length() - 1); }
         else if (k.equals("OK")) {
             String pkg = getIntent().getStringExtra("pkg");
-            if (BlockStore.checkPin(this, typed.toString())) {
-                BlockStore.unlock(this, pkg);
-                Toast.makeText(this, "Liberado até você sair do app", Toast.LENGTH_SHORT).show();
-                Intent open = pkg == null ? null : getPackageManager().getLaunchIntentForPackage(pkg);
-                finish();
-                if (open != null) startActivity(open);
-                return;
-            }
+            if (BlockStore.checkPin(this, typed.toString())) { openUnlocked(); return; }
             typed.setLength(0);
             dots.animate().translationX(dp(14)).setDuration(60).withEndAction(() -> dots.animate().translationX(-dp(14)).setDuration(60)
                 .withEndAction(() -> dots.animate().translationX(0).setDuration(60).start()).start()).start();
             Toast.makeText(this, "PIN incorreto", Toast.LENGTH_SHORT).show();
         } else if (typed.length() < 8) typed.append(k);
         paintDots();
+    }
+
+    // libera o app bloqueado até o responsável sair dele e já abre o app
+    private void openUnlocked() {
+        String pkg = getIntent().getStringExtra("pkg");
+        BlockStore.unlock(this, pkg);
+        Toast.makeText(this, "Liberado até você sair do app", Toast.LENGTH_SHORT).show();
+        Intent open = pkg == null ? null : getPackageManager().getLaunchIntentForPackage(pkg);
+        finish();
+        if (open != null) startActivity(open);
     }
 
     private void paintDots() {

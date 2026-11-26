@@ -942,10 +942,19 @@ document.addEventListener('click', (e) => {
 
 // ---------- Digital / rosto (WebAuthn) ----------
 const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const pkIds = () => { try { return JSON.parse(store.get('gt-pk') || '[]'); } catch { return []; } };
-const pkSave = (ids) => store.set('gt-pk', JSON.stringify([...new Set(ids)]));
-const pkCan = async () => { try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; } };
+const bioApp = () => window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.GtAlarm?.bioCheck ? window.Capacitor.Plugins.GtAlarm : null;
+const pkIds = () => { if (bioApp()) return store.get('gt-bio') === '1' ? ['bio'] : []; try { return JSON.parse(store.get('gt-pk') || '[]'); } catch { return []; } };
+const pkSave = (ids) => { if (bioApp()) { if (!ids.length) { store.set('gt-bio', '0'); bioApp().bioClear().catch(() => {}); } return; } store.set('gt-pk', JSON.stringify([...new Set(ids)])); };
+const pkCan = async () => {
+  if (bioApp()) { try { return (await bioApp().bioCheck()).available; } catch { return false; } }
+  try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); } catch { return false; }
+};
 async function pkAdd() {
+  if (bioApp()) { // chave do painel neste aparelho, guardada atrás da digital do Android
+    const { token } = await api('POST', '/auth/parent/device');
+    await bioApp().bioSave({ token });
+    store.set('gt-bio', '1'); return;
+  }
   const o = await api('POST', '/auth/passkey/register/options', {});
   const c = await navigator.credentials.create({ publicKey: { ...o, challenge: b64key(o.challenge), user: { ...o.user, id: b64key(o.user.id) },
     excludeCredentials: (o.excludeCredentials || []).map(x => ({ ...x, id: b64key(x.id) })) } });
@@ -956,6 +965,11 @@ async function pkAdd() {
   pkSave([...pkIds(), res.id]);
 }
 async function pkUse() {
+  if (bioApp()) {
+    const { token } = await bioApp().bioGet();
+    try { return await api('POST', '/auth/parent/bio', { token }); }
+    catch (e) { if (e.status === 401) { store.set('gt-bio', '0'); bioApp().bioClear().catch(() => {}); } throw e; }
+  }
   let o;
   try { o = await api('POST', '/auth/passkey/login/options', { ids: pkIds() }); }
   catch (e) { if (e.code === 'none') store.set('gt-pk', '[]'); throw e; }
@@ -967,7 +981,7 @@ async function pkUse() {
         signature: b64u(r.signature), userHandle: r.userHandle ? b64u(r.userHandle) : undefined } } });
   } catch (e) { if (e.code === 'unknown') pkSave(pkIds().filter(x => x !== c.id)); throw e; }
 }
-const pkErr = (e) => e.name === 'NotAllowedError' ? 'Leitura cancelada.' : e.name === 'InvalidStateError' ? 'Esta digital já está cadastrada neste aparelho.' : e.message;
+const pkErr = (e) => /cancelad/i.test(e.message || '') ? 'Leitura cancelada.' : e.name === 'NotAllowedError' ? 'Leitura cancelada.' : e.name === 'InvalidStateError' ? 'Esta digital já está cadastrada neste aparelho.' : e.message;
 
 // ---------- Convite de responsável ----------
 async function viewInvite(token) {
@@ -1003,7 +1017,7 @@ async function viewInvite(token) {
 // ---------- PIN dos pais ----------
 function viewPin() {
   let pin = '';
-  const finger = pkIds().length && window.PublicKeyCredential;
+  const finger = pkIds().length && (bioApp() || window.PublicKeyCredential);
   app.innerHTML = `<div class="lobby"><div class="auth">
     <div class="logo">${im('lock')}<h1 class="d stroke" style="font-size:44px">Painel dos pais</h1></div>
     <div class="card" id="card">${finger ? `<button class="btn green finger" id="fp">${SVG.finger}Entrar com a digital</button><p class="or">ou digite seu PIN</p>` : '<h2 class="d" style="text-align:center">Digite seu PIN</h2>'}${PAINEL ? '<p class="hint" style="text-align:center">Só desta vez: depois este app abre direto.</p>' : ''}
@@ -1525,7 +1539,7 @@ async function adminSettings(pane, refresh) {
     <section class="box" data-sum="PIN${canFp ? ' e digital' : ''} · ${esc(meM.name || '')}"><div class="box-h"><h2 class="d">Meu acesso</h2></div>
       <form id="pinf" class="inline-form" novalidate><div class="field"><label for="np">Meu PIN</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="Novo PIN"></div>
         <button class="btn sm">Trocar PIN</button></form>
-      <div class="fp-row">${SVG.finger}${!canFp ? '<span>Este aparelho não tem leitor de digital ou de rosto disponível para o navegador.</span>'
+      <div class="fp-row">${SVG.finger}${!canFp ? (bioApp() ? '<span>Nenhuma digital cadastrada neste aparelho. Cadastre a sua (e a de outro responsável) em <b>Configurações › Biometria</b> do Android e volte aqui.</span>' : '<span>Este aparelho não tem leitor de digital ou de rosto disponível para o navegador.</span>')
         : pkIds().length ? '<span><b>Digital ativada neste aparelho.</b> O painel abre sem o PIN.</span><button class="btn ghost sm" id="fpOff">Desativar</button>'
         : '<span>Abra o painel com a digital ou o rosto neste aparelho.</span><button class="btn green sm" id="fpAdd">Ativar</button>'}</div></section>
     ${full() ? `<section class="box" data-sum="${mb.members.length} ${mb.members.length === 1 ? 'pessoa' : 'pessoas'}${mb.invites.length ? ' · convite aguardando' : ''}"><div class="box-h"><h2 class="d">Responsáveis</h2><button class="btn green sm" id="inv">${im('people')}Convidar</button></div>
@@ -1559,6 +1573,7 @@ async function adminSettings(pane, refresh) {
   $('#pinf').onsubmit = guard(async (e) => { e.preventDefault(); await api('PUT', '/admin/me/pin', { pin: e.target.pin.value }); e.target.pin.value = ''; toast('PIN trocado'); });
   const fa = $('#fpAdd'); if (fa) fa.onclick = async () => { try { await pkAdd(); sfx.win(); toast('Digital ativada neste aparelho'); refresh(); } catch (e) { toast(pkErr(e), true); } };
   const fo = $('#fpOff'); if (fo) fo.onclick = guard(async () => {
+    if (bioApp()) { pkSave([]); store.set('gt-pk-skip', '1'); toast('Digital desativada neste aparelho'); return refresh(); }
     const mine = (await api('GET', '/admin/me/passkeys')).map(k => k.id);
     for (const id of pkIds().filter(x => mine.includes(x))) await api('DELETE', '/admin/me/passkeys/' + encodeURIComponent(id));
     pkSave([]); store.set('gt-pk-skip', '1'); toast('Digital desativada neste aparelho'); refresh();

@@ -441,6 +441,13 @@ const step = (m) => console.log('✔', m);
     assert.ok(devs.some(d => d.label === 'Tablet das crianças' && d.on)); assert.ok(devs.some(d => d.label === 'Celular da Ana' && !d.on));
     await ok('POST', '/api/admin/messages', { text: 'Só no tablet', kid_ids: allIds, devices: devs.filter(d => d.on).map(d => d.id) });
     step('app Android registra o celular para recados com o app fechado');
+    // digital do app Android: a chave do aparelho abre o painel sem PIN
+    const bioTok = (await ok('POST', '/api/auth/parent/device')).token;
+    await ok('POST', '/api/auth/parent/exit');
+    assert.equal((await api('POST', '/api/auth/parent/bio', { token: 'errada' })).status, 401);
+    await ok('POST', '/api/auth/parent/bio', { token: bioTok });
+    await ok('GET', '/api/admin/pending');
+    step('digital do app Android abre o painel');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

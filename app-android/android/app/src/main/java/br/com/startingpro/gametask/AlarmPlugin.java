@@ -133,6 +133,38 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
+    // ---------- Digital (biometria do Android) ----------
+    /** available: há digital/rosto cadastrado; enrolled: o painel já está ligado à digital neste aparelho */
+    @PluginMethod
+    public void bioCheck(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("available", Bio.available(getContext()));
+        r.put("none", Bio.noneEnrolled(getContext()));
+        r.put("enrolled", !Bio.token(getContext()).isEmpty());
+        call.resolve(r);
+    }
+
+    /** Pede a digital e guarda a chave do painel (token) neste aparelho */
+    @PluginMethod
+    public void bioSave(PluginCall call) {
+        String token = call.getString("token", "");
+        if (token.isEmpty()) { call.reject("Sem chave"); return; }
+        getActivity().runOnUiThread(() -> Bio.prompt((androidx.fragment.app.FragmentActivity) getActivity(), "Ativar a digital", "Confirme com a sua digital",
+            () -> { Bio.save(getContext(), token); call.resolve(); }, (msg) -> call.reject(msg)));
+    }
+
+    /** Pede a digital e devolve a chave do painel */
+    @PluginMethod
+    public void bioGet(PluginCall call) {
+        String token = Bio.token(getContext());
+        if (token.isEmpty()) { call.reject("Digital não ativada neste aparelho"); return; }
+        getActivity().runOnUiThread(() -> Bio.prompt((androidx.fragment.app.FragmentActivity) getActivity(), "Painel dos pais", "Use a sua digital para entrar",
+            () -> { JSObject r = new JSObject(); r.put("token", token); call.resolve(r); }, (msg) -> call.reject(msg)));
+    }
+
+    @PluginMethod
+    public void bioClear(PluginCall call) { Bio.save(getContext(), ""); call.resolve(); }
+
     /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
     @PluginMethod
     public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }

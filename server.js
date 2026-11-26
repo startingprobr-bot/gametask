@@ -139,6 +139,15 @@ app.post('/api/auth/parent/device', needFamily, wrap(async (req, res) => {
   await pool.query('INSERT INTO parent_devices (family_id,member_id,token_hash) VALUES (?,?,?)', [req.fid, mid, sha(token)]);
   res.json({ token });
 }));
+// App Android: a digital libera a chave do aparelho; ela abre o painel como o responsável que ativou
+app.post('/api/auth/parent/bio', needFamily, wrap(async (req, res) => {
+  const k = 'b' + req.fid;
+  if (blocked(k)) return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 minuto.' });
+  const [[d]] = await pool.query('SELECT m.* FROM parent_devices d JOIN members m ON m.id=d.member_id AND m.active=1 WHERE d.token_hash=? AND d.family_id=?', [sha(String(req.body.token || '')), req.fid]);
+  if (!d) { fail(k); return res.status(401).json({ error: 'Digital desatualizada. Entre com o PIN e ative de novo em Ajustes.' }); }
+  members.openParent(req, d);
+  res.json({ ok: true, name: d.name });
+}));
 app.delete('/api/auth/parent/device', needFamily, wrap(async (req, res) => {
   await pool.query('DELETE FROM parent_devices WHERE token_hash=? AND family_id=?', [sha(req.get('x-parent-device') || ''), req.fid]);
   res.json({ ok: true });
