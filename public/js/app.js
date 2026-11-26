@@ -739,7 +739,7 @@ function viewPin() {
 
 // ---------- Painel dos pais ----------
 let tab = 'pending';
-const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wheels', 'party', 'Roletas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
+const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Prêmios'], ['wheels', 'party', 'Roletas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
 const full = () => !!ME.actor?.full;
 const DAILY_TABS = ['pending', 'wallet', 'settings']; // quem só tem o dia a dia (ex.: babá)
 let adminShown = null; // aba que está na tela: ao salvar, a mesma aba se redesenha e volta para onde estava
@@ -1139,7 +1139,7 @@ async function adminRewards(pane, refresh) {
   const prog = (r) => wal.kids.map(k => ({ k, g: k.goals.find(g => g.id === r.id) })).filter(x => x.g);
   const myTasks = allTasks.filter(t => t.active);
   const kidsOnly = allKids.filter(k => k.active && !k.adult);
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Recompensas e metas</h2><button class="btn green sm" id="new">Nova recompensa</button></div>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Prêmios e metas</h2><button class="btn green sm" id="new">Nova recompensa</button></div>
     <p class="lead">Tempo de tela: o total do dia é dividido igualmente entre as tarefas ligadas a ele (20 min com 10 tarefas = 2 min cada). Metas contam missões ou moedas até serem alcançadas.</p>
     ${rewards.length ? `<div class="list">${rewards.map(r => `<div class="item ${r.active ? '' : 'off'}"><div class="ic">${im(r.icon, '', 'game')}</div><div class="grow"><div class="t">${esc(r.title)}</div>
       <div class="s">${r.kind === 'time' ? `${num(r.total_value)} ${esc(r.unit)} por dia · ${r.task_count} tarefa(s)${r.task_count ? ` · ${num(r.total_value / r.task_count)} ${esc(r.unit)} cada` : ''}` : `Meta: ${num(r.total_value)} ${r.goal_mode === 'coins' ? 'moedas' : 'missões'}`}${r.kid_id ? ` · <b>só para ${esc(r.kid_name || '?')}</b>` : ''}</div>
@@ -1220,31 +1220,31 @@ async function adminSettings(pane, refresh) {
   const [w, mb, canFp] = await Promise.all([full() ? api('GET', '/admin/wallet') : null, api('GET', '/admin/members'), pkCan()]);
   const meM = mb.members.find(m => m.me) || {};
   const access = (m) => m.full_access ? 'Acesso completo' : 'Dia a dia';
-  pane.innerHTML = `${full() ? `<form class="box" id="f" novalidate><div class="box-h"><h2 class="d">Ajustes</h2></div>
+  pane.innerHTML = `${full() ? `<form class="box" id="f" novalidate data-sum="1 moeda = ${brl(w.settings.coin_value)}"><div class="box-h"><h2 class="d">Moedas</h2></div>
       <div class="field"><label for="cv">Valor de 1 moeda em reais</label><input id="cv" name="coin_value" type="number" step="0.01" min="0" value="${w.settings.coin_value}" inputmode="decimal"></div>
       <p class="hint">A aprovação automática é escolhida em cada filho, na aba Filhos.</p>
       <div class="err" role="alert"></div><div class="actions"><button class="btn green">Salvar ajustes</button></div></form>` : ''}
-    <section class="box"><div class="box-h"><h2 class="d">Meu acesso</h2><span class="muted">${esc(meM.name || '')} · ${esc(meM.role || '')} · ${access(meM)}</span></div>
+    <section class="box" data-sum="PIN${canFp ? ' e digital' : ''} · ${esc(meM.name || '')}"><div class="box-h"><h2 class="d">Meu acesso</h2></div>
       <form id="pinf" class="inline-form" novalidate><div class="field"><label for="np">Meu PIN</label><input id="np" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password" placeholder="Novo PIN"></div>
         <button class="btn sm">Trocar PIN</button></form>
       <div class="fp-row">${SVG.finger}${!canFp ? '<span>Este aparelho não tem leitor de digital ou de rosto disponível para o navegador.</span>'
         : pkIds().length ? '<span><b>Digital ativada neste aparelho.</b> O painel abre sem o PIN.</span><button class="btn ghost sm" id="fpOff">Desativar</button>'
         : '<span>Abra o painel com a digital ou o rosto neste aparelho.</span><button class="btn green sm" id="fpAdd">Ativar</button>'}</div></section>
-    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Responsáveis</h2><button class="btn green sm" id="inv">${im('people')}Convidar</button></div>
+    ${full() ? `<section class="box" data-sum="${mb.members.length} ${mb.members.length === 1 ? 'pessoa' : 'pessoas'}${mb.invites.length ? ' · convite aguardando' : ''}"><div class="box-h"><h2 class="d">Responsáveis</h2><button class="btn green sm" id="inv">${im('people')}Convidar</button></div>
       <p class="lead">Pai, mãe, babá ou avós: cada um entra no próprio celular com e-mail, senha e PIN, e pode usar a digital.</p>
       <div class="list">${mb.members.map(m => `<div class="item"><div class="ic">${im(m.plays ? m.avatar : 'people', '', 'fox')}</div>
         <div class="grow"><div class="t">${esc(m.name)}${m.me ? ' <span class="tag ok">você</span>' : ''}</div>
         <div class="s">${esc(m.role)} · ${access(m)}${m.plays ? ' · na rotina' : ''}${m.passkeys ? ' · digital' : ''}${m.email ? ' · ' + esc(m.email) : ''}</div></div>
         <div class="btns"><button class="btn ghost sm" data-m="${m.id}">Editar</button></div></div>`).join('')}</div>
       ${mb.invites.length ? `<p class="hint">${mb.invites.length === 1 ? '1 convite aguardando' : mb.invites.length + ' convites aguardando'} (${mb.invites.map(i => esc(i.name)).join(', ')}). <button type="button" class="link" id="invX">Cancelar convites</button></p>` : ''}</section>` : ''}
-    <section class="box"><div class="box-h"><h2 class="d">Área dos pais separada</h2></div>
+    <section class="box" data-sum="Painel como outro app, com disfarce"><div class="box-h"><h2 class="d">Área dos pais separada</h2></div>
       <p class="lead">Instale o painel como outro app no seu celular. Ele abre direto aqui, com a digital ou o PIN, sem passar pelo jogo. Escolha um disfarce para a criança não reconhecer:</p>
       <div class="disg" role="radiogroup" aria-label="Disfarce do app">${DISGUISES.map(([k, n], i) => `<label><input type="radio" name="dg" value="${k}" ${i === 0 ? 'checked' : ''}><img src="/icons/d/${k}-192.png" alt=""><span>${n}</span></label>`).join('')}</div>
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     <div id="alarms"></div>
-    ${full() ? `<section class="box"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
-    <section class="box"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
+    ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
+    <section class="box" data-sum="Desconectar ou voltar a pedir o PIN"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
   const fg = $('#forget', pane); if (fg) fg.onclick = guard(async () => { await api('DELETE', '/auth/parent/device'); store.set('gt-pdev', ''); toast('Pronto: o app vai pedir o PIN ao abrir'); await route(); });
   const dgUrl = () => `${location.origin}/painel?i=${$('[name=dg]:checked', pane).value}`;
   $$('[name=dg]', pane).forEach(r => r.onchange = () => sfx.tap());
@@ -1301,6 +1301,25 @@ async function adminSettings(pane, refresh) {
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
   if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
   await adminAlarms($('#alarms'), refresh);
+  accordion(pane);
+}
+
+// Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
+const ACC_IC = { 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+function accordion(pane) {
+  const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
+  $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {
+    const h = $('.box-h h2', el); if (!h) return;
+    const title = h.textContent.trim(), d = document.createElement('details'), sum = document.createElement('summary');
+    d.className = 'box acc';
+    sum.innerHTML = `${im(ACC_IC[title] || 'gear', 'acc-ic')}<span class="acc-tx"><b>${esc(title)}</b>${el.dataset.sum ? `<small>${esc(el.dataset.sum)}</small>` : ''}</span>`;
+    h.remove();
+    const bh = $('.box-h', el); if (bh && !bh.textContent.trim() && !bh.children.length) bh.remove();
+    el.classList.remove('box'); el.classList.add('acc-body');
+    el.before(d); d.append(sum, el);
+    d.open = open.has(title);
+    d.addEventListener('toggle', () => { if (d.open) { open.add(title); sfx.tap(); } else open.delete(title); store.set('gt-acc', [...open].join('|')); });
+  });
 }
 
 // Link do convite: compartilhar (WhatsApp etc.) ou copiar
@@ -1706,15 +1725,15 @@ async function adminAlarms(pane, refresh) {
        <label class="check"><input type="checkbox" id="da" ${guessLabel() === 'Celular' ? 'checked' : ''}>Pedidos de aprovação (quando uma criança conclui uma missão)</label>
        <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
 
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>
-    <section class="box"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus && full() ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
+  pane.innerHTML = `<section class="box" data-sum="${!p.plus ? 'No plano anual' : mine ? 'Ligados' : 'Desligados'}"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>
+    <section class="box" data-sum="${alarms.length ? `${alarms.length} ${alarms.length === 1 ? 'aviso' : 'avisos'}` : 'Nenhum ainda'}"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus && full() ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
       <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
       ${alarms.length ? `<div class="list">${alarms.map(a => `<div class="item ${a.active ? '' : 'off'}"><div class="ic">${im('clock')}</div><div class="grow"><div class="t">${esc(a.title)}</div>
         <div class="s"><b class="num">${esc(a.time)}</b> · ${when(a.weekdays)} · ${a.kid_id ? esc(kidOf(a.kid_id)?.name || '?') : 'toda a família'}</div></div>
         ${full() ? `<div class="btns"><button class="btn ghost sm" data-e="${a.id}">Editar</button></div>` : ''}</div>`).join('')}</div>` : zero('clock', 'Nenhum aviso programado ainda.')}
       <div class="field lead-time"><label for="rb">Tarefas com horário avisam</label><select id="rb" ${p.plus && full() ? '' : 'disabled'}>${[[0, 'na hora certa'], [5, '5 minutos antes'], [10, '10 minutos antes'], [15, '15 minutos antes'], [30, '30 minutos antes'], [60, '1 hora antes']].map(([v, l]) => `<option value="${v}" ${+p.remind_before === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <p class="hint">Vale para as tarefas que têm horário (natação 18h, por exemplo) e só avisa quem ainda não fez.</p></div></section>
-    ${p.plus ? `<section class="box"><div class="box-h"><h2 class="d">Últimos avisos enviados</h2></div>
+    ${p.plus ? `<section class="box" data-sum="Para conferir se um aviso saiu"><div class="box-h"><h2 class="d">Últimos avisos enviados</h2></div>
       <p class="lead">Se um aviso não tocou, veja aqui se ele saiu e em quantos aparelhos chegou.</p>
       ${p.log?.length ? `<div class="list">${p.log.map(l => `<div class="item"><div class="ic">${im(l.fail || !l.ok ? 'cross' : 'check')}</div><div class="grow"><div class="t">${esc(l.title)}</div>
         <div class="s">${new Date(l.created_at.replace(' ', 'T') + (l.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · chegou em ${l.ok} aparelho(s)${l.fail ? ` · falhou em ${l.fail}` : ''}${l.err ? ` · ${esc(l.err)}` : ''}</div></div></div>`).join('')}</div>`

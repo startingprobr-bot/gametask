@@ -941,3 +941,18 @@ button.meter:active{transform:scale(.98)}
   .item .btns.pair{flex-wrap:nowrap}
   .stmt-head,.sday>summary{grid-template-columns:minmax(70px,auto) 1fr auto 4.2em 12px;gap:6px}
 }
+
+/* ---- Ajustes em sanfona: uma linha por bloco, abre ao tocar ---- */
+.acc{padding:0;overflow:hidden}
+.acc+.acc,#alarms .acc,#alarms+.acc{margin-top:10px}
+.acc>summary{list-style:none;display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;min-height:64px}
+.acc>summary::-webkit-details-marker{display:none}
+.acc>summary .acc-ic{width:34px;height:34px;flex:0 0 auto}
+.acc-tx{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
+.acc-tx b{font-family:inherit;font-size:17px;font-weight:900;color:var(--navy)}
+.acc-tx small{font-size:13px;font-weight:800;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc>summary::after{content:'';flex:0 0 auto;width:9px;height:9px;border-right:3px solid var(--ink-soft);border-bottom:3px solid var(--ink-soft);transform:rotate(-45deg);transition:transform .25s var(--spring)}
+.acc[open]>summary::after{transform:rotate(45deg)}
+.acc[open]>summary{border-bottom:2px solid var(--mist)}
+.acc-body{padding:12px 16px 16px}
+.acc-body>.box-h:first-child{justify-content:flex-end;margin-bottom:4px}
