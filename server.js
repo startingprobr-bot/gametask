@@ -20,7 +20,7 @@ if (prod && process.env.SESSION_SECRET.length < 24) console.warn('ATENÇÃO: SES
 // Cabeçalhos de proteção: não abrir dentro de site de terceiros, não adivinhar tipo de arquivo, só HTTPS
 app.use((req, res, next) => {
   res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' });
+    'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()' });
   if (prod) res.set('Strict-Transport-Security', 'max-age=31536000');
   next();
 });

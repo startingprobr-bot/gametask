@@ -471,6 +471,10 @@ const step = (m) => console.log('✔', m);
     assert.equal((await anaPh('GET', `/api/calls/${cid}`)).data.status, 'ended');
     assert.ok(Array.isArray((await tab('GET', '/api/calls/ice')).data));
     step('ligação da família: chamar, tocar, atender, trocar sinais e desligar');
+    // o site precisa poder usar o microfone (ligação) e nada de câmera/localização
+    const pp = (await fetch(BASE + '/app')).headers.get('permissions-policy') || '';
+    assert.ok(/microphone=\(self\)/.test(pp) && /camera=\(\)/.test(pp), 'Permissions-Policy: ' + pp);
+    step('cabeçalho permite o microfone só para o próprio site');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;
