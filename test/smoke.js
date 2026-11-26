@@ -242,9 +242,12 @@ const step = (m) => console.log('✔', m);
 
     // extrato diário: resumo por dia e por filho, detalhe ao abrir o dia
     const st = await ok('GET', '/api/admin/statement');
-    assert.equal(st[0].kids[ber].coins, 5); assert.equal(st[0].kids[eva].tasks, 2);
+    assert.equal(st[0].kids[ber].in, 5);
+    const wNow = await ok('GET', '/api/admin/wallet');
+    for (const k of wNow.kids) if (st[0].kids[k.id]) assert.equal(st[0].kids[k.id].saldo, k.balance); // saldo do dia de hoje = saldo atual
     const det = await ok('GET', '/api/admin/statement/' + st[0].day);
-    assert.equal(det[eva].tasks.length, 2); assert.ok(det[eva].other.some(o => o.note === 'Pagamento')); step('extrato diário com detalhe do dia');
+    assert.ok(det[eva].filter(x => x.task).length >= 1); const pg = det[eva].find(o => o.title === 'Pagamento'); assert.ok(pg && pg.amount < 0 && pg.brl > 0);
+    step('extrato diário só de moedas, com saldo do dia e detalhe');
 
     // responsáveis: convite da mãe (acesso completo) e da babá (só o dia a dia)
     const main = cookie;
@@ -364,6 +367,17 @@ const step = (m) => console.log('✔', m);
     fx = await ok('GET', '/api/admin/fix'); assert.equal(fx.wheels.length, 3); assert.ok(fx.spins.some(s => s.spun_at && s.kid === 'Zé'));
     await ok('PUT', `/api/admin/fix/${fx.wheels[2].id}`, { name: 'Gritos', items: [{ label: 'X' }, { label: 'Y', coins: 3 }] });
     assert.equal((await ok('GET', '/api/admin/fix')).wheels[2].name, 'Gritos');
+    // roleta extra (livre): moedas entram na conta, não conta como correção
+    const frId = (await ok('POST', '/api/admin/fix', { name: 'Bônus', kind: 'free', items: [{ label: 'Ganha 7', coins: 7 }, { label: 'Ganha 7 também', coins: 7 }] })).id;
+    fx = await ok('GET', '/api/admin/fix'); assert.equal(fx.wheels.find(w => w.id === frId).kind, 'free'); assert.equal(fx.wheels.filter(w => w.kind === 'fix').length, 3);
+    const bal0 = (await ok('GET', `/api/kids/${zeId}/home`)).balance;
+    const apF = await ok('POST', `/api/admin/fix/${frId}/apply`, { kid_id: zeId }); assert.equal(apF.kind, 'free');
+    assert.equal((await ok('GET', `/api/kids/${zeId}/home`)).fix[0].kind, 'free');
+    await ok('POST', `/api/kids/${zeId}/fix/${apF.id}/spin`, {});
+    assert.equal((await ok('GET', `/api/kids/${zeId}/home`)).balance, bal0 + 7);
+    assert.ok((await ok('POST', `/api/admin/fix/${frId}/free-spin`, {})).prizes.length === 2);
+    assert.equal((await api('POST', '/api/admin/draw', { kid_ids: [zeId] })).status, 400);
+    await ok('DELETE', `/api/admin/fix/${frId}`);
     await ok('DELETE', `/api/admin/kids/${zeId}`);
     step('roletas de correção: sugestões, girar aqui ou na tela dele, desconta moedas sem negativar');
 

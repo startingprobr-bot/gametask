@@ -263,9 +263,9 @@ async function fixItems(wheelId) {
   return items;
 }
 async function pendingFix(fid, kidId) {
-  const [rows] = await pool.query('SELECT id,wheel_id,wheel_name FROM fix_spins WHERE family_id=? AND kid_id=? AND spun_at IS NULL ORDER BY id', [fid, kidId]);
+  const [rows] = await pool.query('SELECT id,wheel_id,wheel_name,kind FROM fix_spins WHERE family_id=? AND kid_id=? AND spun_at IS NULL ORDER BY id', [fid, kidId]);
   const out = [];
-  for (const r of rows) { const prizes = await fixItems(r.wheel_id); if (prizes.length >= 2) out.push({ id: r.id, name: r.wheel_name, prizes }); }
+  for (const r of rows) { const prizes = await fixItems(r.wheel_id); if (prizes.length >= 2) out.push({ id: r.id, name: r.wheel_name, kind: r.kind, prizes }); }
   return out;
 }
 const fail = (status, error) => Object.assign(new Error(error), { status });
@@ -279,10 +279,11 @@ async function spinFix(fid, spinId, kidId) {
   const index = crypto.randomInt(items.length), p = items[index];
   const [[k]] = await pool.query('SELECT adult FROM kids WHERE id=?', [s.kid_id]);
   let coins = k?.adult ? 0 : +p.coins || 0;
-  if (coins > 0) coins = Math.min(coins, Math.max(0, Math.floor(await balance(fid, s.kid_id))));
+  const free = s.kind === 'free'; // roleta extra: as moedas entram na conta; correção: saem (sem deixar negativo)
+  if (coins > 0 && !free) coins = Math.min(coins, Math.max(0, Math.floor(await balance(fid, s.kid_id))));
   const [r] = await pool.query('UPDATE fix_spins SET label=?,emoji=?,coins=?,spun_at=NOW() WHERE id=? AND spun_at IS NULL', [p.label, p.emoji, coins, s.id]);
   if (!r.affectedRows) throw fail(400, 'Essa roleta já foi girada');
-  if (coins > 0) await pool.query("INSERT INTO ledger (family_id,kid_id,kind,amount,day,note) VALUES (?,?,'coin',?,?,?)", [fid, s.kid_id, -coins, today(), `Correção (${s.wheel_name}): ${p.label}`.slice(0, 160)]);
+  if (coins > 0) await pool.query("INSERT INTO ledger (family_id,kid_id,kind,amount,day,note) VALUES (?,?,'coin',?,?,?)", [fid, s.kid_id, free ? coins : -coins, today(), `${free ? 'Roleta extra' : 'Correção'} (${s.wheel_name}): ${p.label}`.slice(0, 160)]);
   return { index, prize: { ...p, coins }, prizes: items };
 }
 router.post('/kids/:id/fix/:sid/spin', async (req, res) => {

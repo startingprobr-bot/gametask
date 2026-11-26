@@ -181,24 +181,24 @@ async function saveFixItems(fid, wheelId, items) {
   await pool.query('DELETE FROM fix_items WHERE wheel_id=? AND family_id=?', [wheelId, fid]);
   if (items.length) await pool.query('INSERT INTO fix_items (family_id,wheel_id,label,emoji,coins,sort) VALUES ?', [items.map((p, i) => [fid, wheelId, p.label, p.emoji, p.coins, i])]);
 }
-const ownFix = async (req) => (await pool.query('SELECT id,name FROM fix_wheels WHERE id=? AND family_id=?', [req.params.id, req.fid]))[0][0];
+const ownFix = async (req) => (await pool.query('SELECT id,name,kind FROM fix_wheels WHERE id=? AND family_id=?', [req.params.id, req.fid]))[0][0];
 function fixBody(req, res) {
   const name = String(req.body.name || '').trim().slice(0, 40), items = cleanItems(req.body.items);
   if (!name) { res.status(400).json({ error: 'Dê um nome para a roleta' }); return null; }
   if (items.length < 2) { res.status(400).json({ error: 'Coloque pelo menos 2 itens' }); return null; }
-  return { name, items };
+  return { name, items, kind: req.body.kind === 'free' ? 'free' : 'fix' };
 }
 router.get('/fix', wrap(async (req, res) => {
-  const [wheels] = await pool.query('SELECT id,name FROM fix_wheels WHERE family_id=? ORDER BY sort,id', [req.fid]);
+  const [wheels] = await pool.query('SELECT id,name,kind FROM fix_wheels WHERE family_id=? ORDER BY sort,id', [req.fid]);
   const { fixItems } = require('./kid');
   for (const w of wheels) w.items = await fixItems(w.id);
   const [spins] = await pool.query(
-    `SELECT s.id,s.wheel_name,s.label,s.emoji,s.coins,s.created_at,s.spun_at,k.name kid FROM fix_spins s JOIN kids k ON k.id=s.kid_id
+    `SELECT s.id,s.kind,s.wheel_name,s.label,s.emoji,s.coins,s.created_at,s.spun_at,k.name kid FROM fix_spins s JOIN kids k ON k.id=s.kid_id
      WHERE s.family_id=? ORDER BY s.id DESC LIMIT 10`, [req.fid]);
   res.json({ wheels, spins });
 }));
 router.post('/fix/samples', wrap(async (req, res) => {
-  const [[n]] = await pool.query('SELECT COUNT(*) n FROM fix_wheels WHERE family_id=?', [req.fid]);
+  const [[n]] = await pool.query("SELECT COUNT(*) n FROM fix_wheels WHERE family_id=? AND kind='fix'", [req.fid]);
   if (n.n) return res.status(400).json({ error: 'Você já tem roletas de correção' });
   for (const [i, [name, items]] of FIX_SAMPLES.entries()) {
     const [r] = await pool.query('INSERT INTO fix_wheels (family_id,name,sort) VALUES (?,?,?)', [req.fid, name, i]);
@@ -210,7 +210,7 @@ router.post('/fix', wrap(async (req, res) => {
   const b = fixBody(req, res); if (!b) return;
   const [[n]] = await pool.query('SELECT COUNT(*) n FROM fix_wheels WHERE family_id=?', [req.fid]);
   if (n.n >= 12) return res.status(400).json({ error: 'No máximo 12 roletas' });
-  const [r] = await pool.query('INSERT INTO fix_wheels (family_id,name,sort) VALUES (?,?,?)', [req.fid, b.name, n.n]);
+  const [r] = await pool.query('INSERT INTO fix_wheels (family_id,name,sort,kind) VALUES (?,?,?,?)', [req.fid, b.name, n.n, b.kind]);
   await saveFixItems(req.fid, r.insertId, b.items);
   res.json({ id: r.insertId });
 }));
@@ -236,12 +236,28 @@ router.post('/fix/:id/apply', wrap(async (req, res) => {
   const { fixItems } = require('./kid');
   const items = await fixItems(w.id);
   if (items.length < 2) return res.status(400).json({ error: 'Essa roleta precisa de pelo menos 2 itens' });
-  const [r] = await pool.query('INSERT INTO fix_spins (family_id,kid_id,wheel_id,wheel_name) VALUES (?,?,?,?)', [req.fid, k.id, w.id, w.name]);
-  res.json({ id: r.insertId, name: w.name, prizes: items });
+  const [r] = await pool.query('INSERT INTO fix_spins (family_id,kid_id,wheel_id,wheel_name,kind) VALUES (?,?,?,?,?)', [req.fid, k.id, w.id, w.name, w.kind]);
+  res.json({ id: r.insertId, name: w.name, kind: w.kind, prizes: items });
 }));
 router.post('/fix-spins/:id/spin', wrap(async (req, res) => {
   try { res.json(await require('./kid').spinFix(req.fid, +req.params.id)); }
   catch (e) { if (!e.status) throw e; res.status(e.status).json({ error: e.message }); }
+}));
+// Roleta extra só por diversão: gira sem ninguém ganhar nem perder nada
+router.post('/fix/:id/free-spin', wrap(async (req, res) => {
+  const w = await ownFix(req); if (!w) return res.status(404).json({ error: 'Roleta não encontrada' });
+  const prizes = await require('./kid').fixItems(w.id);
+  if (prizes.length < 2) return res.status(400).json({ error: 'Essa roleta precisa de pelo menos 2 itens' });
+  const index = require('crypto').randomInt(prizes.length);
+  res.json({ index, prize: { ...prizes[index], coins: 0 }, prizes: prizes.map(p => ({ ...p, coins: 0 })) });
+}));
+// Sorteio entre os filhos escolhidos (o nome de cada um vira uma fatia)
+router.post('/draw', wrap(async (req, res) => {
+  const ids = (Array.isArray(req.body.kid_ids) ? req.body.kid_ids : []).map(Number).filter(Boolean);
+  const [kids] = ids.length ? await pool.query('SELECT name FROM kids WHERE family_id=? AND active=1 AND id IN (?) ORDER BY id', [req.fid, ids]) : [[]];
+  if (kids.length < 2) return res.status(400).json({ error: 'Escolha pelo menos 2 jogadores' });
+  const prizes = kids.map(k => ({ label: k.name, emoji: null, coins: 0 }));
+  res.json({ index: require('crypto').randomInt(prizes.length), prizes });
 }));
 // Desistir de uma correção que ainda não foi girada
 router.delete('/fix-spins/:id', wrap(async (req, res) => {
@@ -269,6 +285,13 @@ async function saveReward(req, id) {
   else {
     const [r] = await pool.query('INSERT INTO rewards (title,icon,kind,unit,total_value,goal_mode,active,kid_id,family_id) VALUES (?,?,?,?,?,?,?,?,?)', [...v, req.fid]);
     id = r.insertId;
+  }
+  // Missões que contam para esta recompensa (só as desta família). Meta de moedas não usa missões.
+  if (Array.isArray(b.task_ids) && mode !== 'coins') {
+    const ids = b.task_ids.map(Number).filter(Boolean);
+    const [own] = ids.length ? await pool.query('SELECT id FROM tasks WHERE family_id=? AND id IN (?)', [req.fid, ids]) : [[]];
+    await pool.query('DELETE FROM task_rewards WHERE reward_id=? AND task_id IN (SELECT id FROM tasks WHERE family_id=?)', [id, req.fid]);
+    if (own.length) await pool.query('INSERT INTO task_rewards (task_id,reward_id) VALUES ?', [own.map(t => [t.id, id])]);
   }
   return id;
 }
@@ -378,40 +401,36 @@ router.post('/redeem', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------- Extrato diário (dentro da Carteira) ----------
-// Resumo por dia e por filho dos últimos 90 dias; o detalhe de um dia só é carregado quando os pais abrem o dia.
+// ---------- Extrato (dentro da Carteira): só moedas, como extrato de banco ----------
+// Por dia e por filho: quanto entrou, quanto saiu e o saldo no fim do dia (últimos 90 dias).
 router.get('/statement', wrap(async (req, res) => {
   const [rows] = await pool.query(
     `SELECT day, kid_id,
-       SUM(CASE WHEN kind='coin' AND amount>0 THEN amount ELSE 0 END) coins,
-       SUM(CASE WHEN kind='time' AND amount>0 THEN amount ELSE 0 END) time,
-       COUNT(DISTINCT completion_id) tasks
-     FROM ledger WHERE family_id=? AND day>=DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+       SUM(CASE WHEN amount>0 THEN amount ELSE 0 END) cin, SUM(CASE WHEN amount<0 THEN -amount ELSE 0 END) cout
+     FROM ledger WHERE family_id=? AND kind='coin' AND day>=DATE_SUB(CURDATE(), INTERVAL 90 DAY)
      GROUP BY day, kid_id ORDER BY day DESC`, [req.fid]);
+  const run = {}; // saldo de cada filho, voltando no tempo a partir do saldo de hoje
   const days = [];
   for (const r of rows) {
+    if (!(r.kid_id in run)) run[r.kid_id] = await balance(req.fid, r.kid_id);
     let d = days[days.length - 1];
     if (d?.day !== r.day) days.push(d = { day: r.day, kids: {} });
-    d.kids[r.kid_id] = { coins: r2(r.coins), time: r2(r.time), tasks: r.tasks };
+    const cin = r2(r.cin), cout = r2(r.cout);
+    d.kids[r.kid_id] = { in: cin, out: cout, net: r2(cin - cout), saldo: r2(run[r.kid_id]) };
+    run[r.kid_id] -= cin - cout;
   }
   res.json(days);
 }));
+// Lançamentos de moedas de um dia (missões, bônus, roletas, pagamentos), por filho
 router.get('/statement/:day', wrap(async (req, res) => {
   const day = String(req.params.day);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: 'Data inválida' });
-  const [comps] = await pool.query(
-    `SELECT c.id,c.kid_id,c.status,t.title,t.icon FROM completions c JOIN tasks t ON t.id=c.task_id
-     WHERE c.family_id=? AND c.day=? AND c.status<>'pending' ORDER BY c.created_at,c.id`, [req.fid, day]);
-  const [led] = await pool.query('SELECT kid_id,completion_id,kind,amount,note FROM ledger WHERE family_id=? AND day=? ORDER BY id', [req.fid, day]);
+  const [led] = await pool.query(
+    `SELECT l.kid_id,l.amount,l.note,t.title,t.icon,p.amount brl FROM ledger l
+       LEFT JOIN completions c ON c.id=l.completion_id LEFT JOIN tasks t ON t.id=c.task_id LEFT JOIN payouts p ON p.id=l.payout_id
+     WHERE l.family_id=? AND l.day=? AND l.kind='coin' AND l.amount<>0 ORDER BY l.id`, [req.fid, day]);
   const out = {};
-  const kidOf = (id) => out[id] ||= { tasks: [], other: [] };
-  for (const c of comps) {
-    const g = led.filter(l => l.completion_id === c.id);
-    kidOf(c.kid_id).tasks.push({ title: c.title, icon: c.icon, status: c.status,
-      coins: r2(g.filter(l => l.kind === 'coin').reduce((a, l) => a + +l.amount, 0)),
-      time: r2(g.filter(l => l.kind === 'time').reduce((a, l) => a + +l.amount, 0)) });
-  }
-  for (const l of led.filter(l => !l.completion_id)) kidOf(l.kid_id).other.push({ kind: l.kind, amount: r2(l.amount), note: l.note });
+  for (const l of led) (out[l.kid_id] ||= []).push({ title: l.title || l.note || 'Ajuste', icon: l.icon || (l.brl != null ? 'moneybag' : null), amount: r2(l.amount), brl: l.brl != null ? r2(l.brl) : null, task: !!l.title });
   res.json(out);
 }));
 

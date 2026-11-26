@@ -154,6 +154,8 @@ const COLUMNS = [
   ['payments', 'coupon', 'VARCHAR(30) NULL'],
   ['leads', 'code', 'VARCHAR(12) NULL'],                 // código da mensagem pronta do WhatsApp (GT-XXXX)
   ['leads', 'wa_confirmed_at', 'TIMESTAMP NULL'],        // a pessoa mandou o código pelo WhatsApp (número confirmado)
+  ['fix_wheels', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],  // 'fix' = correção (tira moedas), 'free' = roleta extra (dá moedas)
+  ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
   ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)

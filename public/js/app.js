@@ -212,17 +212,19 @@ function coinRain(n) {
 // Roleta do dia (bonificação) de um jogador
 const bonusWheel = (kidId, w) => ({ kind: 'bonus', prizes: w.prizes, spin: () => api('POST', `/kids/${kidId}/spin`, {}) });
 // Roleta de correção: f = { name, prizes }
+// Roleta extra (livre): bônus, sorteio ou diversão. o.sub e o.won podem trocar os textos
+const freeWheel = (f, spin, sub, won) => ({ kind: 'free', prizes: f.prizes, spin, title: f.name, sub: sub || 'Gire a roleta e veja o que cai!', won });
 const fixWheel = (f, spin, who) => ({ kind: 'fix', prizes: f.prizes, spin, title: f.name, sub: who ? `Vez de ${who} girar a roleta da correção.` : 'Gire a roleta e cumpra o que cair.' });
 // Abre a roleta. o = { kind:'bonus'|'fix', prizes, spin() -> {index,prize,prizes}, done, celebrate, title, sub }
 function openWheel(o) {
-  const fix = o.kind === 'fix';
+  const fix = o.kind === 'fix', free = o.kind === 'free';
   const bg = document.createElement('div'); bg.className = 'sheet-bg wheel-bg' + (fix ? ' fix' : '');
   const bulbs = Array.from({ length: 16 }, (_, i) => `<i class="bulb" style="--a:${i * 22.5}deg"></i>`).join('');
-  const title = fix ? esc(o.title || 'Correção') : o.celebrate ? 'Dia completo!' : 'Roleta do dia';
-  const sub = fix ? esc(o.sub || '') : o.celebrate ? 'Você fez todas as missões. Gire a roleta e ganhe uma surpresa!' : 'Toque em girar e descubra a sua surpresa!';
-  bg.innerHTML = `<div class="wheel-rays" aria-hidden="true"></div><div class="wheel-card" role="dialog" aria-label="${fix ? 'Roleta da correção' : 'Roleta do dia'}">
-    ${fix ? `<p class="wheel-tag">${im('shield')}Roleta da correção</p>` : ''}<h2 class="d stroke">${title}</h2><p class="wheel-sub">${sub}</p>
-    <div class="wheel">${bulbs}<i class="pin"></i><div class="disc">${wheelSvg(o.prizes, o.kind)}</div><b class="hub"></b></div>
+  const title = free ? esc(o.title || 'Roleta extra') : fix ? esc(o.title || 'Correção') : o.celebrate ? 'Dia completo!' : 'Roleta do dia';
+  const sub = free ? esc(o.sub || '') : fix ? esc(o.sub || '') : o.celebrate ? 'Você fez todas as missões. Gire a roleta e ganhe uma surpresa!' : 'Toque em girar e descubra a sua surpresa!';
+  bg.innerHTML = `<div class="wheel-rays" aria-hidden="true"></div><div class="wheel-card" role="dialog" aria-label="${fix ? 'Roleta da correção' : free ? 'Roleta extra' : 'Roleta do dia'}">
+    ${fix ? `<p class="wheel-tag">${im('shield')}Roleta da correção</p>` : free ? `<p class="wheel-tag">${im('party')}Roleta extra</p>` : ''}<h2 class="d stroke">${title}</h2><p class="wheel-sub">${sub}</p>
+    <div class="wheel">${bulbs}<i class="pin"></i><div class="disc">${wheelSvg(o.prizes, fix ? 'fix' : 'bonus')}</div><b class="hub"></b></div>
     <div class="wheel-res" aria-live="polite"></div><button class="btn ${fix ? '' : 'green'} big" id="spin">Girar!</button></div>`;
   document.body.append(bg);
   const btn = $('#spin', bg), disc = $('.disc', bg), res = $('.wheel-res', bg), wheel = $('.wheel', bg);
@@ -250,11 +252,11 @@ function openWheel(o) {
         return;
       }
       sfx.win();
-      res.innerHTML = `<div>Você ganhou<b>${esc(p.emoji || '')} ${esc(p.label)}</b>${coins ? `<span class="coin-won">${im('coin')}+${num(coins)} moedas na sua conta!</span>` : ''}</div>`;
+      res.innerHTML = `<div>${esc(o.won || 'Você ganhou')}<b>${esc(p.emoji || '')} ${esc(p.label)}</b>${coins ? `<span class="coin-won">${im('coin')}+${num(coins)} moedas na sua conta!</span>` : ''}</div>`;
       const b = disc.getBoundingClientRect();
       [0, 350, 700].forEach((t, i) => setTimeout(() => sparks(b.left + b.width * [.5, .2, .8][i], b.top + b.height * [.1, .4, .4][i]), t));
       if (coins) setTimeout(() => coinRain(coins), 500);
-      setTimeout(() => say(`Você ganhou ${p.label}!`), coins ? 300 : 900);
+      setTimeout(() => say(`${o.won || 'Você ganhou'} ${p.label}!`), coins ? 300 : 900);
       btn.textContent = 'Oba!'; btn.disabled = false; btn.onclick = close; btn.focus();
     }, ms + 150);
   };
@@ -565,7 +567,7 @@ async function viewKid(id) {
     $('#back').onclick = () => { sfx.tap(); location.hash = '#/'; };
     const spinIt = (w, celebrate) => openWheel({ ...bonusWheel(id, w), celebrate, done: () => load().catch(() => {}) });
     if (d.messages?.length && !$('.sheet-bg,.burst')) showMessage(id, d.messages[0], () => load().catch(() => {}));
-    else if (d.fix?.length && !$('.sheet-bg,.burst')) openWheel({ ...fixWheel(d.fix[0], () => api('POST', `/kids/${id}/fix/${d.fix[0].id}/spin`, {})), done: () => load().catch(() => {}) });
+    else if (d.fix?.length && !$('.sheet-bg,.burst')) openWheel({ ...(d.fix[0].kind === 'free' ? freeWheel : fixWheel)(d.fix[0], () => api('POST', `/kids/${id}/fix/${d.fix[0].id}/spin`, {})), done: () => load().catch(() => {}) });
     if ($('#wheelGo')) $('#wheelGo').onclick = () => { sfx.tap(); spinIt(d.wheel); };
     $$('[data-do]').forEach(b => b.onclick = guard(async () => {
       b.disabled = true;
@@ -737,7 +739,7 @@ function viewPin() {
 
 // ---------- Painel dos pais ----------
 let tab = 'pending';
-const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
+const TABS = [['pending', 'check', 'Aprovar'], ['kids', 'people', 'Filhos'], ['tasks', 'clipboard', 'Tarefas'], ['rewards', 'gift', 'Recompensas'], ['wheels', 'party', 'Roletas'], ['wallet', 'moneybag', 'Carteira'], ['settings', 'gear', 'Ajustes']];
 const full = () => !!ME.actor?.full;
 const DAILY_TABS = ['pending', 'wallet', 'settings']; // quem só tem o dia a dia (ex.: babá)
 let adminShown = null; // aba que está na tela: ao salvar, a mesma aba se redesenha e volta para onde estava
@@ -764,33 +766,25 @@ async function viewAdmin() {
     fpOn.onclick = async () => { try { await pkAdd(); sfx.win(); toast('Digital ativada neste aparelho'); $('.fp-offer').remove(); } catch (e) { toast(pkErr(e), true); } };
     $('#fpNo').onclick = () => { store.set('gt-pk-skip', '1'); $('.fp-offer').remove(); };
   }
-  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wallet: adminWallet, settings: adminSettings };
+  const fns = { pending: adminPending, kids: adminKids, tasks: adminTasks, rewards: adminRewards, wheels: adminWheels, wallet: adminWallet, settings: adminSettings };
   await (fns[tab] || (tab = 'pending', adminPending))($('#pane'), viewAdmin);
   adminShown = tab;
   if (keepY) scrollTo(0, keepY);
 }
 const zero = (icon, text) => `<div class="zero">${im(icon)}<span>${text}</span></div>`;
 
-// Recados para os jogadores: aparece na tela deles na hora e toca nos aparelhos com avisos
-async function adminMessages(box) {
-  const [msgs, kids] = await Promise.all([api('GET', '/admin/messages'), api('GET', '/admin/kids')]);
-  const on = kids.filter(k => k.active);
-  const ago = (t) => { const d = new Date(t.replace(' ', 'T') + (t.endsWith('Z') ? '' : 'Z')), m = Math.round((Date.now() - d) / 60000); return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : dmy(t.slice(0, 10)); };
-  box.innerHTML = `<div class="box-h"><h2 class="d">Recados</h2><button class="btn green sm" id="msgNew">${im('bell')}Mandar recado</button></div>
-    <p class="lead">Aparece na tela do jogador na hora e toca nos aparelhos com avisos ligados. Ele responde com um toque.</p>
-    ${msgs.length ? `<div class="list">${msgs.map(m => `<div class="item"><div class="ic">${im(m.avatar, '', 'fox')}</div><div class="grow"><div class="t">${esc(m.text)}</div>
-      <div class="s">Para ${esc(m.kid)} · ${ago(m.created_at)} · ${m.read_at ? (m.reply ? `<b>respondeu: ${esc(m.reply)}</b>` : 'visto') : 'ainda não viu'}</div></div></div>`).join('')}</div>` : ''}`;
-  $('#msgNew').onclick = () => {
-    const quick = ['Hora do banho!', 'Venha jantar!', 'Hora de dormir', 'Vem aqui um minutinho', 'Desliga a TV, por favor'];
-    const bg = sheet('Mandar recado', `<div class="field"><span class="lab">Para quem</span><div class="kid-pick">${on.map(k => `<label class="kp-check"><input type="checkbox" name="to" value="${k.id}" checked><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
-      <div class="field"><label for="mt">Recado</label><textarea id="mt" name="text" rows="3" maxlength="300" placeholder="Venha jantar!" required></textarea>
-      <div class="quick">${quick.map(q => `<button type="button" class="chip-btn" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`,
-      async (f) => {
-        const r = await api('POST', '/admin/messages', { text: f.text.value, kid_ids: $$('[name=to]:checked', f).map(x => +x.value) });
-        toast(r.sent ? `Recado enviado e tocou em ${r.sent} aparelho(s)` : 'Recado enviado. Aparece na tela do jogador.'); adminMessages(box);
-      }, { saveLabel: 'Enviar' });
-    $$('[data-q]', bg).forEach(b => b.onclick = () => { bg.querySelector('#mt').value = b.dataset.q; sfx.tap(); });
-  };
+// Recado para os jogadores: aparece na tela deles na hora e toca nos aparelhos com avisos ligados. Não fica histórico.
+function messageSheet(on, pre = []) {
+  const quick = ['Hora do banho!', 'Venha jantar!', 'Hora de dormir', 'Vem aqui um minutinho', 'Desliga a TV, por favor'];
+  const bg = sheet(pre.length === 1 ? `Recado para ${on.find(k => k.id === pre[0])?.name || ''}` : 'Mandar recado', `<div class="field"><span class="lab">Para quem</span><div class="kid-pick">${on.map(k => `<label class="kp-check"><input type="checkbox" name="to" value="${k.id}" ${!pre.length || pre.includes(k.id) ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
+    <div class="field"><label for="mt">Recado</label><textarea id="mt" name="text" rows="3" maxlength="300" placeholder="Venha jantar!" required></textarea>
+    <div class="quick">${quick.map(q => `<button type="button" class="chip-btn" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+    <p class="hint">Aparece na tela na hora e toca nos aparelhos com avisos ligados. A resposta chega como aviso para você.</p></div>`,
+    async (f) => {
+      const r = await api('POST', '/admin/messages', { text: f.text.value, kid_ids: $$('[name=to]:checked', f).map(x => +x.value) });
+      toast(r.sent ? `Recado enviado e tocou em ${r.sent} aparelho(s)` : 'Recado enviado. Aparece na tela do jogador.');
+    }, { saveLabel: 'Enviar' });
+  $$('[data-q]', bg).forEach(b => b.onclick = () => { bg.querySelector('#mt').value = b.dataset.q; sfx.tap(); });
 }
 
 async function adminPending(pane, refresh) {
@@ -799,11 +793,7 @@ async function adminPending(pane, refresh) {
     ${rows.length ? `<div class="list">${rows.map(r => `<div class="item"><div class="ic">${im(r.icon)}</div><div class="grow"><div class="t">${esc(r.title)}</div>
       <div class="s">${esc(r.kid)} · ${dmy(r.day)}${r.coins > 0 ? ` · ${num(r.coins)} moedas` : ''}</div></div>
       <div class="btns"><button class="btn green sm" data-ok="${r.id}">Aprovar</button><button class="btn ghost sm" data-no="${r.id}">Rejeitar</button></div></div>`).join('')}</div>`
-    : zero('party', 'Nada para aprovar agora.')}</section>
-    <section class="box" id="fixBox"></section>
-    <section class="box" id="msgBox"></section>`;
-  adminFix($('#fixBox')).catch(e => toast(e.message, true));
-  adminMessages($('#msgBox')).catch(e => toast(e.message, true));
+    : zero('party', 'Nada para aprovar agora.')}</section>`;
   const act = (url, ids, msg) => guard(async () => { await api('POST', url, { ids }); sfx.done(); toast(msg); refresh(); });
   $$('[data-ok]').forEach(b => b.onclick = act('/admin/approve', [+b.dataset.ok], 'Aprovada'));
   $$('[data-no]').forEach(b => b.onclick = act('/admin/reject', [+b.dataset.no], 'Rejeitada'));
@@ -812,10 +802,10 @@ async function adminPending(pane, refresh) {
 
 async function adminKids(pane, refresh) {
   const all = await api('GET', '/admin/kids'), kids = all.filter(k => !k.adult), adults = all.filter(k => k.adult);
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><button class="btn green sm" id="new">Adicionar filho</button></div>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${im('bell')}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
     ${kids.length ? `<div class="list">${kids.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
       <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${!k.active ? 'Inativo' : k.auto_approve ? 'Tarefas aprovadas automaticamente' : 'Você confere as tarefas'}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
+      <div class="btns pair">${k.active ? `<button class="btn ghost sm" data-msg="${k.id}">${im('bell')}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
     ${adults.length ? `<section class="box"><div class="box-h"><h2 class="d">Adultos no jogo</h2></div>
       <p class="lead">Pai, mãe ou outro responsável que faz a rotina junto, sem moedas. Quem sai do jogo continua com o acesso ao painel.</p>
       <div class="list">${adults.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
@@ -830,6 +820,9 @@ async function adminKids(pane, refresh) {
     <label class="check"><input type="checkbox" name="active" ${k.active ? 'checked' : ''}>Ativo na tela de jogadores</label>
     ${k.id ? `<button type="button" class="btn red sm" data-del style="margin-top:14px">Apagar ${esc(k.name)}</button>` : ''}`;
   const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked });
+  const onK = all.filter(k => k.active);
+  $$('[data-msg]').forEach(b => b.onclick = () => messageSheet(onK, [+b.dataset.msg]));
+  const ma = $('#msgAll'); if (ma) ma.onclick = () => messageSheet(onK);
   $('#new').onclick = () => sheet('Novo filho', form(), async (f) => { await api('POST', '/admin/kids', read(f)); toast('Jogador adicionado'); refresh(); }, { saveLabel: 'Adicionar' });
   $$('[data-e]').forEach(b => b.onclick = () => {
     const k = kids.find(x => x.id == b.dataset.e);
@@ -1036,14 +1029,29 @@ const readPrizes = (f, coinHint) => $$('.prow', f).map(r => {
 }).filter(p => p.label);
 const coinTag = (p, lose) => +p.coins ? ` <small class="ptag">${lose ? '−' : '+'}${num(p.coins)} 🪙</small>` : '';
 
+// Aba Roletas: as três juntas (do dia, de correção e extra)
+async function adminWheels(pane) {
+  pane.innerHTML = `<section class="box" id="wDay"></section><section class="box" id="wFix"></section><section class="box" id="wFree"></section>`;
+  const fail = (e) => toast(e.message, true);
+  adminWheel($('#wDay')).catch(fail); adminFix($('#wFix'), 'fix').catch(fail); adminFix($('#wFree'), 'free').catch(fail);
+}
+
+// Miniatura de roleta (só as fatias coloridas), para as listas
+function wheelThumb(n, kind = 'bonus') {
+  const cols = WHEEL_COLS[kind] || WHEEL_COLS.bonus; n = Math.max(2, n);
+  const pt = (a) => { const t = (a - 90) * Math.PI / 180; return `${(50 + 50 * Math.cos(t)).toFixed(2)} ${(50 + 50 * Math.sin(t)).toFixed(2)}`; };
+  return `<svg class="wthumb" viewBox="0 0 100 100" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<path d="M50 50 L${pt(i * 360 / n)} A50 50 0 0 1 ${pt((i + 1) * 360 / n)} Z" fill="${cols[i === n - 1 && i % cols.length === 0 ? 2 : i % cols.length]}" stroke="#0d1b4c" stroke-width="2"/>`).join('')}<circle cx="50" cy="50" r="9" fill="#fff" stroke="#0d1b4c" stroke-width="3"/></svg>`;
+}
+const histBox = (title, rows) => rows ? `<details class="hist"><summary>${title}</summary><div class="list">${rows}</div></details>` : '';
+
 // Roleta do dia: o pai escolhe o que pode cair; quem termina todas as missões gira uma vez por dia
 async function adminWheel(box) {
   const { prizes, spins, sample: isSample } = await api('GET', '/admin/wheel');
   box.innerHTML = `<div class="box-h"><h2 class="d">Roleta do dia</h2><button class="btn green sm" id="wedit">${isSample ? 'Montar roleta' : 'Editar prêmios'}</button></div>
-    <p class="lead">Quando um filho termina todas as missões do dia, ganha um giro. Você escolhe o que pode cair: abraço, 20 minutos de jogo, 50 moedas…</p>
-    ${isSample ? '<p class="hint">Por enquanto a roleta usa estes prêmios de exemplo. Toque em <b>Montar roleta</b> para escolher os seus.</p>' : ''}
-    <div class="prizes">${prizes.map(p => `<span class="prize">${esc(p.emoji || '🎁')} ${esc(p.label)}${coinTag(p)}</span>`).join('')}</div>
-    ${spins.length ? `<h3 class="sub-h">Últimos giros</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} ganhou ${esc(s.emoji || '')} ${esc(s.label)}${coinTag(s)}</div><div class="s">${dayName(s.day)}</div></div></div>`).join('')}</div>` : ''}`;
+    <p class="lead">Quando um filho termina todas as missões do dia, ganha um giro.</p>
+    <div class="item wsum"><div class="ic">${wheelThumb(prizes.length)}</div><div class="grow"><div class="t">${prizes.length} prêmios</div>
+      <div class="s">${isSample ? 'Prêmios de exemplo. Toque em Montar roleta para escolher os seus.' : 'Todos com a mesma chance de cair.'}</div></div></div>
+    ${histBox(`Ver últimos giros (${spins.length})`, spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} ganhou ${esc(s.emoji || '')} ${esc(s.label)}${coinTag(s)}</div><div class="s">${dayName(s.day)}</div></div></div>`).join(''))}`;
   const sample = [['🤗', 'Abraço do pai'], ['🤗', 'Abraço da mãe'], ['🎮', '20 min de game'], ['🍦', 'Sorvete'], ['🎬', 'Escolher o filme'], ['💰', '50 moedas', 50]].map(([emoji, label, coins = 0]) => ({ emoji, label, coins }));
   $('#wedit').onclick = () => {
     const bg = sheet('Prêmios da roleta', `<p class="lead" style="margin-top:6px">Até 12 prêmios, todos com a mesma chance. No campo da moedinha coloque moedas para o prêmio cair direto na conta (ex.: 50). Deixe vazio se não valer moedas.</p>
@@ -1058,67 +1066,85 @@ async function adminWheel(box) {
 }
 
 // Roletas de correção: para implicância, desobediência, gritaria… Os pais escolhem quem gira.
-async function adminFix(box) {
-  const [{ wheels, spins }, kids] = await Promise.all([api('GET', '/admin/fix'), api('GET', '/admin/kids')]);
+async function adminFix(box, kind = 'fix') {
+  const free = kind === 'free';
+  const [{ wheels: all, spins: allSpins }, kids] = await Promise.all([api('GET', '/admin/fix'), api('GET', '/admin/kids')]);
+  const wheels = all.filter(w => (w.kind || 'fix') === kind), spins = allSpins.filter(s => (s.kind || 'fix') === kind);
   const on = kids.filter(k => k.active);
   const when = (t) => new Date(t.replace(' ', 'T') + (t.endsWith('Z') ? '' : 'Z')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  box.innerHTML = `<div class="box-h"><h2 class="d">Roletas de correção</h2>${wheels.length ? '<button class="btn ghost sm" id="fixNew">Nova roleta</button>' : ''}</div>
-    <p class="lead">Para os momentos de confusão: implicância com o irmão, desobediência, gritaria. Escolha quem e qual roleta; gira aqui no seu aparelho ou na tela dele.</p>
-    ${wheels.length ? `<div class="list">${wheels.map(w => `<div class="item"><div class="ic fix-ic">${esc(w.items[0]?.emoji || '⚖️')}</div><div class="grow"><div class="t">${esc(w.name)}</div>
-      <div class="s">${w.items.map(i => esc(i.label)).join(' · ')}</div></div>
+  box.innerHTML = `<div class="box-h"><h2 class="d">${free ? 'Roletas extras' : 'Roletas de correção'}</h2>${wheels.length ? `<button class="btn ghost sm" id="fixNew">Nova roleta</button>` : ''}</div>
+    <p class="lead">${free ? 'Para dar um bônus, fazer um sorteio ou só brincar. Não depende das missões: você escolhe quem gira e o que cai. As moedinhas dos itens entram na conta de quem girar.' : 'Para os momentos de confusão: implicância com o irmão, desobediência, gritaria. Escolha quem e qual roleta; gira aqui no seu aparelho ou na tela dele.'}</p>
+    ${free && on.length > 1 ? `<div class="draw-row"><button class="btn green sm" id="drawBtn">${im('people')}Sortear entre os filhos</button></div>` : ''}
+    ${wheels.length ? `<div class="list">${wheels.map(w => `<div class="item"><div class="ic">${wheelThumb(w.items.length, free ? 'bonus' : 'fix')}</div><div class="grow"><div class="t">${esc(w.name)}</div>
+      <div class="s">${w.items.length} itens</div></div>
       <div class="btns"><button class="btn sm" data-use="${w.id}">Usar</button><button class="btn ghost sm" data-fe="${w.id}">Editar</button></div></div>`).join('')}</div>`
+    : free ? `<div class="fix-empty">${zero('party', 'Nenhuma roleta extra ainda.')}<div class="actions"><button class="btn green" id="fixNew">Criar uma roleta extra</button></div>
+      <p class="hint">Exemplos: "Bônus do fim de semana", "Quem escolhe o filme", "Sorteio do doce".</p></div>`
     : `<div class="fix-empty">${zero('shield', 'Nenhuma roleta de correção ainda.')}<div class="actions"><button class="btn green" id="fixSample">Começar com sugestões</button><button class="btn ghost" id="fixNew">Criar do zero</button></div>
       <p class="hint">As sugestões trazem Desobediência, Implicância e Gritaria. Você pode mudar tudo depois.</p></div>`}
-    ${spins.length ? `<h3 class="sub-h">Últimas correções</h3><div class="list">${spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} · ${esc(s.wheel_name)}</div>
-      <div class="s">${when(s.created_at)} · ${s.spun_at ? `<b>${esc(s.emoji || '')} ${esc(s.label)}</b>${s.coins ? ` (−${num(s.coins)} moedas)` : ''}` : 'esperando girar na tela dele'}</div></div>
-      ${s.spun_at ? '' : `<div class="btns"><button class="btn ghost sm" data-fx="${s.id}">Cancelar</button></div>`}</div>`).join('')}</div>` : ''}`;
-  const reload = () => adminFix(box).catch(e => toast(e.message, true));
+    ${histBox(`${free ? 'Ver últimos giros' : 'Ver últimas correções'} (${spins.length})`, spins.map(s => `<div class="item"><div class="grow"><div class="t">${esc(s.kid)} · ${esc(s.wheel_name)}</div>
+      <div class="s">${when(s.created_at)} · ${s.spun_at ? `<b>${esc(s.emoji || '')} ${esc(s.label)}</b>${s.coins ? ` (${free ? '+' : '−'}${num(s.coins)} moedas)` : ''}` : 'esperando girar na tela dele'}</div></div>
+      ${s.spun_at ? '' : `<div class="btns"><button class="btn ghost sm" data-fx="${s.id}">Cancelar</button></div>`}</div>`).join(''))}`;
+  const reload = () => adminFix(box, kind).catch(e => toast(e.message, true));
   const edit = (w) => {
-    const bg = sheet(w ? 'Editar roleta' : 'Nova roleta de correção', `<div class="field"><label for="fxn">Nome da roleta</label><input id="fxn" name="name" maxlength="40" value="${esc(w?.name || '')}" placeholder="Implicância" required></div>
-      <p class="lead" style="margin-top:4px">O que pode cair (até 12, todos com a mesma chance). No campo da moedinha coloque quantas moedas a criança perde, se quiser.</p>
-      ${prizeEditor(w ? w.items : [{}, {}, {}], 'lose')}
+    const bg = sheet(w ? 'Editar roleta' : free ? 'Nova roleta extra' : 'Nova roleta de correção', `<div class="field"><label for="fxn">Nome da roleta</label><input id="fxn" name="name" maxlength="40" value="${esc(w?.name || '')}" placeholder="Implicância" required></div>
+      <p class="lead" style="margin-top:4px">${free ? 'O que pode cair (até 12, todos com a mesma chance). No campo da moedinha coloque quantas moedas a criança ganha, se quiser.' : 'O que pode cair (até 12, todos com a mesma chance). No campo da moedinha coloque quantas moedas a criança perde, se quiser.'}</p>
+      ${prizeEditor(w ? w.items : [{}, {}, {}], free ? '' : 'lose')}
       ${w ? '<button type="button" class="btn ghost sm danger-link" id="fxDel">Apagar esta roleta</button>' : ''}`,
       async (f) => {
-        const body = { name: f.name.value, items: readPrizes(f, 'lose') };
+        const body = { name: f.name.value, items: readPrizes(f, free ? '' : 'lose'), kind };
         if (body.items.length < 2) throw new Error('Coloque pelo menos 2 itens');
         if (w) await api('PUT', '/admin/fix/' + w.id, body); else await api('POST', '/admin/fix', body);
         toast('Roleta salva'); reload();
       });
-    wirePrizeEditor(bg, 'lose');
+    wirePrizeEditor(bg, free ? '' : 'lose');
     const del = $('#fxDel', bg);
     if (del) del.onclick = () => sheet(`Apagar "${w.name}"?`, '<p class="lead" style="margin-top:6px">O histórico das correções já feitas continua.</p>',
       async () => { await api('DELETE', '/admin/fix/' + w.id); bg.remove(); toast('Roleta apagada'); reload(); }, { saveLabel: 'Apagar', danger: true });
   };
   $$('#fixNew', box).forEach(b => b.onclick = () => edit(null));
   const smp = $('#fixSample', box); if (smp) smp.onclick = guard(async () => { await api('POST', '/admin/fix/samples'); sfx.done(); toast('Roletas criadas'); reload(); });
+  const dr = $('#drawBtn', box); if (dr) dr.onclick = () => sheet('Sortear entre os filhos', `<div class="field"><span class="lab">Quem entra no sorteio?</span><div class="kid-pick">${on.map(k => `<label class="kp-check"><input type="checkbox" name="to" value="${k.id}" checked><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>`,
+    async (f) => {
+      const ids = $$('[name=to]:checked', f).map(x => +x.value);
+      if (ids.length < 2) throw new Error('Escolha pelo menos 2 jogadores');
+      const first = await api('POST', '/admin/draw', { kid_ids: ids }); let used = false;
+      setTimeout(() => openWheel({ ...freeWheel({ name: 'Sorteio', prizes: first.prizes }, async () => { if (used) return api('POST', '/admin/draw', { kid_ids: ids }); used = true; return first; }, 'Quem será o sorteado?', 'Sorteado:'), done: reload }), 50);
+    }, { saveLabel: 'Sortear' });
   $$('[data-fe]', box).forEach(b => b.onclick = () => edit(wheels.find(w => w.id === +b.dataset.fe)));
   $$('[data-fx]', box).forEach(b => b.onclick = guard(async () => { await api('DELETE', '/admin/fix-spins/' + b.dataset.fx); toast('Correção cancelada'); reload(); }));
   $$('[data-use]', box).forEach(b => b.onclick = () => {
     const w = wheels.find(x => x.id === +b.dataset.use);
     if (!on.length) return toast('Cadastre um jogador primeiro', true);
-    const bg = sheet(`Roleta: ${w.name}`, `<div class="field"><span class="lab">Quem vai girar?</span><div class="kid-pick">${on.map((k, i) => `<label class="kp-check"><input type="radio" name="kid" value="${k.id}" ${on.length === 1 && !i ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
+    const bg = sheet(`Roleta: ${w.name}`, `<div class="field"><span class="lab">Quem vai girar?</span><div class="kid-pick">${free ? `<label class="kp-check"><input type="radio" name="kid" value="0"><span style="--c:#8892b0">${im('party')}Só por diversão</span></label>` : ''}${on.map((k, i) => `<label class="kp-check"><input type="radio" name="kid" value="${k.id}" ${on.length === 1 && !i ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
       <div class="field"><span class="lab">Onde girar</span>${seg('where', [['here', 'Aqui, agora'], ['kid', 'Na tela dele']], 'here')}</div>`,
       async (f) => {
+        if (free && f.kid.value === '0') { // ninguém ganha nada: só gira aqui na tela
+          setTimeout(() => openWheel({ ...freeWheel({ name: w.name, prizes: w.items }, () => api('POST', `/admin/fix/${w.id}/free-spin`, {}), 'Só por diversão: ninguém ganha moedas.', 'Saiu:'), done: reload }), 50);
+          return;
+        }
         const kid = on.find(k => k.id === +(f.kid.value || 0));
         if (!kid) throw new Error('Escolha quem vai girar');
         const r = await api('POST', `/admin/fix/${w.id}/apply`, { kid_id: kid.id });
         if (f.where.value === 'kid') { toast(`Pronto: a roleta aparece na tela de ${kid.name}`); reload(); return; }
-        setTimeout(() => openWheel({ ...fixWheel(r, () => api('POST', `/admin/fix-spins/${r.id}/spin`, {}), kid.name), done: reload }), 50);
+        setTimeout(() => openWheel({ ...(free ? freeWheel(r, () => api('POST', `/admin/fix-spins/${r.id}/spin`, {}), `Vez de ${kid.name} girar!`) : fixWheel(r, () => api('POST', `/admin/fix-spins/${r.id}/spin`, {}), kid.name)), done: reload }), 50);
       }, { saveLabel: 'Continuar' });
     bg.querySelector('.kid-pick').addEventListener('change', () => sfx.tap());
   });
 }
 
 async function adminRewards(pane, refresh) {
-  const [rewards, allKids] = await Promise.all([api('GET', '/admin/rewards'), api('GET', '/admin/kids')]);
+  const [rewards, allKids, allTasks, wal] = await Promise.all([api('GET', '/admin/rewards'), api('GET', '/admin/kids'), api('GET', '/admin/tasks'), api('GET', '/admin/wallet')]);
+  // progresso de cada filho nas metas, e quem pode usar o tempo de tela
+  const prog = (r) => wal.kids.map(k => ({ k, g: k.goals.find(g => g.id === r.id) })).filter(x => x.g);
+  const myTasks = allTasks.filter(t => t.active);
   const kidsOnly = allKids.filter(k => k.active && !k.adult);
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Recompensas e metas</h2><button class="btn green sm" id="new">Nova recompensa</button></div>
     <p class="lead">Tempo de tela: o total do dia é dividido igualmente entre as tarefas ligadas a ele (20 min com 10 tarefas = 2 min cada). Metas contam missões ou moedas até serem alcançadas.</p>
     ${rewards.length ? `<div class="list">${rewards.map(r => `<div class="item ${r.active ? '' : 'off'}"><div class="ic">${im(r.icon, '', 'game')}</div><div class="grow"><div class="t">${esc(r.title)}</div>
-      <div class="s">${r.kind === 'time' ? `${num(r.total_value)} ${esc(r.unit)} por dia · ${r.task_count} tarefa(s)${r.task_count ? ` · ${num(r.total_value / r.task_count)} ${esc(r.unit)} cada` : ''}` : `Meta: ${num(r.total_value)} ${r.goal_mode === 'coins' ? 'moedas' : 'missões'}`}${r.kid_id ? ` · <b>só para ${esc(r.kid_name || '?')}</b>` : ''}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-e="${r.id}">Editar</button></div></div>`).join('')}</div>` : zero('gift', 'Crie tempo de videogame, YouTube ou uma meta como ir ao parque.')}</section>
-    <section class="box" id="wheelBox"></section>`;
-  adminWheel($('#wheelBox')).catch(e => toast(e.message, true));
+      <div class="s">${r.kind === 'time' ? `${num(r.total_value)} ${esc(r.unit)} por dia · ${r.task_count} tarefa(s)${r.task_count ? ` · ${num(r.total_value / r.task_count)} ${esc(r.unit)} cada` : ''}` : `Meta: ${num(r.total_value)} ${r.goal_mode === 'coins' ? 'moedas' : 'missões'}`}${r.kid_id ? ` · <b>só para ${esc(r.kid_name || '?')}</b>` : ''}</div>
+      ${r.kind === 'goal' && r.active ? `<div class="gprog">${prog(r).map(({ k, g }) => `<div class="gp"><span class="gn">${esc(k.name)}</span><span class="bar"><i style="width:${Math.min(100, g.progress / g.target * 100).toFixed(1)}%"></i></span><span class="num">${num(g.progress)}/${num(g.target)}</span>${g.ready && full() ? `<button class="btn green sm" data-redeem="${k.id}:${r.id}">Entregar</button>` : ''}</div>`).join('')}</div>` : ''}</div>
+      <div class="btns">${r.kind === 'time' && r.active && wal.kids.length ? `<button class="btn ghost sm" data-use="${r.id}">${im('stopwatch')}Tempo usado</button>` : ''}<button class="btn ghost sm" data-e="${r.id}">Editar</button></div></div>`).join('')}</div>` : zero('gift', 'Crie tempo de videogame, YouTube ou uma meta como ir ao parque.')}</section>`;
   const form = (r = { title: '', icon: 'game', kind: 'time', unit: 'min', total_value: 20, goal_mode: 'tasks', active: 1 }) => `
     ${iconName('rn', 'Nome', `<input id="rn" name="title" value="${esc(r.title)}" placeholder="Videogame, YouTube, Parque de diversão" required>`, REWARD_ICONS, slug(r.icon, 'game'))}
     <div class="field"><span class="lab">Tipo</span>${seg('kind', [['time', 'Tempo por dia'], ['goal', 'Meta']], r.kind)}</div>
@@ -1126,10 +1152,18 @@ async function adminRewards(pane, refresh) {
     <div class="field"><label for="rv" data-lbl>Minutos por dia</label><input id="rv" type="number" step="any" min="1" name="total_value" value="${r.total_value}" inputmode="decimal" required></div>
     ${kidsOnly.length > 1 || r.kid_id ? `<div class="field"><label for="rk">Para quem</label><select id="rk" name="kid_id"><option value="">Todos os filhos</option>${kidsOnly.map(k => `<option value="${k.id}" ${k.id === r.kid_id ? 'selected' : ''}>Só ${esc(k.name)}</option>`).join('')}</select>
       <p class="hint">Só aquele filho vê e ganha esta recompensa, mesmo que as tarefas sejam de todos.</p></div>` : ''}
+    ${myTasks.length ? `<div class="field" data-tasks><span class="lab">Missões que contam <button type="button" class="btn ghost sm" data-all>Marcar todas</button> <button type="button" class="btn ghost sm" data-none>Tirar todas</button></span>
+      <div class="rw-tasks">${myTasks.map(t => `<label class="check"><input type="checkbox" name="tk" value="${t.id}" ${!r.id || t.reward_ids.includes(r.id) ? 'checked' : ''}>${esc(t.title)}</label>`).join('')}</div>
+      <p class="hint">Tempo: o total do dia é dividido entre as missões marcadas. Meta: cada missão feita soma +1. Missões novas você liga na própria missão.</p></div>` : ''}
     <label class="check"><input type="checkbox" name="active" ${r.active ? 'checked' : ''}>Ativa</label>`;
-  const read = (f) => ({ title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked, kid_id: f.kid_id ? +f.kid_id.value || null : null });
-  const wire = (bg) => { const f = bg.querySelector('form'); const u = () => { $('[data-show]', f).hidden = f.kind.value !== 'goal'; $('[data-lbl]', f).textContent = f.kind.value === 'goal' ? (f.goal_mode.value === 'coins' ? 'Quantas moedas custa' : 'Quantas missões para alcançar') : 'Minutos por dia'; }; f.addEventListener('change', u); u(); };
+  const read = (f) => ({ task_ids: myTasks.length ? $$('[name=tk]:checked', f).map(x => +x.value) : undefined, title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked, kid_id: f.kid_id ? +f.kid_id.value || null : null });
+  const wire = (bg) => { const f = bg.querySelector('form'); const tk = $('[data-tasks]', f); if (tk) { $('[data-all]', tk).onclick = () => $$('[name=tk]', tk).forEach(x => { x.checked = true; }); $('[data-none]', tk).onclick = () => $$('[name=tk]', tk).forEach(x => { x.checked = false; }); }
+    const u = () => { $('[data-show]', f).hidden = f.kind.value !== 'goal'; if (tk) tk.hidden = f.kind.value === 'goal' && f.goal_mode.value === 'coins'; $('[data-lbl]', f).textContent = f.kind.value === 'goal' ? (f.goal_mode.value === 'coins' ? 'Quantas moedas custa' : 'Quantas missões para alcançar') : 'Minutos por dia'; }; f.addEventListener('change', u); u(); };
   $('#new').onclick = () => wire(sheet('Nova recompensa', form(), async (f) => { await api('POST', '/admin/rewards', read(f)); toast('Recompensa criada'); refresh(); }, { saveLabel: 'Criar' }));
+  $$('[data-use]').forEach(b => b.onclick = () => { const r = rewards.find(x => x.id == b.dataset.use); sheet(`Tempo usado: ${r.title}`, `<div class="field"><label for="uk">Quem usou</label><select id="uk" name="kid">${wal.kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select></div><div class="field"><label for="um">Minutos usados hoje</label><input id="um" name="m" type="number" step="any" min="1" required inputmode="numeric"></div>`,
+    async (f) => { await api('POST', '/admin/use-time', { kid_id: +f.kid.value, reward_id: r.id, minutes: f.m.value }); toast('Tempo descontado'); refresh(); }, { saveLabel: 'Descontar' }); });
+  $$('[data-redeem]').forEach(b => b.onclick = () => { const [k, g] = b.dataset.redeem.split(':'); sheet('Entregar meta', '<p class="lead" style="margin-top:6px">Confirme que o prêmio foi entregue. O progresso da meta volta a zero (metas em moedas descontam as moedas).</p>',
+    async () => { await api('POST', '/admin/redeem', { kid_id: +k, reward_id: +g }); sfx.win(); toast('Meta entregue'); refresh(); }, { saveLabel: 'Confirmar entrega' }); });
   $$('[data-e]').forEach(b => b.onclick = () => { const r = rewards.find(x => x.id == b.dataset.e); wire(sheet('Editar recompensa', form(r), async (f) => { await api('PUT', '/admin/rewards/' + r.id, read(f)); refresh(); })); });
 }
 
@@ -1140,49 +1174,46 @@ const dayName = (s) => {
   if (s === ymd(y)) return 'Ontem';
   return `${DAYN[new Date(s + 'T12:00:00').getDay()]}, ${dmy(s).slice(0, 5)}`;
 };
-// Extrato: um dia por linha com quanto cada filho ganhou; tocar no dia abre o que foi feito
-async function walletStatement(box) {
-  const [days, kids] = await Promise.all([api('GET', '/admin/statement'), api('GET', '/admin/kids')]);
-  const K = Object.fromEntries(kids.map(k => [k.id, k]));
-  const month = ymd(new Date()).slice(0, 7), tot = {};
-  days.filter(d => d.day.startsWith(month)).forEach(d => Object.entries(d.kids).forEach(([id, v]) => { tot[id] = (tot[id] || 0) + v.coins; }));
-  const gain = (coins, time) => [coins ? `${im('coin')}<b class="num">+${num(coins)}</b>` : '', time ? `<i class="num">+${num(time)} min</i>` : ''].join('');
-  box.innerHTML = `<div class="box-h"><h2 class="d">Extrato</h2><span class="s muted">últimos 90 dias</span></div>
-    ${Object.keys(tot).length ? `<div class="month-sum"><span>Neste mês</span>${Object.entries(tot).map(([id, c]) => `<span class="sc">${im(K[id]?.avatar, '', 'fox')}${esc(K[id]?.name || '?')} ${im('coin')}<b class="num">${num(c)}</b></span>`).join('')}</div>` : ''}
-    ${days.length ? `<div class="stmt">${days.map(d => `<details class="sday" data-day="${d.day}"><summary><span class="dl">${dayName(d.day)}</span>
-      <span class="dk">${Object.entries(d.kids).map(([id, v]) => `<span class="sc" title="${esc(K[id]?.name || '')}">${im(K[id]?.avatar, '', 'fox')}${gain(v.coins, v.time) || '<b class="num">0</b>'}</span>`).join('')}</span></summary>
-      <div class="dd">Carregando…</div></details>`).join('')}</div>` : zero('chart', 'Os ganhos de cada dia aparecem aqui quando as tarefas forem aprovadas.')}`;
-  $$('.sday', box).forEach(el => el.addEventListener('toggle', guard(async () => {
-    if (!el.open || el.dataset.loaded) return;
-    el.dataset.loaded = 1;
-    const det = await api('GET', '/admin/statement/' + el.dataset.day);
-    el.querySelector('.dd').innerHTML = Object.entries(det).map(([id, v]) => `<div class="sk"><div class="sk-h">${im(K[id]?.avatar, '', 'fox')}<b>${esc(K[id]?.name || '?')}</b></div><ul>
-      ${v.tasks.map(t => `<li>${im(t.icon)}<span class="grow">${esc(t.title)}</span>${t.status === 'rejected' ? '<span class="tag no">Rejeitada</span>' : `<span class="g">${gain(t.coins, t.time) || '<i>sem ganho</i>'}</span>`}</li>`).join('')}
-      ${v.other.map(o => `<li>${im(o.kind === 'time' ? 'stopwatch' : o.amount < 0 ? 'moneybag' : 'gift')}<span class="grow">${esc(o.note || 'Ajuste')}</span><span class="g ${o.amount < 0 ? 'neg' : ''}"><b class="num">${o.amount > 0 ? '+' : ''}${num(o.amount)}</b> ${o.kind === 'time' ? 'min' : o.kind === 'goal' ? 'na meta' : 'moedas'}</span></li>`).join('')}
-    </ul></div>`).join('') || '<p class="hint">Nada registrado neste dia.</p>';
-  })));
+// Extrato de um filho por vez, como extrato de banco: dia, valor que entrou ou saiu e saldo no fim do dia
+async function walletStatement(box, kids) {
+  const days = await api('GET', '/admin/statement');
+  const list = kids.filter(k => days.some(d => d.kids[k.id]));
+  let cur = +(store.get('gt-stmt-kid') || 0); if (!list.some(k => k.id === cur)) cur = list[0]?.id;
+  const cache = {};
+  const sign = (v) => `${v < 0 ? '−' : '+'}${num(Math.abs(v))}`;
+  const draw = () => {
+    const mine = days.filter(d => d.kids[cur]), month = ymd(new Date()).slice(0, 7);
+    const m = mine.filter(d => d.day.startsWith(month));
+    const mi = m.reduce((a, d) => a + d.kids[cur].in, 0), mo = m.reduce((a, d) => a + d.kids[cur].out, 0);
+    box.innerHTML = `<div class="box-h"><h2 class="d">Extrato</h2><span class="s muted">últimos 90 dias, em moedas</span></div>
+      ${list.length > 1 ? `<div class="stmt-kids" role="tablist">${list.map(k => `<button type="button" role="tab" aria-selected="${k.id === cur}" class="${k.id === cur ? 'on' : ''}" data-k="${k.id}">${im(k.avatar, '', 'fox')}${esc(k.name)}</button>`).join('')}</div>` : ''}
+      ${mine.length ? `<div class="stmt-month"><span>Neste mês</span><span>Entrou <b class="pos num">+${num(mi)}</b></span><span>Saiu <b class="neg num">−${num(mo)}</b></span></div>
+      <div class="stmt-head"><span>Dia</span><span>Valor</span><span>Saldo</span></div>
+      <div class="stmt">${mine.map(d => { const v = d.kids[cur]; return `<details class="sday" data-day="${d.day}"><summary><span class="dl">${dayName(d.day)}</span><i class="dots"></i><span class="amt num ${v.net < 0 ? 'neg' : 'pos'}">${sign(v.net)}</span><span class="bal num">${num(v.saldo)}</span></summary><ul class="dd"><li>Carregando…</li></ul></details>`; }).join('')}</div>`
+      : zero('chart', 'As moedas que entram e saem aparecem aqui, dia a dia.')}`;
+    $$('[data-k]', box).forEach(b => b.onclick = () => { cur = +b.dataset.k; store.set('gt-stmt-kid', String(cur)); sfx.tap(); draw(); });
+    $$('.sday', box).forEach(el => el.addEventListener('toggle', guard(async () => {
+      if (!el.open) return;
+      const det = cache[el.dataset.day] ||= await api('GET', '/admin/statement/' + el.dataset.day);
+      el.querySelector('.dd').innerHTML = (det[cur] || []).map(x => `<li><span class="grow">${esc(x.title)}${x.brl != null ? ` <small>(${brl(x.brl)})</small>` : ''}</span><i class="dots"></i><span class="amt num ${x.amount < 0 ? 'neg' : 'pos'}">${sign(x.amount)}</span></li>`).join('') || '<li>Nada neste dia.</li>';
+    })));
+  };
+  draw();
 }
 
 async function adminWallet(pane, refresh) {
   const w = await api('GET', '/admin/wallet');
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Carteira</h2><span class="s" style="font-weight:800;color:var(--ink-soft)">1 moeda = ${brl(w.settings.coin_value)}</span></div>
-    ${w.kids.map(k => `<div class="wallet-kid">${im(k.avatar, '', 'fox')}<div class="t" style="font-weight:900;font-size:18px">${esc(k.name)}</div>
-      <div class="money"><span class="d num">${num(k.balance)} moedas</span><span class="s" style="font-weight:800;color:var(--ink-soft)">${brl(k.value)} · tempo hoje ${num(k.time_today)} min</span></div>
-      ${k.goals.length ? `<div class="goals">${k.goals.map(g => `<div class="g">${im(g.icon, '', 'trophy')}${esc(g.title)}: ${num(g.progress)}/${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'} ${g.ready && full() ? `<button class="btn green sm" data-redeem="${k.id}:${g.id}">Entregar meta</button>` : ''}</div>`).join('')}</div>` : ''}
-      <div class="btns">${full() ? `<button class="btn sm" data-pay="${k.id}" ${k.balance > 0 ? '' : 'disabled'}>${im('moneybag')}Pagar moedas</button>
-        <button class="btn ghost sm" data-adj="${k.id}">Bônus ou desconto</button>` : ''}${w.timeRewards.length ? `<button class="btn ghost sm" data-use="${k.id}">${im('stopwatch')}Tempo usado</button>` : ''}</div></div>`).join('') || zero('people', 'Cadastre os filhos primeiro.')}</section>
-    <section class="box" id="stmt"></section>
-    <section class="box"><div class="box-h"><h2 class="d">Pagamentos</h2></div>${w.payouts.length ? `<table><thead><tr><th>Data</th><th>Filho</th><th>Moedas</th><th>Valor</th></tr></thead><tbody>${w.payouts.map(p => `<tr><td>${dmy(p.created_at)}</td><td>${esc(p.kid)}</td><td>${num(p.coins)}</td><td>${brl(p.amount)}</td></tr>`).join('')}</tbody></table>` : zero('moneybag', 'Nenhum pagamento ainda.')}</section>`;
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Carteira</h2><span class="rate">1 moeda = ${brl(w.settings.coin_value)}</span></div>
+    ${w.kids.length ? `<div class="accts">${w.kids.map(k => `<div class="acct"><div class="acct-who">${im(k.avatar, '', 'fox')}<b>${esc(k.name)}</b></div>
+      <div class="acct-bal"><span class="num">${im('coin')}${num(k.balance)}</span><small class="num">${brl(k.value)}</small></div>
+      ${full() ? `<div class="acct-act"><button class="btn sm" data-pay="${k.id}" ${k.balance > 0 ? '' : 'disabled'}>Pagar</button><button class="btn ghost sm" data-adj="${k.id}">Ajustar</button></div>` : ''}</div>`).join('')}</div>` : zero('people', 'Cadastre os filhos primeiro.')}</section>
+    <section class="box" id="stmt"></section>`;
   const kid = (id) => w.kids.find(k => k.id == id);
-  $$('[data-pay]').forEach(b => b.onclick = () => { const k = kid(b.dataset.pay); sheet(`Pagar ${k.name}`, `<p class="lead" style="margin-top:6px">Saldo: <b>${num(k.balance)} moedas</b> (${brl(k.value)}). As moedas pagas saem do saldo.</p><div class="field"><label for="pc">Quantas moedas pagar</label><input id="pc" name="coins" type="number" step="any" min="0.01" max="${k.balance}" value="${k.balance}" inputmode="decimal"></div>`,
+  $$('[data-pay]').forEach(b => b.onclick = () => { const k = kid(b.dataset.pay); sheet(`Pagar ${k.name}`, `<p class="lead" style="margin-top:6px">Saldo: <b>${num(k.balance)} moedas</b> (${brl(k.value)}). As moedas pagas saem do saldo e aparecem no extrato.</p><div class="field"><label for="pc">Quantas moedas pagar</label><input id="pc" name="coins" type="number" step="any" min="0.01" max="${k.balance}" value="${k.balance}" inputmode="decimal"></div>`,
     async (f) => { const r = await api('POST', '/admin/payout', { kid_id: k.id, coins: f.coins.value }); sfx.win(); toast(`Pagamento de ${brl(r.amount)} registrado`); refresh(); }, { saveLabel: 'Confirmar pagamento' }); });
-  $$('[data-adj]').forEach(b => b.onclick = () => { const k = kid(b.dataset.adj); sheet(`Moedas de ${k.name}`, `<div class="field"><label for="aa">Quantidade</label><input id="aa" name="amount" type="number" step="any" required inputmode="decimal"><p class="hint">Positivo dá bônus, negativo desconta.</p></div><div class="field"><label for="an">Motivo</label><input id="an" name="note" placeholder="Ajudou a lavar o carro"></div>`,
+  $$('[data-adj]').forEach(b => b.onclick = () => { const k = kid(b.dataset.adj); sheet(`Bônus ou desconto para ${k.name}`, `<div class="field"><label for="aa">Moedas</label><input id="aa" name="amount" type="number" step="any" required inputmode="decimal"><p class="hint">Positivo dá bônus, negativo desconta.</p></div><div class="field"><label for="an">Motivo</label><input id="an" name="note" placeholder="Ajudou a lavar o carro"></div>`,
     async (f) => { await api('POST', '/admin/adjust', { kid_id: k.id, amount: f.amount.value, note: f.note.value }); toast('Saldo ajustado'); refresh(); }); });
-  $$('[data-use]').forEach(b => b.onclick = () => { const k = kid(b.dataset.use); sheet(`Tempo usado por ${k.name}`, `<div class="field"><label for="ur">Recompensa</label><select id="ur" name="rw">${w.timeRewards.map(r => `<option value="${r.id}">${esc(r.title)}</option>`).join('')}</select></div><div class="field"><label for="um">Minutos usados</label><input id="um" name="m" type="number" step="any" min="1" required inputmode="numeric"></div>`,
-    async (f) => { await api('POST', '/admin/use-time', { kid_id: k.id, reward_id: f.rw.value, minutes: f.m.value }); toast('Tempo descontado'); refresh(); }, { saveLabel: 'Descontar' }); });
-  $$('[data-redeem]').forEach(b => b.onclick = () => { const [k, g] = b.dataset.redeem.split(':'); sheet('Entregar meta', '<p class="lead" style="margin-top:6px">Confirme que a recompensa foi entregue. O progresso da meta volta a zero (metas em moedas descontam as moedas).</p>',
-    async () => { await api('POST', '/admin/redeem', { kid_id: +k, reward_id: +g }); sfx.win(); toast('Meta entregue'); refresh(); }, { saveLabel: 'Confirmar entrega' }); });
-  await walletStatement($('#stmt'));
+  await walletStatement($('#stmt'), w.kids);
 }
 
 async function adminSettings(pane, refresh) {
