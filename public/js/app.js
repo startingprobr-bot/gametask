@@ -714,10 +714,10 @@ async function viewKid(id) {
     const mission = (t, i) => {
       const chips = [
         t.late && !doneLike(t.status) ? `<span class="chip late">Ficou de ontem</span>` : '',
-        t.time ? `<span class="chip hour">${esc(t.time)}</span>` : t.until && !doneLike(t.status) ? `<span class="chip until">até ${esc(t.until)}</span>` : '',
-        t.timer ? `<span class="chip time">${im('stopwatch')}${num(t.timer.minutes)} min</span>` : '',
-        t.coins > 0 ? `<span class="chip">${im('coin')}+${num(t.coins)}</span>` : '',
-        ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}+${num(r.value)} ${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}+1</span>`),
+        t.time ? `<span class="chip hour">${esc(t.time)}</span>` : '',
+        t.timer ? `<span class="chip time">${im('stopwatch')}${Math.round(t.timer.minutes)}min</span>` : '',
+        t.coins > 0 ? `<span class="chip">${im('coin')}${num(t.coins)}</span>` : '',
+        ...t.rewards.map(r => r.kind === 'time' ? `<span class="chip time">${im(r.icon, '', 'game')}${Math.max(1, Math.round(r.value))}${esc(r.unit)}</span>` : `<span class="chip goal">${im(r.icon, '', 'trophy')}1</span>`),
       ].join('');
       const tm = t.timer, trun = tm && running(tm), tkey = `${d.kid.id}:t${t.id}`;
       const act = t.status === 'todo' && tm ? `<button class="btn ${trun ? '' : 'green'} go tgo ${trun ? 'on' : ''}" data-tt="${t.id}" aria-label="${trun ? 'Pausar' : 'Começar'} o cronômetro">${trun ? SVG.pause : SVG.play}<span>${trun ? 'Pausar' : tm.left * 60 < tm.minutes * 60 - 1 ? 'Continuar' : 'Começar'}</span><b class="num" ${trun ? `data-clock="${tkey}"` : ''}>${mmss(trun ? clockLeft(d.kid.id, { id: t.id, ...tm }, 't') : tm.left * 60)}</b></button>`
@@ -725,7 +725,7 @@ async function viewKid(id) {
         : doneLike(t.status) ? `<span class="status ok">${im('check')}Feito!</span>${t.status === 'pending' || d.kid.adult ? `<button class="link" data-undo="${t.id}">Desfazer</button>` : ''}`
         : `<span class="status no">${im('cross')}Refazer</span>`;
       return `<article class="mission ${doneLike(t.status) ? 'done' : t.status === 'rejected' ? 'rejected' : ''}" data-m="${t.id}" style="animation-delay:${i * 45}ms">
-        <div class="info"><div class="ttl" data-say="${t.id}" role="button" tabindex="0" aria-label="${esc(t.title)}. Toque para ouvir"><span class="tile" data-tile="${t.id}">${im(t.icon)}</span><span class="tt">${esc(t.title)}</span></div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
+        <div class="info"><span class="tile" data-tile="${t.id}">${im(t.icon)}</span><div class="ttl" data-say="${t.id}" role="button" tabindex="0" aria-label="${esc(t.title)}. Toque para ouvir"><span class="tt">${esc(t.title)}</span></div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
         <div class="act">${act}</div></article>`;
     };
     const head = todo.length ? (todo.length === 1 ? 'Falta 1!' : `Faltam ${todo.length}!`) : d.total ? 'Tudo feito!' : 'Dia livre!';

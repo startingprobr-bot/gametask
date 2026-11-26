@@ -1094,3 +1094,14 @@ button.meter:active{transform:scale(.98)}
 .loader.soft{background:rgba(234,242,255,.82);backdrop-filter:blur(3px)}
 .loader.soft img{width:72px;height:72px}
 .loader.soft span{color:var(--ink-soft)}
+
+/* ---- Cartão da missão (v6): ícone grande à esquerda ocupando título + etiquetas ---- */
+.mission .info{display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center}
+.mission .info>.tile{grid-row:1/span 3;width:54px;height:54px;border-radius:15px;align-self:center}
+.mission .info>.tile img{width:42px;height:42px}
+.mission .info>.ttl,.mission .info>.desc,.mission .info>.chips{grid-column:2}
+.mission .ttl{font-size:18px}
+.mission .chips{margin-top:4px}
+@media (max-width:620px){
+  .mission .info>.tile{width:50px;height:50px}.mission .info>.tile img{width:40px;height:40px}
+}
