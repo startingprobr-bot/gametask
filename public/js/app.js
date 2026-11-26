@@ -39,10 +39,13 @@ const SVG = {
 };
 
 // ---------- API ----------
+// este aparelho: token do app Android ou o endereço dos avisos do navegador (quando houver)
+const devId = () => (typeof fcmTok !== 'undefined' && fcmTok) || (typeof pushEndpoint !== 'undefined' && pushEndpoint) || '';
 async function api(method, url, body) {
   const pdev = PAINEL && store.get('gt-pdev');
   let r;
-  try { r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
+  const me = devId();
+  try { r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
   catch { throw new Error('Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
@@ -313,6 +316,7 @@ async function checkMessages() {
   } catch {}
 }
 setInterval(checkMessages, 10000);
+setTimeout(() => { if (!NATIVE && pushEndpoint === null && 'serviceWorker' in navigator) { pushEndpoint = ''; mySub().then(s => { pushEndpoint = s?.endpoint || ''; }).catch(() => {}); } }, 1500);
 
 // ---------- App Android: alarme de despertador no próprio celular ----------
 // O site manda a agenda dos próximos 7 dias (avisos, missões com horário e cronômetros ligados aqui);
@@ -703,8 +707,8 @@ async function viewKid(id) {
     const goalRoad = (g) => {
       const p = g.progress + g.pending, pct = Math.min(100, g.target ? p / g.target * 100 : 0), ready = p >= g.target;
       const nodes = [25, 50, 75].map(n => `<i class="node ${pct >= n ? 'on' : ''}" style="left:${n}%"></i>`).join('');
-      return `<div class="road"><div class="road-head">${im(g.icon, '', 'trophy')}<b class="stroke-sm">${esc(g.title)}</b><span class="num">${ready ? 'Conquistado!' : `${num(p)} de ${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'}`}</span></div>
-        <div class="track"><div class="rail"></div><div class="fill" style="width:${pct}%"></div>${nodes}<img src="/img/3d/${slug(d.kid.avatar, 'fox')}.png" alt="" class="me" style="left:${pct}%">${im(g.icon, 'prize' + (ready ? ' ready' : ''), 'trophy')}</div></div>`;
+      return `<div class="meter goal ${ready ? 'ready' : ''}">${im(g.icon, '', 'trophy')}<div class="lbl"><b>${esc(g.title)}</b><span class="num">${ready ? 'Conquistado!' : `${num(p)} de ${num(g.target)} ${g.mode === 'coins' ? 'moedas' : 'missões'}`}</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div></div>`;
     };
     const timeMeter = (t) => {
       const run = running(t), key = `${d.kid.id}:${t.id}`;
@@ -979,7 +983,8 @@ function messageSheet(on, pre = []) {
   api('GET', '/admin/devices').then(list => {
     if (!list.length) return;
     const box = $('[data-devs]', bg);
-    $('.dev-pick', box).innerHTML = list.map(d => `<label class="check"><input type="checkbox" name="dev" value="${esc(d.id)}" ${d.on ? 'checked' : ''}>${im('phone')}${esc(d.label)}</label>`).join('');
+    list.sort((a, b) => a.me - b.me);
+    $('.dev-pick', box).innerHTML = list.map(d => `<label class="check"><input type="checkbox" name="dev" value="${esc(d.id)}" ${d.on && !d.me ? 'checked' : ''}>${im('phone')}${esc(d.label)}${d.me ? ' <span class="muted">(este aparelho)</span>' : ''}</label>`).join('');
     box.hidden = false;
   }).catch(() => {});
 }
@@ -1957,7 +1962,8 @@ async function adminAlarms(pane, refresh) {
     const d = p.devices.find(x => x.id == b.dataset.dev);
     const bg = sheet('Ajustar aparelho', `<div class="field"><label for="el">Nome</label><input id="el" name="label" value="${esc(d.label)}" maxlength="60"></div>
       <label class="check"><input type="checkbox" name="reminders" ${d.reminders ? 'checked' : ''}>Lembretes das crianças</label>
-      <label class="check"><input type="checkbox" name="approvals" ${d.approvals ? 'checked' : ''}>Pedidos de aprovação</label>
+      <label class="check"><input type="checkbox" name="approvals" ${d.approvals ? 'checked' : ''}>Missão concluída (pedido de aprovação)</label>
+      <p class="hint">O aviso de missão concluída nunca vai para o aparelho onde a missão foi marcada.</p>
       <button type="button" class="btn red sm" id="rm" style="margin-top:16px">Desligar avisos deste aparelho</button>`,
       async (f) => { await api('PUT', '/admin/push/' + d.id, { label: f.label.value, reminders: f.reminders.checked, approvals: f.approvals.checked }); toast('Aparelho atualizado'); refresh(); });
     bg.querySelector('#rm').onclick = guard(async () => {

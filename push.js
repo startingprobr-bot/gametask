@@ -21,7 +21,8 @@ async function sendToFamily(fid, payload, kind = 'reminders') {
   const where = kind === 'all' ? '' : ` AND ${kind === 'approvals' ? 'approvals' : 'reminders'}=1`;
   let [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
   if (payload.only) subs = subs.filter(s => payload.only.p.includes(s.id));
-  const { only, ...visible } = payload;
+  if (payload.skip) subs = subs.filter(s => s.endpoint !== payload.skip);
+  const { only, skip, ...visible } = payload;
   const body = JSON.stringify(visible);
   let ok = 0, fail = 0, err = null;
   await Promise.all(subs.map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 900, urgency: 'high' })
@@ -45,6 +46,7 @@ async function sendFcm(fid, payload, kind) {
   if (!fcm.on() || /^[at]\d/.test(tag)) return 0;
   let [rows] = await pool.query(`SELECT id,token,msgs FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
   if (payload.only) rows = rows.filter(r => payload.only.f.includes(r.id));       // recado: só os aparelhos marcados
+  if (payload.skip) rows = rows.filter(r => r.token !== payload.skip);            // não avisa quem fez a ação
   else if (tag.startsWith('msg')) rows = rows.filter(r => r.msgs);                 // sem escolha: quem aceita recados
   let ok = 0;
   await Promise.all(rows.map(async (r) => {

@@ -1105,3 +1105,10 @@ button.meter:active{transform:scale(.98)}
 @media (max-width:620px){
   .mission .info>.tile{width:50px;height:50px}.mission .info>.tile img{width:40px;height:40px}
 }
+/* meta no mesmo desenho do tempo de tela: barra rosa; conquistada fica dourada */
+.meter.goal{padding:6px 0 0}
+.meter.goal .bar i{background:linear-gradient(180deg,#ffb1dd,var(--pink) 60%,#d12f86)}
+.meter.goal.ready .bar i{background:linear-gradient(180deg,#ffe970,var(--yellow,#ffd23f) 60%,#e8a900)}
+.meter.goal.ready>img{animation:wiggle2 1.2s ease-in-out infinite}
+@keyframes wiggle2{25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+@media (prefers-reduced-motion:reduce){.meter.goal.ready>img{animation:none}}

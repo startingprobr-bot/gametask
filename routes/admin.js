@@ -512,9 +512,11 @@ router.get('/messages', wrap(async (req, res) => {
 }));
 // Aparelhos onde o recado pode tocar: celulares com o app (f…) e aparelhos com avisos do navegador (p…)
 router.get('/devices', wrap(async (req, res) => {
-  const [f] = await pool.query('SELECT id,label,msgs FROM fcm_tokens WHERE family_id=? ORDER BY id', [req.fid]);
-  const [p] = await pool.query('SELECT id,label FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
-  res.json([...f.map(x => ({ id: 'f' + x.id, label: x.label || 'Aparelho com o app', on: !!x.msgs })), ...p.map(x => ({ id: 'p' + x.id, label: x.label || 'Navegador', on: true }))]);
+  const me = req.get('x-gt-dev') || '';
+  const [f] = await pool.query('SELECT id,label,msgs,token FROM fcm_tokens WHERE family_id=? ORDER BY id', [req.fid]);
+  const [p] = await pool.query('SELECT id,label,endpoint FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
+  res.json([...f.map(x => ({ id: 'f' + x.id, label: x.label || 'Aparelho com o app', on: !!x.msgs, me: !!me && x.token === me })),
+    ...p.map(x => ({ id: 'p' + x.id, label: x.label || 'Navegador', on: true, me: !!me && x.endpoint === me }))]);
 }));
 router.post('/messages', wrap(async (req, res) => {
   const text = String(req.body.text || '').trim().slice(0, 300);

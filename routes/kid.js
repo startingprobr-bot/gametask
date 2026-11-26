@@ -191,7 +191,8 @@ async function completeTask(req, kid, task, day) {
   if (r.affectedRows) {
     const [[k]] = await pool.query('SELECT auto_approve FROM kids WHERE id=?', [kid.id]);
     if (k.auto_approve) await approve(req.fid, r.insertId);
-    else if (access(req.family).plus) push.sendToFamily(req.fid, { title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
+    // não avisa o aparelho onde a missão acabou de ser marcada
+    else if (access(req.family).plus) push.sendToFamily(req.fid, { skip: req.get('x-gt-dev') || '', title: `${kid.name} concluiu: ${task.title}`, body: 'Toque para conferir e aprovar.', tag: 'approve', url: '/app#/admin' }, 'approvals').catch(() => {});
   }
   return !!r.affectedRows;
 }
