@@ -1781,7 +1781,8 @@ async function adminAlarms(pane, refresh) {
        <label class="check"><input type="checkbox" id="da" ${guessLabel() === 'Celular' ? 'checked' : ''}>Pedidos de aprovação (quando uma criança conclui uma missão)</label>
        <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
 
-  pane.innerHTML = `<section class="box" data-sum="${!p.plus ? 'No plano anual' : mine ? 'Ligados' : 'Desligados'}"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>
+  // no app Android quem avisa é o alarme do próprio celular (bloco "Alarme deste celular"); os avisos do navegador não valem lá
+  pane.innerHTML = `${NATIVE ? '' : `<section class="box" data-sum="${!p.plus ? 'No plano anual' : mine ? 'Ligados' : 'Desligados'}"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>`}
     <section class="box" data-sum="${alarms.length ? `${alarms.length} ${alarms.length === 1 ? 'aviso' : 'avisos'}` : 'Nenhum ainda'}"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus && full() ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
       <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
       ${alarms.length ? `<div class="list">${alarms.map(a => `<div class="item ${a.active ? '' : 'off'}"><div class="ic">${im('clock')}</div><div class="grow"><div class="t">${esc(a.title)}</div>

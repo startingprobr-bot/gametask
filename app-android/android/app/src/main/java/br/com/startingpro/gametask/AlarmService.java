@@ -23,7 +23,7 @@ import android.os.Vibrator;
 import androidx.core.app.NotificationCompat;
 
 /**
- * Toca o som de despertador do celular pelo canal de ALARME (não o de notificação),
+ * Toca o toque do GameTask pelo canal de ALARME (não o de notificação),
  * por isso toca mesmo com o celular no silencioso ou no vibrar. Para sozinho em 3 minutos.
  */
 public class AlarmService extends Service {
@@ -64,8 +64,7 @@ public class AlarmService extends Service {
     private void play() {
         stopSound();
         try {
-            Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            Uri uri = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.gt_alarm); // toque próprio do GameTask
             player = new MediaPlayer();
             player.setAudioAttributes(new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
