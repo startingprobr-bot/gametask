@@ -44,7 +44,7 @@ async function sendFcm(fid, payload, kind) {
   const [rows] = await pool.query(`SELECT id,token FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
   let ok = 0;
   await Promise.all(rows.map(async (r) => {
-    const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag });
+    const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag, icon: payload.icon || '' });
     if (res === 'ok') ok++;
     else if (res === 'gone') await pool.query('DELETE FROM fcm_tokens WHERE id=?', [r.id]).catch(() => {});
   }));
@@ -135,7 +135,7 @@ async function timeUp(fid, kid, reward, ts) {
   const [[f]] = await pool.query('SELECT id,email,plan,paid_until,trial_ends FROM families WHERE id=?', [fid]);
   if (!f || !access(f).plus) return;
   if (!await once(`tu${kid.id}:${reward.id}:${ts}`)) return;
-  await sendToFamily(fid, { title: `O tempo de ${reward.title} de ${kid.name} acabou`, body: 'Hora de desligar.', tag: `tu${kid.id}`, alarm: true, url: '/app#/' });
+  await sendToFamily(fid, { icon: kid.avatar || '', title: `O tempo de ${reward.title} de ${kid.name} acabou`, body: 'Hora de desligar.', tag: `tu${kid.id}`, alarm: true, url: '/app#/' });
 }
 
 function start() {
@@ -151,8 +151,8 @@ const addDays = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDa
 const at = (ymd, hm, minus = 0) => new Date(`${ymd}T${hm.slice(0, 5)}:00-03:00`).getTime() - minus * 60000; // Brasília, sem horário de verão
 async function plan(fid, days = 7) {
   const [[f]] = await pool.query('SELECT id,remind_before FROM families WHERE id=?', [fid]);
-  const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [fid]);
-  const kidName = Object.fromEntries(kids.map(k => [k.id, k.name]));
+  const [kids] = await pool.query('SELECT id,name,avatar FROM kids WHERE family_id=? AND active=1', [fid]);
+  const kidName = Object.fromEntries(kids.map(k => [k.id, k.name])), kidIcon = Object.fromEntries(kids.map(k => [k.id, k.avatar || '']));
   const [alarms] = await pool.query('SELECT * FROM alarms WHERE family_id=? AND active=1', [fid]);
   const [tasks] = await pool.query('SELECT * FROM tasks WHERE family_id=? AND active=1 AND time IS NOT NULL', [fid]);
   const [tk] = tasks.length ? await pool.query('SELECT task_id,kid_id FROM task_kids WHERE task_id IN (?)', [tasks.map(t => t.id)]) : [[]];
@@ -163,7 +163,7 @@ async function plan(fid, days = 7) {
     for (const a of alarms) {
       if (!a.weekdays.includes(wd)) continue;
       const who = a.kid_id ? kidName[a.kid_id] : null;
-      out.push({ id: `a${a.id}-${day}`, at: at(day, a.time), title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time.slice(0, 5)}` });
+      out.push({ id: `a${a.id}-${day}`, at: at(day, a.time), title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time.slice(0, 5)}`, icon: a.kid_id ? kidIcon[a.kid_id] || '' : '' });
     }
     for (const t of tasks) {
       if (!taskOnDay(t, day)) continue;
@@ -171,8 +171,9 @@ async function plan(fid, days = 7) {
       if (i === 0) ids = ids.filter(id => !done.some(x => x.task_id === t.id && x.kid_id === id)); // hoje: só quem ainda não fez
       if (!ids.length) continue;
       const left = ids.map(id => kidName[id]), names = left.length === 1 ? left[0] : left.slice(0, -1).join(', ') + ' e ' + left.at(-1);
-      out.push({ id: `t${t.id}-${day}`, at: at(day, t.time), title: `${names}: ${t.title}`, body: `Hora da missão (${t.time.slice(0, 5)})!` });
-      if (pre) out.push({ id: `t${t.id}-${day}-pre`, at: at(day, t.time, pre), title: `${names}: ${t.title}`, body: `Missão daqui a ${pre} min (${t.time.slice(0, 5)}).` });
+      const icon = ids.length === 1 ? kidIcon[ids[0]] || '' : '';
+      out.push({ id: `t${t.id}-${day}`, at: at(day, t.time), title: `${names}: ${t.title}`, body: `Hora da missão (${t.time.slice(0, 5)})!`, icon });
+      if (pre) out.push({ id: `t${t.id}-${day}-pre`, at: at(day, t.time, pre), title: `${names}: ${t.title}`, body: `Missão daqui a ${pre} min (${t.time.slice(0, 5)}).`, icon });
     }
   }
   return out.filter(x => x.at > now).sort((a, b) => a.at - b.at).slice(0, 200);

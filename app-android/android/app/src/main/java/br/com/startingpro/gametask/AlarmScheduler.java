@@ -30,6 +30,9 @@ public class AlarmScheduler {
         }
         prefs(ctx).edit().putString(KEY, keep.toString()).apply();
         scheduleSaved(ctx);
+        java.util.Set<String> icons = new java.util.HashSet<>();
+        for (int i = 0; i < keep.length(); i++) icons.add(keep.optJSONObject(i).optString("icon"));
+        AvatarCache.prefetch(ctx, icons);
     }
 
     /** Remarca o que está guardado (ao trocar a lista e depois que o celular reinicia) */
@@ -39,17 +42,18 @@ public class AlarmScheduler {
         for (int i = 0; i < items.length(); i++) {
             JSONObject it = items.optJSONObject(i);
             if (it == null || it.optLong("at") <= now) continue;
-            set(ctx, it.optString("id"), it.optLong("at"), it.optString("title"), it.optString("body"));
+            set(ctx, it.optString("id"), it.optLong("at"), it.optString("title"), it.optString("body"), it.optString("icon"));
         }
     }
 
-    static void scheduleOne(Context ctx, String id, long at, String title, String body) { set(ctx, id, at, title, body); }
+    static void scheduleOne(Context ctx, String id, long at, String title, String body, String icon) { set(ctx, id, at, title, body, icon == null ? "" : icon); }
 
     static int count(Context ctx) { return saved(ctx).length(); }
 
-    private static void set(Context ctx, String id, long at, String title, String body) {
+    private static void set(Context ctx, String id, long at, String title, String body, String icon) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        PendingIntent pi = pending(ctx, id, title, body);
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, id.hashCode(), intent(ctx, id, title, body).putExtra("icon", icon),
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         if (canExact(ctx)) {
             // aparece como despertador no sistema e acorda o celular mesmo em economia de bateria
             Intent open = new Intent(ctx, MainActivity.class);
@@ -60,10 +64,13 @@ public class AlarmScheduler {
         }
     }
 
-    private static PendingIntent pending(Context ctx, String id, String title, String body) {
-        Intent i = new Intent(ctx, AlarmReceiver.class).setAction("br.com.startingpro.gametask.ALARM." + id)
+    private static Intent intent(Context ctx, String id, String title, String body) {
+        return new Intent(ctx, AlarmReceiver.class).setAction("br.com.startingpro.gametask.ALARM." + id)
             .putExtra("id", id).putExtra("title", title).putExtra("body", body);
-        return PendingIntent.getBroadcast(ctx, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    private static PendingIntent pending(Context ctx, String id, String title, String body) {
+        return PendingIntent.getBroadcast(ctx, id.hashCode(), intent(ctx, id, title, body), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
     private static void cancelAll(Context ctx) {

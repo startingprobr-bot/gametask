@@ -42,12 +42,12 @@ public class AlarmService extends Service {
         String body = intent != null && intent.getStringExtra("body") != null ? intent.getStringExtra("body") : "";
 
         channel();
-        Intent full = new Intent(this, AlarmActivity.class).putExtra("title", title).putExtra("body", body)
+        Intent full = new Intent(this, AlarmActivity.class).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent fullPi = PendingIntent.getActivity(this, 2, full, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stopPi = PendingIntent.getService(this, 3, new Intent(this, AlarmService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE);
         Notification n = new NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_gt).setColor(0xFF2A6CF0)
             .setContentTitle(title).setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_MAX).setCategory(NotificationCompat.CATEGORY_ALARM)
             .setFullScreenIntent(fullPi, true).setContentIntent(fullPi)

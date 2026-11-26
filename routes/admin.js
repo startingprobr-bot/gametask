@@ -513,7 +513,7 @@ router.get('/messages', wrap(async (req, res) => {
 router.post('/messages', wrap(async (req, res) => {
   const text = String(req.body.text || '').trim().slice(0, 300);
   if (!text) return res.status(400).json({ error: 'Escreva o recado' });
-  const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [req.fid]);
+  const [kids] = await pool.query('SELECT id,name,avatar FROM kids WHERE family_id=? AND active=1', [req.fid]);
   const want = new Set((req.body.kid_ids || []).map(Number));
   const to = kids.filter(k => want.has(k.id));
   if (!to.length) return res.status(400).json({ error: 'Escolha para quem vai o recado' });
@@ -523,7 +523,7 @@ router.post('/messages', wrap(async (req, res) => {
   await pool.query('INSERT INTO messages (family_id,kid_id,to_label,from_name,text) VALUES (?,?,?,?,?)', [req.fid, to.length === 1 ? to[0].id : null, names, from, text]);
   let sent = 0;
   if (access(req.family).plus) {
-    sent = await push.sendToFamily(req.fid, { title: `Recado de ${from} para ${names}`, body: text, tag: 'msg' + Date.now(), alarm: true, url: to.length === 1 ? `/app#/kid/${to[0].id}` : '/app#/' }, 'all');
+    sent = await push.sendToFamily(req.fid, { title: `Recado de ${from} para ${names}`, body: text, tag: 'msg' + Date.now(), alarm: true, icon: to.length === 1 ? to[0].avatar || '' : '', url: to.length === 1 ? `/app#/kid/${to[0].id}` : '/app#/' }, 'all');
   }
   res.json({ ok: true, sent });
 }));

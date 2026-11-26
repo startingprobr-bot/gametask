@@ -117,7 +117,7 @@ public class AlarmPlugin extends Plugin {
     public void test(PluginCall call) {
         int secs = call.getInt("seconds", 5);
         String title = call.getString("title", "Teste do alarme do GameTask");
-        AlarmScheduler.scheduleOne(getContext(), "teste", System.currentTimeMillis() + secs * 1000L, title, "Se você está ouvindo, está funcionando.");
+        AlarmScheduler.scheduleOne(getContext(), "teste", System.currentTimeMillis() + secs * 1000L, title, "Se você está ouvindo, está funcionando.", call.getString("icon", ""));
         call.resolve();
     }
 }

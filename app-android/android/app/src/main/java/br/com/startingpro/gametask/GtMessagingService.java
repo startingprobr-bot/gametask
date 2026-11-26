@@ -28,7 +28,7 @@ public class GtMessagingService extends FirebaseMessagingService {
         String title = d.get("title") != null ? d.get("title") : "GameTask";
         String body = d.get("body") != null ? d.get("body") : "";
         if ("alarm".equals(d.get("type"))) {
-            Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body);
+            Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body).putExtra("icon", d.get("icon"));
             try {
                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(s); else startService(s);
                 return;
@@ -47,7 +47,7 @@ public class GtMessagingService extends FirebaseMessagingService {
         PendingIntent open = PendingIntent.getActivity(this, 5, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         nm.notify(tag != null ? tag : "gt", 1, new NotificationCompat.Builder(this, NOTE)
-            .setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(body)
+            .setSmallIcon(R.drawable.ic_stat_gt).setColor(0xFF2A6CF0).setContentTitle(title).setContentText(body)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true).setContentIntent(open).build());
     }
