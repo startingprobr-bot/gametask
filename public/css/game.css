@@ -1196,3 +1196,11 @@ button.meter:active{transform:scale(.98)}
 .call-btns .btn.red svg{transform:rotate(135deg)}
 .call-btns .btn.off{opacity:.5}
 @media (prefers-reduced-motion:reduce){.call-ic{animation:none}}
+
+/* ---- Escolha de jogador: botões (ligar e som) numa faixa própria, sem cobrir o título ---- */
+.lobby-bar{display:flex;justify-content:flex-end;gap:8px;padding:14px 16px 0;position:relative;z-index:5}
+.lobby-bar+.wrap .select-title{padding-top:6px}
+@media (min-width:760px){
+  .lobby-bar{position:absolute;right:0;top:0}
+  .lobby-bar+.wrap .select-title{padding-top:28px}
+}

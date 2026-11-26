@@ -40,8 +40,9 @@ router.post('/calls', wrap(async (req, res) => {
   if (!targets.length) return res.status(400).json({ error: 'Escolha para quem ligar' });
   const from = String(req.body.from || mine.label || 'GameTask').trim().slice(0, 60);
   const [r] = await pool.query('INSERT INTO calls (family_id,from_dev,from_label,to_ids) VALUES (?,?,?,?)', [req.fid, mine.id, from, targets.map(t => t.id).join(',')]);
-  await Promise.all(targets.map(t => fcm.send(t.token, { type: 'call', call: r.insertId, title: `Ligação de ${from}`, body: 'Toque em Atender', tag: 'call' + r.insertId, icon: String(req.body.icon || '') })));
+  // quem liga já recebe o número da ligação e segue; o aviso aos outros aparelhos sai em paralelo
   res.json({ id: r.insertId });
+  targets.forEach(t => fcm.send(t.token, { type: 'call', call: r.insertId, title: `Ligação de ${from}`, body: 'Toque em Atender', tag: 'call' + r.insertId, icon: String(req.body.icon || '') }).catch(() => {}));
 }));
 
 // Ligações tocando para este aparelho (o app aberto confere a cada poucos segundos)

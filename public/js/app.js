@@ -572,7 +572,7 @@ let ringIv = 0;
 const ring = (on) => { clearInterval(ringIv); if (on) { const r = () => tone([[784, .2], [988, .2], [784, .2], [988, .35]], 'triangle', .22, true); r(); ringIv = setInterval(r, 2200); } };
 async function openPeer(side) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-  const pc = new RTCPeerConnection({ iceServers: await callIce() });
+  const pc = new RTCPeerConnection({ iceServers: await callIce(), iceCandidatePoolSize: 4 });
   stream.getTracks().forEach(t => pc.addTrack(t, stream));
   const audio = new Audio(); audio.autoplay = true;
   pc.ontrack = (e) => { audio.srcObject = e.streams[0]; audio.play().catch(() => {}); };
@@ -610,7 +610,7 @@ async function pollSignals() {
       return endCall(msg, true);
     }
   } catch {}
-  if (call) call.poll = setTimeout(pollSignals, call.live ? 2500 : 700);
+  if (call) call.poll = setTimeout(pollSignals, call.live ? 2500 : 300);
 }
 function connected() {
   if (!call || call.live) return;
@@ -650,8 +650,7 @@ async function answerCall(id, from) {
   $('.call-btns', bg).innerHTML = `<button class="btn red big" id="cEnd">${SVG.phone}Desligar</button>`;
   $('#cEnd', bg).onclick = () => endCall();
   try {
-    await api('POST', `/calls/${id}/accept`);
-    const peer = await openPeer('callee');
+    const [, peer] = await Promise.all([api('POST', `/calls/${id}/accept`), openPeer('callee')]);
     call = { id, side: 'callee', after: 0, queue: [], ...peer };
     pollSignals();
   } catch (e) { endCall(/Permission|NotAllowed/i.test(e.name + e.message) ? 'Permita o microfone para atender' : e.message, true); }
@@ -691,7 +690,7 @@ async function checkCalls() {
     const watch = setInterval(async () => { if (!bg.isConnected) return clearInterval(watch); const c = await api('GET', `/calls/${inc.id}`).catch(() => null); if (c && c.status !== 'ringing') { clearInterval(watch); ring(false); bg.remove(); } }, 1500);
   } catch {}
 }
-setInterval(checkCalls, 3000);
+setInterval(checkCalls, 1500);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkCalls, 400); });
 
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
@@ -901,7 +900,7 @@ async function viewPlayers(me = ME) {
   kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); });
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
-    <div style="position:absolute;right:16px;top:14px;z-index:5">${soundBtn()}</div>
+    <div class="lobby-bar">${soundBtn()}</div>
     <div class="wrap">
       <div class="select-title"><h1 class="d stroke">GameTask</h1><p>${kids.length ? 'Quem vai jogar agora?' : 'Nenhum jogador ainda'}</p></div>
       ${kids.length ? `<div class="roster">${kids.map(k => `<button class="hero" data-id="${k.id}" style="--c:${esc(k.color)}" aria-label="Jogar como ${esc(k.name)}">
