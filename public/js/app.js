@@ -448,9 +448,9 @@ function blockAllowSync() {
   if (!GtAlarm?.blockAllow) return;
   const map = blockMap(), allowed = {}, me = blockKid();
   for (const [, c] of clocks) { const g = !c.kind && c.kid === me && map[c.id]; if (g) allowed[g] = Math.max(allowed[g] || 0, Math.round(c.ends)); }
-  const sig = JSON.stringify(allowed);
+  const sig = JSON.stringify([allowed, me, map]);
   if (sig === blockSig) return;
-  blockSig = sig; GtAlarm.blockAllow({ allowed }).catch(() => {});
+  blockSig = sig; GtAlarm.blockAllow({ allowed, kid: me, map }).catch(() => {});
 }
 setInterval(blockAllowSync, 1000);
 
@@ -983,8 +983,9 @@ async function viewKid(id) {
         ${im(x.icon, 'timer-ic', 'game')}<h2 class="d stroke">${esc(x.title)}</h2>
         <div class="timer-face ${run ? 'on' : ''}"><b class="num" ${run ? `data-clock="${key}"` : ''}>${mmss(s)}</b><span>${run ? 'Valendo!' : s > 0 ? 'Pausado' : 'Sem tempo'}</span></div>
         <p class="timer-hint">${s > 0 ? 'Fez mais missões? O tempo novo soma aqui.' : 'Faça mais missões para ganhar tempo.'}</p>
-        <div class="timer-btns">${x.donate && !run ? `<button type="button" class="btn big yellow" data-donate>Doar</button>` : ''}
-        <button type="button" class="btn big ${run ? '' : 'green'}" data-go ${!run && s <= 0 ? 'disabled' : ''}>${run ? SVG.pause + 'Pausar' : SVG.play + 'Começar'}</button></div></div>`;
+        <div class="timer-btns">${x.donate && !run && !latest.kid.locked ? `<button type="button" class="btn big yellow" data-donate>Doar</button>` : ''}
+        <button type="button" class="btn big ${run ? '' : 'green'}" data-go ${!run && (s <= 0 || latest.kid.locked) ? 'disabled' : ''}>${run ? SVG.pause + 'Pausar' : SVG.play + 'Começar'}</button></div>
+        ${latest.kid.locked ? '<p class="timer-lock">Os pais bloquearam o tempo de tela. Peça para eles liberarem.</p>' : ''}</div>`;
       $('[data-x]', bg).onclick = close;
       $('[data-go]', bg).onclick = guard(async () => {
         sfx.tap();
@@ -1064,6 +1065,7 @@ async function viewKid(id) {
         <span class="who-av" style="--c:${esc(d.kid.color)}">${im(d.kid.avatar, '', 'fox')}</span><span class="who d stroke-sm">${esc(d.kid.name)}</span>
         <div class="pills">${d.kid.adult ? '' : `<div class="pill" id="coinPill" title="Moedas">${im('coin')}<b id="coinNum">${num(coins)}</b></div>`}</div>
         ${soundBtn()}</div></div>
+      ${d.kid.locked ? `<div class="lock-banner" role="status">${im('lock')}<span>Tempo de tela bloqueado pelos pais</span></div>` : ''}
       <div class="wrap ${first ? 'intro' : ''}"><div class="hud">
         <section class="stage" style="--c:${esc(d.kid.color)}"><div class="avatar">${im(d.kid.avatar, '', 'fox')}</div>
           <div><h1 class="d stroke">${head}</h1><p class="cheer">${sub}</p></div>
@@ -1342,8 +1344,9 @@ async function adminPending(pane, refresh) {
 async function adminKids(pane, refresh) {
   const all = await api('GET', '/admin/kids'), kids = all.filter(k => !k.adult), adults = all.filter(k => k.adult);
   pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${NATIVE ? `<button class="btn ghost sm" id="callAny">${SVG.phone}Ligar</button>` : ''}${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${SVG.mega}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
-    ${kids.length ? `<div class="kid-rows">${kids.map(k => `<div class="kid-row ${k.active ? '' : 'off'}"><div class="kid-id"><span class="kid-av" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</span><b>${esc(k.name)}</b>${k.active ? '' : '<small>inativo</small>'}</div>
-      <div class="kid-act">${k.active ? `<button class="btn sm" data-msg="${k.id}">${SVG.mega}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">${im('pencil')}Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
+    ${kids.length ? `<div class="kid-rows">${kids.map(k => `<div class="kid-row ${k.active ? '' : 'off'}"><div class="kid-id"><span class="kid-av" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</span><b>${esc(k.name)}</b>${k.active ? (k.locked ? '<small class="lk">bloqueado</small>' : '') : '<small>inativo</small>'}</div>
+      <div class="kid-act">${k.active ? `<button class="btn sm" data-msg="${k.id}">${SVG.mega}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">${im('pencil')}Editar</button>
+        ${k.active ? `<button class="btn ${k.locked ? 'red' : 'ghost'} sm icon-only" data-lock="${k.id}" aria-label="${k.locked ? 'Liberar o tempo de tela de ' + esc(k.name) : 'Bloquear o tempo de tela de ' + esc(k.name)}" title="${k.locked ? 'Bloqueado. Toque para liberar' : 'Bloquear o tempo de tela agora'}">${im('lock')}</button>` : ''}</div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
     ${adults.length ? `<section class="box"><div class="box-h"><h2 class="d">Adultos no jogo</h2></div>
       <p class="lead">Pai, mãe ou outro responsável que faz a rotina junto, sem moedas. Quem sai do jogo continua com o acesso ao painel.</p>
       <div class="list">${adults.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
@@ -1364,6 +1367,14 @@ async function adminKids(pane, refresh) {
   const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked,
     pin: f.pin?.value.trim() || '', clear_pin: !!f.clearpin?.checked });
   const onK = all.filter(k => k.active);
+  $$('[data-lock]').forEach(b => b.onclick = () => {
+    const k = kids.find(x => x.id == b.dataset.lock), to = !k.locked;
+    sheet(to ? `Bloquear ${k.name}?` : `Liberar ${k.name}?`, to
+      ? `<p class="lead" style="margin-top:6px">Os cronômetros de ${esc(k.name)} param agora e os jogos e vídeos bloqueiam nos aparelhos dela(e) em poucos segundos. Fica assim até você liberar aqui.</p>`
+      : `<p class="lead" style="margin-top:6px">${esc(k.name)} volta a poder dar o play no tempo de tela que ganhou.</p>`,
+      async () => { await api('POST', `/admin/kids/${k.id}/lock`, { locked: to }); toast(to ? `${k.name} bloqueado` : `${k.name} liberado`); refresh(); },
+      { saveLabel: to ? 'Bloquear agora' : 'Liberar', danger: to });
+  });
   $$('[data-msg]').forEach(b => b.onclick = () => messageSheet(onK, [+b.dataset.msg]));
   const ma = $('#msgAll'); if (ma) ma.onclick = () => messageSheet(onK);
   const ca = $('#callAny'); if (ca) ca.onclick = () => callPicker(ME.actor?.name || '');

@@ -511,6 +511,20 @@ const step = (m) => console.log('✔', m);
     assert.equal((await ok('GET', '/api/admin/kids')).find(k => k.id === eva).has_pin, false);
     await ok('POST', pinUrl, { action: 'start' }); await ok('POST', pinUrl, { action: 'pause' });
     step('PIN da criança no play e doação de minutos entre irmãos');
+    // pais bloqueiam o tempo de tela de uma criança: cronômetro para, play é recusado, o app confere pela situação
+    await ok('POST', pinUrl, { action: 'start' });
+    assert.equal((await ok('GET', `/api/kids/${eva}/screen`)).running.length, 1);
+    assert.equal((await api('POST', `/api/admin/kids/9999/lock`, { locked: true })).status, 404);
+    assert.equal((await ok('POST', `/api/admin/kids/${eva}/lock`, { locked: true })).locked, true);
+    let sc = (await ok('GET', `/api/kids/${eva}/screen`)); assert.equal(sc.locked, true); assert.equal(sc.running.length, 0);
+    assert.equal((await ok('GET', `/api/kids/${eva}/home`)).kid.locked, true);
+    const lkR = await api('POST', pinUrl, { action: 'start' }); assert.equal(lkR.status, 403); assert.equal(lkR.data.code, 'locked');
+    assert.equal((await ok('GET', `/api/kids/${ber}/screen`)).locked, false); // o irmão não é afetado
+    assert.equal((await ok('GET', '/api/admin/kids')).find(k => k.id === eva).locked, 1);
+    await ok('POST', `/api/admin/kids/${eva}/lock`, { locked: false });
+    await ok('POST', pinUrl, { action: 'start' }); await ok('POST', pinUrl, { action: 'pause' });
+    assert.equal((await ok('GET', `/api/kids/${eva}/screen`)).running.length, 0);
+    step('bloqueio dos pais: para o cronômetro, recusa o play e libera depois');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

@@ -27,7 +27,15 @@ public class BlockService extends Service {
     private static final int NOTIF = 4343;
     private final Handler h = new Handler(Looper.getMainLooper());
     private String current = "";
-    private long lastShown = 0;
+    private long lastShown = 0, lastPoll = 0;
+    private volatile boolean polling = false;
+    static final String BASE = "https://gametask.startingpro.com.br";
+
+    /** pede uma conferência imediata (aviso do Firebase: alguém pausou, começou ou bloqueou) */
+    static void poll(Context c) {
+        if (!BlockStore.enabled(c)) return;
+        try { c.startService(new Intent(c, BlockService.class).setAction("POLL")); } catch (Exception ignored) { }
+    }
 
     static void sync(Context c) {
         Intent i = new Intent(c, BlockService.class);
@@ -37,6 +45,7 @@ public class BlockService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && "POLL".equals(intent.getAction()) && lastPoll > 0) { lastPoll = 0; return START_STICKY; } // só adianta a próxima conferência
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
             if (nm.getNotificationChannel(CH) == null) {
@@ -61,6 +70,7 @@ public class BlockService extends Service {
             if (!BlockStore.enabled(BlockService.this)) { stopSelf(); return; }
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm.isInteractive()) check();
+            if (System.currentTimeMillis() - lastPoll > 6000) { lastPoll = System.currentTimeMillis(); askServer(); }
             h.postDelayed(this, 900);
         }
     };
@@ -81,6 +91,46 @@ public class BlockService extends Service {
         Intent b = new Intent(this, BlockActivity.class).putExtra("group", g).putExtra("pkg", current)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NO_ANIMATION);
         try { startActivity(b); } catch (Exception ignored) { }
+    }
+
+    /**
+     * Pergunta ao servidor como está o tempo de tela da criança deste aparelho (usa o login do próprio app).
+     * Se alguém pausou o cronômetro em outro aparelho, ou os pais bloquearam, o bloqueio volta aqui em poucos segundos,
+     * mesmo com o GameTask fechado ou em segundo plano.
+     */
+    private void askServer() {
+        final long kid = BlockStore.kid(this);
+        if (kid <= 0 || polling) return;
+        polling = true;
+        final Context ctx = getApplicationContext();
+        new Thread(() -> {
+            java.net.HttpURLConnection c = null;
+            try {
+                String cookie = android.webkit.CookieManager.getInstance().getCookie(BASE);
+                if (cookie == null || cookie.isEmpty()) return;
+                c = (java.net.HttpURLConnection) new java.net.URL(BASE + "/api/kids/" + kid + "/screen").openConnection();
+                c.setConnectTimeout(6000); c.setReadTimeout(8000);
+                c.setRequestProperty("Cookie", cookie);
+                if (c.getResponseCode() != 200) return;
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                try (java.io.InputStream in = c.getInputStream()) { byte[] b = new byte[2048]; int n; while ((n = in.read(b)) > 0) bo.write(b, 0, n); }
+                org.json.JSONObject r = new org.json.JSONObject(bo.toString("UTF-8"));
+                BlockStore.setLocked(ctx, r.optBoolean("locked", false));
+                org.json.JSONObject map = BlockStore.map(ctx), allowed = new org.json.JSONObject();
+                org.json.JSONArray run = r.optJSONArray("running");
+                long now = System.currentTimeMillis();
+                for (int i = 0; run != null && i < run.length(); i++) {
+                    org.json.JSONObject x = run.getJSONObject(i);
+                    String g = map.optString(String.valueOf(x.optInt("reward_id")), "");
+                    if (!g.isEmpty()) allowed.put(g, Math.max(allowed.optLong(g, 0), now + x.optLong("secs") * 1000));
+                }
+                BlockStore.setAllowed(ctx, allowed.toString()); // verdade do servidor: se pausou em outro lugar, some daqui também
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.disconnect();
+                polling = false;
+            }
+        }).start();
     }
 
     /** último app que veio para a frente nos últimos segundos */

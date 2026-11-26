@@ -43,8 +43,8 @@ router.get('/kids', async (req, res) => {
 });
 
 async function ownKid(req, res) {
-  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult,(pin_hash IS NOT NULL) has_pin FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
-  if (k) k.has_pin = !!k.has_pin;
+  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult,locked,(pin_hash IS NOT NULL) has_pin FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
+  if (k) { k.has_pin = !!k.has_pin; k.locked = !!k.locked; }
   if (!k) res.status(404).json({ error: 'Jogador não encontrado' });
   return k;
 }
@@ -184,6 +184,7 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
   if (!t) return res.status(404).json({ error: 'Recompensa não encontrada' });
   if (req.body.action === 'start') {
     if (t.run === null) {
+      if (kid.locked) return res.status(403).json({ error: 'Os pais bloquearam o tempo de tela. Peça para eles liberarem.', code: 'locked' });
       if (!(await kidPinOk(req, res, kid))) return;
       if (!(t.left > 0)) return res.status(400).json({ error: 'Acabou o tempo de hoje. Faça mais missões para ganhar mais!' });
       await pool.query('INSERT IGNORE INTO time_runs (family_id,kid_id,reward_id,day) VALUES (?,?,?,?)', [req.fid, kid.id, rid, day]);
@@ -191,7 +192,15 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
   } else if (t.run !== null) {
     await stopRun(req.fid, kid.id, rid, t.left);
   }
+  push.nudge(req.fid).catch(() => {}); // os outros aparelhos conferem na hora (bloqueiam ou liberam sem esperar)
   res.json({ time: await kidTime(req.fid, kid) });
+});
+// Situação do tempo de tela desta criança, leve: o app Android confere sozinho, mesmo com o GameTask em segundo plano
+router.get('/kids/:id/screen', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const running = kid.locked ? [] : (await kidTime(req.fid, kid)).filter(t => t.run !== null)
+    .map(t => ({ reward_id: t.id, secs: Math.max(0, Math.floor(t.left * 60 - t.run)) }));
+  res.json({ locked: kid.locked, running });
 });
 
 // Doação de minutos entre irmãos (só nos prêmios em que os pais liberaram): quem doa perde, quem recebe ganha.
@@ -411,4 +420,5 @@ module.exports = router;
 module.exports.wheelPrizes = wheelPrizes;
 module.exports.kidTime = kidTime;
 module.exports.spinFix = spinFix;
+module.exports.stopRun = stopRun;
 module.exports.fixItems = fixItems;

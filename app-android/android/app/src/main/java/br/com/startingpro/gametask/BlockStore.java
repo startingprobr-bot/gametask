@@ -30,6 +30,18 @@ public class BlockStore {
 
     static void setAllowed(Context c, String allowedJson) { prefs(c).edit().putString("allowed", allowedJson).apply(); }
 
+    /** criança que usa este aparelho e qual prêmio libera qual grupo ({ "idDoPremio": "game" | "video" }) */
+    static void setKid(Context c, long kid, String mapJson) { prefs(c).edit().putLong("kid", kid).putString("map", mapJson).apply(); }
+
+    static long kid(Context c) { return prefs(c).getLong("kid", 0); }
+
+    static JSONObject map(Context c) { return json(prefs(c).getString("map", "{}")); }
+
+    /** os pais bloquearam o tempo de tela desta criança: jogos e vídeos ficam bloqueados mesmo com tempo */
+    static void setLocked(Context c, boolean v) { prefs(c).edit().putBoolean("locked", v).apply(); }
+
+    static boolean locked(Context c) { return prefs(c).getBoolean("locked", false); }
+
     /** pausa geral (responsável liberou, ou está mexendo nas configurações pelo GameTask) */
     static void pause(Context c, long ms) { prefs(c).edit().putLong("pause", System.currentTimeMillis() + ms).apply(); }
 
@@ -59,6 +71,7 @@ public class BlockStore {
         String g = groups(c).optString(pkg, "");
         if (g.isEmpty() || g.equals("free")) return null;
         if (g.equals("always")) return g;
+        if (locked(c)) return g; // bloqueio dos pais vale acima do tempo ganho
         return System.currentTimeMillis() < allowed(c).optLong(g, 0) ? null : g;
     }
 

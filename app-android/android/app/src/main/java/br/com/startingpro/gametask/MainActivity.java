@@ -20,9 +20,10 @@ public class MainActivity extends BridgeActivity {
         box.setBackgroundColor(0xFF16296B);
         ViewCompat.setOnApplyWindowInsetsListener(box, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            v.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, ime.bottom));
-            return WindowInsetsCompat.CONSUMED;
+            // O Capacitor já reserva o espaço do teclado na janela; aqui só as barras do sistema (senão o teclado conta em dobro)
+            boolean keyboard = insets.isVisible(WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, keyboard ? 0 : bars.bottom);
+            return insets;
         });
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).setAppearanceLightStatusBars(false);
     }

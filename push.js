@@ -186,4 +186,11 @@ async function plan(fid, days = 7) {
   return out.filter(x => x.at > now).sort((a, b) => a.at - b.at).slice(0, 200);
 }
 
-module.exports = { start, init, tick, sendToFamily, sendToSub, publicKey, timeUp, plan };
+// Aviso silencioso para os aparelhos com o app: "confira o tempo de tela agora" (alguém pausou, começou ou bloqueou)
+async function nudge(fid) {
+  if (!fcm.on()) return;
+  const [rows] = await pool.query('SELECT id,token FROM fcm_tokens WHERE family_id=?', [fid]);
+  await Promise.all(rows.map(async (r) => { if (await fcm.send(r.token, { type: 'screen' }) === 'gone') await pool.query('DELETE FROM fcm_tokens WHERE id=?', [r.id]).catch(() => {}); }));
+}
+
+module.exports = { start, init, tick, sendToFamily, sendToSub, publicKey, timeUp, plan, nudge };

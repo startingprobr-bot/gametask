@@ -18,6 +18,19 @@ router.post('/kids', wrap(async (req, res) => {
   const [r] = await pool.query('INSERT INTO kids (family_id,name,avatar,color,auto_approve) VALUES (?,?,?,?,?)', [req.fid, name.trim(), avatar, color, bool(auto_approve)]);
   res.json({ id: r.insertId });
 }));
+// Bloquear (ou liberar) o tempo de tela de uma criança agora: para os cronômetros e os jogos bloqueiam até liberar
+router.post('/kids/:id/lock', wrap(async (req, res) => {
+  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE id=? AND family_id=? AND adult=0', [req.params.id, req.fid]);
+  if (!k) return res.status(404).json({ error: 'Filho não encontrado' });
+  const locked = bool(req.body.locked);
+  await pool.query('UPDATE kids SET locked=? WHERE id=?', [locked, k.id]);
+  if (locked) {
+    const { kidTime, stopRun } = require('./kid');
+    for (const t of await kidTime(req.fid, k)) if (t.run !== null) await stopRun(req.fid, k.id, t.id, t.left);
+  }
+  require('../push').nudge(req.fid).catch(() => {});
+  res.json({ ok: true, locked: !!locked });
+}));
 router.put('/kids/:id', wrap(async (req, res) => {
   const { name, avatar, color, active, auto_approve } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });

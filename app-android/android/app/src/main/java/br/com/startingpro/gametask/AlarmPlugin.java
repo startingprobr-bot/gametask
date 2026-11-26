@@ -130,6 +130,8 @@ public class AlarmPlugin extends Plugin {
     @PluginMethod
     public void blockAllow(PluginCall call) {
         BlockStore.setAllowed(getContext(), call.getObject("allowed", new JSObject()).toString());
+        if (call.hasOption("kid")) BlockStore.setKid(getContext(), call.getInt("kid", 0), call.getObject("map", new JSObject()).toString());
+        BlockService.poll(getContext()); // confere com o servidor logo depois de mudar a criança ou o mapa
         call.resolve();
     }
 

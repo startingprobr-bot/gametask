@@ -1217,3 +1217,13 @@ button.meter:active{transform:scale(.98)}
 .kpin h2{font-size:24px;color:var(--navy)}
 .kpin-sub{margin:4px 0 0;font-weight:800;color:var(--ink-soft)}
 .kpin .btn.ghost[data-c]{margin-top:12px;width:100%}
+
+/* ---- Bloqueio dos pais ---- */
+.kid-id small.lk{color:#fff;background:var(--red);border-radius:999px;padding:0 8px;font-weight:900}
+.kid-act .btn.icon-only{flex:0 0 46px;min-width:46px;padding:0}
+.kid-act .btn.icon-only img{width:24px;height:24px}
+.lock-banner{display:flex;align-items:center;gap:10px;margin:8px 16px 0;padding:10px 14px;border-radius:16px;background:#ff4d5e;color:#fff;border:2px solid var(--navy);box-shadow:0 3px 0 var(--navy);font-weight:900}
+.lock-banner img{width:28px;height:28px}
+.timer-lock{margin:10px 0 0;padding:8px 12px;border-radius:12px;background:rgba(255,77,94,.22);color:#fff;font-weight:800}
+.kid-act{gap:6px}
+.kid-act .btn{padding:0 8px;font-size:15px}

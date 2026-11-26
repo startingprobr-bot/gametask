@@ -25,6 +25,7 @@ public class GtMessagingService extends FirebaseMessagingService {
     @Override
     public void onMessageReceived(RemoteMessage msg) {
         Map<String, String> d = msg.getData();
+        if ("screen".equals(d.get("type"))) { BlockService.poll(this); return; } // alguém mexeu no tempo de tela: confere agora
         String title = d.get("title") != null ? d.get("title") : "GameTask";
         String body = d.get("body") != null ? d.get("body") : "";
         boolean call = "call".equals(d.get("type"));
