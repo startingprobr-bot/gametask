@@ -1204,3 +1204,16 @@ button.meter:active{transform:scale(.98)}
   .lobby-bar{position:absolute;right:0;top:0}
   .lobby-bar+.wrap .select-title{padding-top:28px}
 }
+
+/* ---- Doar minutos e PIN da criança ---- */
+.btn.yellow{--bg:var(--yellow,#ffd21f);--hi:var(--yellow-hi,#ffe970);--lo:var(--yellow-lo,#e8a900);--fg:var(--navy);text-shadow:none}
+.timer-btns{display:flex;gap:10px;margin-top:6px}
+.timer-btns .btn{flex:1}
+.stepper{display:flex;align-items:center;justify-content:center;gap:22px;padding:6px 0}
+.stepper b{min-width:70px;text-align:center;font-family:var(--display);font-weight:400;font-size:44px;color:var(--navy)}
+.stepper .btn.round{width:60px;height:60px;font-size:34px;font-weight:900;line-height:1}
+.kpin-bg{z-index:110;display:grid;place-items:center;padding:16px;background:rgba(8,18,58,.78)}
+.kpin{width:min(380px,100%);max-height:96dvh;overflow:auto;text-align:center;padding:22px 20px 18px;border-radius:28px;background:#fff;border:3px solid var(--navy);box-shadow:0 8px 0 var(--navy),0 24px 60px rgba(0,0,0,.4);animation:zoom .3s var(--spring) both}
+.kpin h2{font-size:24px;color:var(--navy)}
+.kpin-sub{margin:4px 0 0;font-weight:800;color:var(--ink-soft)}
+.kpin .btn.ghost[data-c]{margin-top:12px;width:100%}

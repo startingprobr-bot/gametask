@@ -10,7 +10,7 @@ const wrap = (fn) => (req, res) => fn(req, res).catch(e => { console.error(e); r
 // ---------- Filhos ----------
 router.get('/kids', wrap(async (req, res) => {
   const [rows] = await pool.query('SELECT * FROM kids WHERE family_id=? ORDER BY active DESC,adult,sort,id', [req.fid]);
-  res.json(rows);
+  res.json(rows.map(({ pin_hash, ...k }) => ({ ...k, has_pin: !!pin_hash })));
 }));
 router.post('/kids', wrap(async (req, res) => {
   const { name, avatar = 'fox', color = '#ff4fae', auto_approve } = req.body;
@@ -23,6 +23,13 @@ router.put('/kids/:id', wrap(async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'Nome obrigatório' });
   await pool.query('UPDATE kids SET name=?,avatar=?,color=?,active=?,auto_approve=? WHERE id=? AND family_id=?',
     [name.trim(), avatar, color, bool(active), bool(auto_approve), req.params.id, req.fid]);
+  // PIN da criança: 4 números (vazio = não muda; clear_pin = tira)
+  const pin = String(req.body.pin || '').trim();
+  if (req.body.clear_pin) await pool.query('UPDATE kids SET pin_hash=NULL WHERE id=? AND family_id=?', [req.params.id, req.fid]);
+  else if (pin) {
+    if (!/^\d{4}$/.test(pin)) return res.status(400).json({ error: 'O PIN da criança tem 4 números' });
+    await pool.query('UPDATE kids SET pin_hash=? WHERE id=? AND family_id=?', [bcrypt.hashSync(pin, 8), req.params.id, req.fid]);
+  }
   res.json({ ok: true });
 }));
 
@@ -278,12 +285,13 @@ async function saveReward(req, id) {
   const mode = kind === 'goal' ? (b.goal_mode === 'coins' ? 'coins' : 'tasks') : null;
   const v = [b.title.trim(), b.icon || 'game', kind, kind === 'time' ? (b.unit || 'min') : (mode === 'coins' ? 'moedas' : 'tarefas'),
     +b.total_value, mode, bool(b.active ?? 1)];
+  const donate = kind === 'time' && bool(b.donate) ? 1 : 0;
   // só um filho (ou todos): o filho precisa ser desta família
   const [[k]] = b.kid_id ? await pool.query('SELECT id FROM kids WHERE id=? AND family_id=?', [b.kid_id, req.fid]) : [[]];
   v.push(k?.id || null);
-  if (id) await pool.query('UPDATE rewards SET title=?,icon=?,kind=?,unit=?,total_value=?,goal_mode=?,active=?,kid_id=? WHERE id=? AND family_id=?', [...v, id, req.fid]);
+  if (id) await pool.query('UPDATE rewards SET title=?,icon=?,kind=?,unit=?,total_value=?,goal_mode=?,active=?,kid_id=?,donate=? WHERE id=? AND family_id=?', [...v, donate, id, req.fid]);
   else {
-    const [r] = await pool.query('INSERT INTO rewards (title,icon,kind,unit,total_value,goal_mode,active,kid_id,family_id) VALUES (?,?,?,?,?,?,?,?,?)', [...v, req.fid]);
+    const [r] = await pool.query('INSERT INTO rewards (title,icon,kind,unit,total_value,goal_mode,active,kid_id,donate,family_id) VALUES (?,?,?,?,?,?,?,?,?,?)', [...v, donate, req.fid]);
     id = r.insertId;
   }
   // Missões que contam para esta recompensa (só as desta família). Meta de moedas não usa missões.

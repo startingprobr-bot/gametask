@@ -475,6 +475,42 @@ const step = (m) => console.log('✔', m);
     const pp = (await fetch(BASE + '/app')).headers.get('permissions-policy') || '';
     assert.ok(/microphone=\(self\)/.test(pp) && /camera=\(\)/.test(pp), 'Permissions-Policy: ' + pp);
     step('cabeçalho permite o microfone só para o próprio site');
+    // PIN da criança no cronômetro e doação de minutos entre irmãos
+    const today0 = new Date().toLocaleDateString('sv');
+    const kidRow = (await ok('GET', '/api/admin/kids')).find(k => k.id === eva);
+    assert.equal(kidRow.pin_hash, undefined); assert.equal(kidRow.has_pin, false);
+    const tdbD = await mysql.createConnection({ host: process.env.DB_HOST || '127.0.0.1', user: process.env.DB_USER || 'root', password: process.env.DB_PASS || '', database: 'gametask_test' });
+    await tdbD.query("INSERT INTO ledger (family_id,kid_id,kind,reward_id,amount,day,note) SELECT family_id,id,'time',?,10,?,'teste' FROM kids WHERE id IN (?,?)", [game, today0, eva, ber]);
+    await tdbD.end();
+    const putKid = (extra) => ok('PUT', `/api/admin/kids/${eva}`, { name: kidRow.name, avatar: kidRow.avatar, color: kidRow.color, active: true, auto_approve: !!kidRow.auto_approve, ...extra });
+    assert.equal((await api('PUT', `/api/admin/kids/${eva}`, { name: kidRow.name, avatar: kidRow.avatar, color: kidRow.color, pin: '12' })).status, 400);
+    await putKid({ pin: '1234' });
+    assert.equal((await ok('GET', '/api/admin/kids')).find(k => k.id === eva).has_pin, true);
+    assert.equal((await ok('GET', `/api/kids/${eva}/home`)).kid.has_pin, true);
+    const pinUrl = `/api/kids/${eva}/timer/${game}`;
+    let r403 = await api('POST', pinUrl, { action: 'start' }); assert.equal(r403.status, 403); assert.equal(r403.data.code, 'pin');
+    assert.equal((await api('POST', pinUrl, { action: 'start', pin: '9999' })).status, 403);
+    await ok('POST', pinUrl, { action: 'start', pin: '1234' });
+    await ok('POST', pinUrl, { action: 'pause' }); // pausar não pede PIN
+    // doação: só com o prêmio liberado pelos pais
+    const donUrl = `/api/kids/${eva}/donate`, don = (o) => api('POST', donUrl, { reward_id: game, to_kid_id: ber, minutes: 2, pin: '1234', ...o });
+    assert.equal((await don({})).status, 403); // ainda não liberado
+    const gameRw = (await ok('GET', '/api/admin/rewards')).find(r => r.id === game);
+    await ok('PUT', `/api/admin/rewards/${game}`, { title: gameRw.title, icon: gameRw.icon, kind: 'time', total_value: gameRw.total_value, active: true, donate: true });
+    assert.equal((await ok('GET', `/api/kids/${eva}/home`)).time.find(x => x.id === game).donate, true);
+    assert.equal((await don({ pin: '0000' })).status, 403);
+    assert.equal((await don({ to_kid_id: eva })).status, 404); // não doa para si mesmo
+    assert.equal((await don({ minutes: 0 })).status, 400);
+    assert.equal((await don({ minutes: 999 })).status, 400); // mais do que tem
+    const e0 = (await ok('GET', `/api/kids/${eva}/home`)).time.find(x => x.id === game), b0 = (await ok('GET', `/api/kids/${ber}/home`)).time.find(x => x.id === game);
+    const dr = await don({}); assert.equal(dr.status, 200);
+    const e1 = (await ok('GET', `/api/kids/${eva}/home`)).time.find(x => x.id === game), b1 = (await ok('GET', `/api/kids/${ber}/home`)).time.find(x => x.id === game);
+    assert.equal(+(e0.left - e1.left).toFixed(2), 2); assert.equal(+(b1.left - b0.left).toFixed(2), 2);
+    assert.equal((await ok('GET', `/api/kids/${eva}/donate-targets?reward_id=${game}`)).some(k => k.id === ber), true);
+    await putKid({ clear_pin: true });
+    assert.equal((await ok('GET', '/api/admin/kids')).find(k => k.id === eva).has_pin, false);
+    await ok('POST', pinUrl, { action: 'start' }); await ok('POST', pinUrl, { action: 'pause' });
+    step('PIN da criança no play e doação de minutos entre irmãos');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

@@ -169,6 +169,8 @@ const COLUMNS = [
   ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
   ['messages', 'to_label', 'VARCHAR(120) NULL'],
   ['messages', 'devices', 'VARCHAR(500) NULL'],         // aparelhos escolhidos ("f3,p2"); NULL = todos
+  ['kids', 'pin_hash', 'VARCHAR(80) NULL'],              // PIN da criança: pedido ao dar o play no tempo de tela e ao doar minutos
+  ['rewards', 'donate', 'TINYINT NOT NULL DEFAULT 0'],   // permite doar minutos entre irmãos
   ['fcm_tokens', 'label', 'VARCHAR(60) NULL'],          // nome do aparelho (Tablet das crianças, Celular da Ana)
   ['fcm_tokens', 'msgs', 'TINYINT NOT NULL DEFAULT 1'],  // recados tocam neste aparelho
   ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'],

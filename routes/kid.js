@@ -43,7 +43,8 @@ router.get('/kids', async (req, res) => {
 });
 
 async function ownKid(req, res) {
-  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
+  const [[k]] = await pool.query('SELECT id,name,avatar,color,adult,(pin_hash IS NOT NULL) has_pin FROM kids WHERE id=? AND family_id=? AND active=1', [req.params.id, req.fid]);
+  if (k) k.has_pin = !!k.has_pin;
   if (!k) res.status(404).json({ error: 'Jogador não encontrado' });
   return k;
 }
@@ -142,7 +143,7 @@ async function timeState(fid, kid, day, rewards, pTime) {
       used = r2(used + await stopRun(fid, kid.id, r.id, left)); run = null; ended = true;
       push.timeUp(fid, kid, r, ts).catch(e => console.error('aviso de tempo', e.message)); // chega mesmo com o app fechado
     }
-    out.push({ id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value, earned, used, pending,
+    out.push({ id: r.id, title: r.title, icon: r.icon, unit: r.unit, cap: r.total_value, earned, used, pending, donate: !!r.donate && !r.kid_id,
       left: Math.max(0, r2(earned + pending - used)), run, ended });
   }
   return out;
@@ -164,6 +165,18 @@ async function kidTime(fid, kid) {
   const { pTime } = await pendingGains(kid.id, sh, day);
   return timeState(fid, kid, day, rewards.filter(r => relevant.has(r.id)), pTime);
 }
+// PIN da criança (se os pais definiram): 5 erros por minuto e a criança espera
+const pinFails = new Map();
+async function kidPinOk(req, res, kid) {
+  if (!kid.has_pin) return true;
+  const now = Date.now(), tries = (pinFails.get(kid.id) || []).filter(t => now - t < 60000);
+  if (tries.length >= 5) { res.status(429).json({ error: 'Muitas tentativas. Espere 1 minuto.', code: 'pin' }); return false; }
+  const [[row]] = await pool.query('SELECT pin_hash FROM kids WHERE id=?', [kid.id]);
+  if (row?.pin_hash && require('bcryptjs').compareSync(String(req.body.pin || ''), row.pin_hash)) { pinFails.delete(kid.id); return true; }
+  tries.push(now); pinFails.set(kid.id, tries);
+  res.status(403).json({ error: req.body.pin ? 'PIN incorreto' : 'Digite o seu PIN', code: 'pin' });
+  return false;
+}
 router.post('/kids/:id/timer/:rid', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   const rid = +req.params.rid, day = today();
@@ -171,6 +184,7 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
   if (!t) return res.status(404).json({ error: 'Recompensa não encontrada' });
   if (req.body.action === 'start') {
     if (t.run === null) {
+      if (!(await kidPinOk(req, res, kid))) return;
       if (!(t.left > 0)) return res.status(400).json({ error: 'Acabou o tempo de hoje. Faça mais missões para ganhar mais!' });
       await pool.query('INSERT IGNORE INTO time_runs (family_id,kid_id,reward_id,day) VALUES (?,?,?,?)', [req.fid, kid.id, rid, day]);
     }
@@ -178,6 +192,39 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
     await stopRun(req.fid, kid.id, rid, t.left);
   }
   res.json({ time: await kidTime(req.fid, kid) });
+});
+
+// Doação de minutos entre irmãos (só nos prêmios em que os pais liberaram): quem doa perde, quem recebe ganha.
+// Só dá para doar tempo já aprovado e com o cronômetro parado.
+router.get('/kids/:id/donate-targets', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  const rid = +req.query.reward_id;
+  const [sib] = await pool.query('SELECT id,name,avatar,color FROM kids WHERE family_id=? AND active=1 AND adult=0 AND id<>? ORDER BY sort,id', [req.fid, kid.id]);
+  const out = [];
+  for (const s of sib) { if ((await kidTime(req.fid, { ...s, adult: 0 })).some(x => x.id === rid)) out.push(s); }
+  res.json(out);
+});
+router.post('/kids/:id/donate', async (req, res) => {
+  const kid = await ownKid(req, res); if (!kid) return;
+  if (kid.adult) return res.status(400).json({ error: 'Só as crianças doam tempo' });
+  const rid = +req.body.reward_id, to = +req.body.to_kid_id, m = Math.floor(+req.body.minutes);
+  if (!(m >= 1)) return res.status(400).json({ error: 'Escolha quantos minutos doar' });
+  const [[rw]] = await pool.query("SELECT * FROM rewards WHERE id=? AND family_id=? AND kind='time' AND active=1", [rid, req.fid]);
+  if (!rw || !rw.donate || rw.kid_id) return res.status(403).json({ error: 'Os pais ainda não liberaram doar este tempo' });
+  const [[rk]] = await pool.query('SELECT id,name,avatar FROM kids WHERE id=? AND family_id=? AND active=1 AND adult=0 AND id<>?', [to, req.fid, kid.id]);
+  if (!rk) return res.status(404).json({ error: 'Escolha um irmão para receber' });
+  if (!(await kidPinOk(req, res, kid))) return;
+  const mine = (await kidTime(req.fid, kid)).find(x => x.id === rid);
+  if (!mine) return res.status(404).json({ error: 'Recompensa não encontrada' });
+  if (mine.run !== null) return res.status(400).json({ error: 'Pause o cronômetro antes de doar' });
+  const can = Math.floor(Math.max(0, mine.earned - mine.used));
+  if (m > can) return res.status(400).json({ error: can ? `Você pode doar até ${can} min (o tempo que os pais já aprovaram)` : 'Você não tem tempo aprovado para doar' });
+  if (!(await kidTime(req.fid, { ...rk, adult: 0 })).some(x => x.id === rid)) return res.status(400).json({ error: `${rk.name} não tem esse tempo` });
+  const day = today();
+  await pool.query("INSERT INTO ledger (family_id,kid_id,kind,reward_id,amount,day,note) VALUES (?,?,'time',?,?,?,?),(?,?,'time',?,?,?,?)",
+    [req.fid, kid.id, rid, -m, day, `Doou ${m} min para ${rk.name}`, req.fid, rk.id, rid, m, day, `Ganhou ${m} min de ${kid.name}`]);
+  if (access(req.family).plus) push.sendToFamily(req.fid, { skip: req.get('x-gt-dev') || '', title: `${kid.name} doou ${m} min para ${rk.name}`, body: rw.title, tag: 'donate' + Date.now() }, 'approvals').catch(() => {});
+  res.json({ ok: true, to: rk.name, minutes: m, time: await kidTime(req.fid, kid) });
 });
 
 // Marca a missão como feita. Devolve true se acabou de ser marcada.

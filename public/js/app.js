@@ -856,6 +856,39 @@ function viewLogin(mode = 'login') {
 }
 
 // ---------- Seleção de herói ----------
+// PIN da criança: teclado grande. Devolve os 4 números ou null se cancelar.
+function askKidPin(name, what) {
+  return new Promise(resolve => {
+    let pin = '';
+    const bg = document.createElement('div'); bg.className = 'sheet-bg kpin-bg';
+    bg.innerHTML = `<div class="kpin" role="dialog" aria-label="PIN de ${esc(name)}"><h2 class="d">${esc(name)}, digite o seu PIN</h2><p class="kpin-sub">${esc(what)}</p>
+      <div class="pin-dots" id="kpd">${'<i></i>'.repeat(4)}</div><div class="err" id="kpe" role="alert"></div>
+      <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="btn ghost" data-k="${n}">${n}</button>`).join('')}
+        <button type="button" class="btn ghost" data-k="del" aria-label="Apagar">${SVG.del}</button><button type="button" class="btn ghost" data-k="0">0</button><button type="button" class="btn green" data-k="ok">OK</button></div>
+      <button type="button" class="btn ghost" data-c>Cancelar</button></div>`;
+    document.body.append(bg);
+    const dots = () => { $('#kpd', bg).innerHTML = Array.from({ length: 4 }, (_, i) => `<i class="${i < pin.length ? 'on' : ''}"></i>`).join(''); };
+    const done = (v) => { document.removeEventListener('keydown', kb); bg.remove(); resolve(v); };
+    const press = (k) => {
+      if (k === 'del') pin = pin.slice(0, -1); else if (k === 'ok') { if (pin.length === 4) return done(pin); $('#kpe', bg).textContent = 'São 4 números'; return; } else if (pin.length < 4) pin += k;
+      sfx.tap(); dots(); if (pin.length === 4 && k !== 'del') setTimeout(() => bg.isConnected && done(pin), 150);
+    };
+    const kb = (e) => { if (/^\d$/.test(e.key)) press(e.key); else if (e.key === 'Backspace') press('del'); else if (e.key === 'Enter') press('ok'); else if (e.key === 'Escape') done(null); };
+    document.addEventListener('keydown', kb);
+    $$('[data-k]', bg).forEach(b => b.onclick = () => press(b.dataset.k));
+    $('[data-c]', bg).onclick = () => done(null);
+  });
+}
+// pede o PIN (se a criança tem) e repete enquanto estiver errado
+async function withKidPin(kid, what, fn) {
+  let pin;
+  for (;;) {
+    if (kid.has_pin) { pin = await askKidPin(kid.name, what); if (pin === null) return null; }
+    try { return await fn(pin); }
+    catch (e) { if (e.code === 'pin' && kid.has_pin) { toast(e.message, true); sfx.bad(); if (e.status === 429) return null; continue; } throw e; }
+  }
+}
+
 // Carregamento ao trocar de aba: a barra só aparece se demorar
 async function withLoader(fn) {
   let ov = null, pct = 8, tick = 0;
@@ -950,16 +983,40 @@ async function viewKid(id) {
         ${im(x.icon, 'timer-ic', 'game')}<h2 class="d stroke">${esc(x.title)}</h2>
         <div class="timer-face ${run ? 'on' : ''}"><b class="num" ${run ? `data-clock="${key}"` : ''}>${mmss(s)}</b><span>${run ? 'Valendo!' : s > 0 ? 'Pausado' : 'Sem tempo'}</span></div>
         <p class="timer-hint">${s > 0 ? 'Fez mais missões? O tempo novo soma aqui.' : 'Faça mais missões para ganhar tempo.'}</p>
-        <button type="button" class="btn big ${run ? '' : 'green'}" data-go ${!run && s <= 0 ? 'disabled' : ''}>${run ? SVG.pause + 'Pausar' : SVG.play + 'Começar'}</button></div>`;
+        <div class="timer-btns">${x.donate && !run ? `<button type="button" class="btn big yellow" data-donate>Doar</button>` : ''}
+        <button type="button" class="btn big ${run ? '' : 'green'}" data-go ${!run && s <= 0 ? 'disabled' : ''}>${run ? SVG.pause + 'Pausar' : SVG.play + 'Começar'}</button></div></div>`;
       $('[data-x]', bg).onclick = close;
       $('[data-go]', bg).onclick = guard(async () => {
         sfx.tap();
-        const r = await api('POST', `/kids/${id}/timer/${tid}`, { action: run ? 'pause' : 'start' });
+        const r = run ? await api('POST', `/kids/${id}/timer/${tid}`, { action: 'pause' })
+          : await withKidPin(latest.kid, `Para começar ${x.title}`, (pin) => api('POST', `/kids/${id}/timer/${tid}`, { action: 'start', pin }));
+        if (!r) return;
         latest.time = r.time; syncClocks(latest.kid, r.time); bg.paint();
       });
+      const dn = $('[data-donate]', bg); if (dn) dn.onclick = guard(async () => { sfx.tap(); await donateSheet(x); });
     };
     bg.onclick = (e) => { if (e.target === bg) close(); };
     bg.paint(); document.body.append(bg); $('[data-go]', bg)?.focus();
+  };
+
+  // Doar minutos para um irmão (só quando os pais liberaram no prêmio)
+  const donateSheet = async (x) => {
+    const can = Math.floor(Math.max(0, x.earned - x.used));
+    if (can < 1) return toast('Você ainda não tem minutos aprovados para doar.', true);
+    const sib = await api('GET', `/kids/${id}/donate-targets?reward_id=${x.id}`);
+    if (!sib.length) return toast('Nenhum irmão pode receber este tempo.', true);
+    let m = 1;
+    const bg = sheet(`Doar ${x.title}`, `<p class="lead" style="margin-top:6px">Você pode doar até <b>${can} min</b> (o tempo que os pais já aprovaram). Quem recebe ganha; você perde.</p>
+      <div class="field"><span class="lab">Para quem</span><div class="kid-pick">${sib.map((k, i) => `<label class="kp-check"><input type="radio" name="to" value="${k.id}" ${sib.length === 1 || !i ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
+      <div class="field"><span class="lab">Quantos minutos</span><div class="stepper"><button type="button" class="btn ghost round" data-m="-1" aria-label="Menos um minuto">−</button><b id="dm" class="num">1</b><button type="button" class="btn ghost round" data-m="1" aria-label="Mais um minuto">+</button></div></div>`,
+      async (f) => {
+        const to = +f.to.value, name = sib.find(k => k.id === to)?.name;
+        const r = await withKidPin(latest.kid, `Para doar ${m} min a ${name}`, (pin) => api('POST', `/kids/${id}/donate`, { reward_id: x.id, to_kid_id: to, minutes: m, pin }));
+        if (!r) throw new Error('Doação cancelada');
+        latest.time = r.time; syncClocks(latest.kid, r.time); sfx.win(); toast(`Você doou ${r.minutes} min para ${r.to}!`);
+        document.querySelector('.timer-bg')?.paint?.();
+      }, { saveLabel: 'Doar' });
+    $$('[data-m]', bg).forEach(b => b.onclick = () => { m = Math.min(can, Math.max(1, m + +b.dataset.m)); $('#dm', bg).textContent = m; sfx.tap(); });
   };
 
   const render = (d) => {
@@ -1298,9 +1355,14 @@ async function adminKids(pane, refresh) {
     <div class="field"><span class="lab">Cor do card</span>${swatches('color', k.color)}</div>
     <label class="check"><input type="checkbox" name="auto" ${k.auto_approve ? 'checked' : ''}>Aprovar as tarefas automaticamente</label>
     <p class="hint">Os ganhos entram assim que ${k.name ? esc(k.name) : 'a criança'} marca a tarefa, sem passar pela aba Aprovar.</p>
+    ${k.adult ? '' : `<div class="field"><label for="kpin">PIN da criança ${k.has_pin ? '<span class="muted">(já definido)</span>' : '<span class="muted">(opcional)</span>'}</label>
+      <input id="kpin" name="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="${k.has_pin ? 'Digite 4 números para trocar' : '4 números'}">
+      <p class="hint">${k.name ? esc(k.name) : 'A criança'} digita o PIN para dar o play no tempo de tela e para doar minutos. Assim um irmão não usa o tempo do outro.</p>
+      ${k.has_pin ? '<label class="check"><input type="checkbox" name="clearpin">Tirar o PIN</label>' : ''}</div>`}
     <label class="check"><input type="checkbox" name="active" ${k.active ? 'checked' : ''}>Ativo na tela de jogadores</label>
     ${k.id ? `<button type="button" class="btn red sm" data-del style="margin-top:14px">Apagar ${esc(k.name)}</button>` : ''}`;
-  const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked });
+  const read = (f) => ({ name: f.name.value, avatar: f.avatar.value, color: f.color.value, active: f.active.checked, auto_approve: f.auto.checked,
+    pin: f.pin?.value.trim() || '', clear_pin: !!f.clearpin?.checked });
   const onK = all.filter(k => k.active);
   $$('[data-msg]').forEach(b => b.onclick = () => messageSheet(onK, [+b.dataset.msg]));
   const ma = $('#msgAll'); if (ma) ma.onclick = () => messageSheet(onK);
@@ -1622,15 +1684,17 @@ async function adminRewards(pane, refresh) {
     <div class="field"><span class="lab">Tipo</span>${seg('kind', [['time', 'Tempo por dia'], ['goal', 'Meta']], r.kind)}</div>
     <div class="field" data-show="goal"><span class="lab">A meta conta</span>${seg('goal_mode', [['tasks', 'Missões feitas'], ['coins', 'Moedas']], r.goal_mode || 'tasks')}</div>
     <div class="field"><label for="rv" data-lbl>Minutos por dia</label><input id="rv" type="number" step="any" min="1" name="total_value" value="${r.total_value}" inputmode="decimal" required></div>
+    ${kidsOnly.length > 1 ? `<label class="check" data-donate><input type="checkbox" name="donate" ${r.donate ? 'checked' : ''}>Permitir que as crianças doem minutos entre si</label>
+      <p class="hint" data-donate>Aparece o botão <b>Doar</b> no cronômetro. Quem doa perde os minutos e o irmão ganha. Só dá para doar tempo já aprovado.</p>` : ''}
     ${kidsOnly.length > 1 || r.kid_id ? `<div class="field"><label for="rk">Para quem</label><select id="rk" name="kid_id"><option value="">Todos os filhos</option>${kidsOnly.map(k => `<option value="${k.id}" ${k.id === r.kid_id ? 'selected' : ''}>Só ${esc(k.name)}</option>`).join('')}</select>
       <p class="hint">Só aquele filho vê e ganha esta recompensa, mesmo que as tarefas sejam de todos.</p></div>` : ''}
     ${myTasks.length ? `<div class="field" data-tasks><span class="lab">Missões que contam <button type="button" class="btn ghost sm" data-all>Marcar todas</button> <button type="button" class="btn ghost sm" data-none>Tirar todas</button></span>
       <div class="rw-tasks">${myTasks.map(t => `<label class="check"><input type="checkbox" name="tk" value="${t.id}" ${!r.id || t.reward_ids.includes(r.id) ? 'checked' : ''}>${esc(t.title)}</label>`).join('')}</div>
       <p class="hint">Tempo: o total do dia é dividido entre as missões marcadas. Meta: cada missão feita soma +1. Missões novas você liga na própria missão.</p></div>` : ''}
     <label class="check"><input type="checkbox" name="active" ${r.active ? 'checked' : ''}>Ativa</label>`;
-  const read = (f) => ({ task_ids: myTasks.length ? $$('[name=tk]:checked', f).map(x => +x.value) : undefined, title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked, kid_id: f.kid_id ? +f.kid_id.value || null : null });
+  const read = (f) => ({ donate: !!f.donate?.checked, task_ids: myTasks.length ? $$('[name=tk]:checked', f).map(x => +x.value) : undefined, title: f.title.value, icon: f.icon.value, kind: f.kind.value, goal_mode: f.goal_mode.value, total_value: f.total_value.value, active: f.active.checked, kid_id: f.kid_id ? +f.kid_id.value || null : null });
   const wire = (bg) => { const f = bg.querySelector('form'); const tk = $('[data-tasks]', f); if (tk) { $('[data-all]', tk).onclick = () => $$('[name=tk]', tk).forEach(x => { x.checked = true; }); $('[data-none]', tk).onclick = () => $$('[name=tk]', tk).forEach(x => { x.checked = false; }); }
-    const u = () => { $('[data-show]', f).hidden = f.kind.value !== 'goal'; if (tk) tk.hidden = f.kind.value === 'goal' && f.goal_mode.value === 'coins'; $('[data-lbl]', f).textContent = f.kind.value === 'goal' ? (f.goal_mode.value === 'coins' ? 'Quantas moedas custa' : 'Quantas missões para alcançar') : 'Minutos por dia'; }; f.addEventListener('change', u); u(); };
+    const u = () => { $('[data-show]', f).hidden = f.kind.value !== 'goal'; if (tk) tk.hidden = f.kind.value === 'goal' && f.goal_mode.value === 'coins'; $$('[data-donate]', f).forEach(e => { e.hidden = f.kind.value !== 'time' || !!+(f.kid_id?.value || 0); }); $('[data-lbl]', f).textContent = f.kind.value === 'goal' ? (f.goal_mode.value === 'coins' ? 'Quantas moedas custa' : 'Quantas missões para alcançar') : 'Minutos por dia'; }; f.addEventListener('change', u); u(); };
   $('#new').onclick = () => wire(sheet('Nova recompensa', form(), async (f) => { await api('POST', '/admin/rewards', read(f)); toast('Recompensa criada'); refresh(); }, { saveLabel: 'Criar' }));
   $$('[data-use]').forEach(b => b.onclick = () => { const r = rewards.find(x => x.id == b.dataset.use); sheet(`Tempo usado: ${r.title}`, `<div class="field"><label for="uk">Quem usou</label><select id="uk" name="kid">${wal.kids.map(k => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}</select></div><div class="field"><label for="um">Minutos usados hoje</label><input id="um" name="m" type="number" step="any" min="1" required inputmode="numeric"></div>`,
     async (f) => { await api('POST', '/admin/use-time', { kid_id: +f.kid.value, reward_id: r.id, minutes: f.m.value }); toast('Tempo descontado'); refresh(); }, { saveLabel: 'Descontar' }); });
