@@ -510,6 +510,12 @@ router.get('/messages', wrap(async (req, res) => {
     WHERE m.family_id=? ORDER BY m.id DESC LIMIT 15`, [req.fid]);
   res.json(rows);
 }));
+// Aparelhos onde o recado pode tocar: celulares com o app (f…) e aparelhos com avisos do navegador (p…)
+router.get('/devices', wrap(async (req, res) => {
+  const [f] = await pool.query('SELECT id,label,msgs FROM fcm_tokens WHERE family_id=? ORDER BY id', [req.fid]);
+  const [p] = await pool.query('SELECT id,label FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
+  res.json([...f.map(x => ({ id: 'f' + x.id, label: x.label || 'Aparelho com o app', on: !!x.msgs })), ...p.map(x => ({ id: 'p' + x.id, label: x.label || 'Navegador', on: true }))]);
+}));
 router.post('/messages', wrap(async (req, res) => {
   const text = String(req.body.text || '').trim().slice(0, 300);
   if (!text) return res.status(400).json({ error: 'Escreva o recado' });
@@ -523,7 +529,9 @@ router.post('/messages', wrap(async (req, res) => {
   await pool.query('INSERT INTO messages (family_id,kid_id,to_label,from_name,text) VALUES (?,?,?,?,?)', [req.fid, to.length === 1 ? to[0].id : null, names, from, text]);
   let sent = 0;
   if (access(req.family).plus) {
-    sent = await push.sendToFamily(req.fid, { title: `Recado de ${from} para ${names}`, body: text, tag: 'msg' + Date.now(), alarm: true, icon: to.length === 1 ? to[0].avatar || '' : '', url: to.length === 1 ? `/app#/kid/${to[0].id}` : '/app#/' }, 'all');
+    // aparelhos escolhidos (se a lista veio); sem lista, vale o padrão de cada aparelho
+    const only = Array.isArray(req.body.devices) ? { f: req.body.devices.filter(d => /^f\d+$/.test(d)).map(d => +d.slice(1)), p: req.body.devices.filter(d => /^p\d+$/.test(d)).map(d => +d.slice(1)) } : null;
+    sent = await push.sendToFamily(req.fid, { only, title: `Recado de ${from} para ${names}`, body: text, tag: 'msg' + Date.now(), alarm: true, icon: to.length === 1 ? to[0].avatar || '' : '', url: to.length === 1 ? `/app#/kid/${to[0].id}` : '/app#/' }, 'all');
   }
   res.json({ ok: true, sent });
 }));

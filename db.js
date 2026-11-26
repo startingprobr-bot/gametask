@@ -160,7 +160,10 @@ const COLUMNS = [
   ['leads', 'wa_confirmed_at', 'TIMESTAMP NULL'],        // a pessoa mandou o código pelo WhatsApp (número confirmado)
   ['fix_wheels', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],  // 'fix' = correção (tira moedas), 'free' = roleta extra (dá moedas)
   ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
-  ['messages', 'to_label', 'VARCHAR(120) NULL'],          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
+  ['messages', 'to_label', 'VARCHAR(120) NULL'],
+  ['fcm_tokens', 'label', 'VARCHAR(60) NULL'],          // nome do aparelho (Tablet das crianças, Celular da Ana)
+  ['fcm_tokens', 'msgs', 'TINYINT NOT NULL DEFAULT 1'],  // recados tocam neste aparelho
+  ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'], // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
   ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)

@@ -19,8 +19,10 @@ async function sendToFamily(fid, payload, kind = 'reminders') {
   const fcmOk = await sendFcm(fid, payload, kind);
   if (!ready) return fcmOk;
   const where = kind === 'all' ? '' : ` AND ${kind === 'approvals' ? 'approvals' : 'reminders'}=1`;
-  const [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
-  const body = JSON.stringify(payload);
+  let [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
+  if (payload.only) subs = subs.filter(s => payload.only.p.includes(s.id));
+  const { only, ...visible } = payload;
+  const body = JSON.stringify(visible);
   let ok = 0, fail = 0, err = null;
   await Promise.all(subs.map(s => webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, { TTL: 900, urgency: 'high' })
     .then(() => ok++)
@@ -41,7 +43,9 @@ const fcm = require('./fcm');
 async function sendFcm(fid, payload, kind) {
   const tag = String(payload.tag || '');
   if (!fcm.on() || /^[at]\d/.test(tag)) return 0;
-  const [rows] = await pool.query(`SELECT id,token FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
+  let [rows] = await pool.query(`SELECT id,token,msgs FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
+  if (payload.only) rows = rows.filter(r => payload.only.f.includes(r.id));       // recado: só os aparelhos marcados
+  else if (tag.startsWith('msg')) rows = rows.filter(r => r.msgs);                 // sem escolha: quem aceita recados
   let ok = 0;
   await Promise.all(rows.map(async (r) => {
     const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag, icon: payload.icon || '' });

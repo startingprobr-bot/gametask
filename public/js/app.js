@@ -315,19 +315,21 @@ setInterval(checkMessages, 10000);
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 const GtAlarm = NATIVE ? window.Capacitor?.Plugins?.GtAlarm : null;
 let alarmSig = '', alarmWait = 0;
-// registra o celular no Firebase uma vez por abertura (e quando muda a opção de aprovações)
+// nome deste aparelho (ele escolhe em Ajustes); sem nome, "Tablet" ou "Celular" pelo tamanho da tela
+const devLabel = () => store.get('gt-dev-label') || (Math.min(screen.width, screen.height) >= 600 ? 'Tablet' : 'Celular');
+// registra o celular no Firebase uma vez por abertura (e quando muda alguma opção dele)
 let fcmDone = '';
 async function registerFcm() {
   if (!GtAlarm?.fcmToken || !ME.family) return null;
-  const approvals = store.get('gt-fcm-appr') !== '0';
-  try { const { token } = await GtAlarm.fcmToken(); const k = token + approvals; if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals }); fcmDone = k; return r.server; }
+  const approvals = store.get('gt-fcm-appr') !== '0', msgs = store.get('gt-dev-msgs') !== '0', alarms = store.get('gt-dev-alarms') !== '0', label = devLabel();
+  try { const { token } = await GtAlarm.fcmToken(); const k = [token, approvals, msgs, alarms, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, label }); fcmDone = k; return r.server; }
   catch { return null; }
 }
 async function syncNativeAlarms() {
   if (!GtAlarm || !ME.family || !ME.access?.active) return;
   registerFcm();
   try {
-    const { items } = await api('GET', '/alarm-plan');
+    const { items } = store.get('gt-dev-alarms') === '0' ? { items: [] } : await api('GET', '/alarm-plan');
     for (const [k, c] of clocks) items.push({ id: 'c' + k, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
     const sig = JSON.stringify(items.map(x => [x.id, x.at, x.title]));
     if (sig === alarmSig) return;
@@ -350,8 +352,11 @@ async function nativeAlarmBox(box) {
     ${row(st.fullScreen, 'Abrir por cima da tela bloqueada', '<button class="btn sm" data-nat="fullScreen">Liberar</button>')}
     ${row(st.battery, 'Funcionar com o app fechado (bateria sem restrição)', '<button class="btn sm" data-nat="battery">Liberar</button>')}
     ${st.xiaomi ? `<div class="nat-row">${im('phone')}<span class="grow"><b>Xiaomi:</b> ligue o GameTask em <b>Início automático</b>, senão o alarme só toca com o app aberto.</span><button class="btn sm" data-nat="autostart">Abrir</button></div>` : ''}
+    <div class="field nat-name"><label for="natName">Nome deste aparelho</label><input id="natName" maxlength="40" value="${esc(devLabel())}" placeholder="Tablet das crianças"><p class="hint">Aparece na hora de escolher onde o recado toca.</p></div>
+    <label class="check"><input type="checkbox" id="natAlarms" ${store.get('gt-dev-alarms') !== '0' ? 'checked' : ''}>Tocar os alarmes de horário (avisos e missões)</label>
+    <label class="check"><input type="checkbox" id="natMsgs" ${store.get('gt-dev-msgs') !== '0' ? 'checked' : ''}>Tocar os recados como alarme</label>
     <label class="check"><input type="checkbox" id="natAppr" ${store.get('gt-fcm-appr') !== '0' ? 'checked' : ''}>Avisar aqui quando uma criança concluir uma missão</label>
-    <p class="hint">Recados tocam como alarme neste celular mesmo com o app fechado.</p>
+    <p class="hint">Em reunião? Desligue os alarmes e os recados aqui e use o app normalmente.</p>
     <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button></div>
     <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
   $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {
@@ -359,6 +364,9 @@ async function nativeAlarmBox(box) {
     setTimeout(() => nativeAlarmBox(box).catch(() => {}), 800);
   }));
   $('#natAppr', box).onchange = (e) => { store.set('gt-fcm-appr', e.target.checked ? '1' : '0'); registerFcm(); };
+  $('#natMsgs', box).onchange = (e) => { store.set('gt-dev-msgs', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Recados vão tocar aqui' : 'Recados não tocam mais aqui'); };
+  $('#natAlarms', box).onchange = (e) => { store.set('gt-dev-alarms', e.target.checked ? '1' : '0'); alarmSig = ''; registerFcm(); syncNativeAlarms(); toast(e.target.checked ? 'Alarmes de horário ligados aqui' : 'Alarmes de horário desligados aqui'); };
+  $('#natName', box).onchange = (e) => { store.set('gt-dev-label', e.target.value.trim().slice(0, 40)); registerFcm(); toast('Nome salvo'); };
   $('#natTest', box).onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
   addEventListener('focus', () => nativeAlarmBox(box).catch(() => {}), { once: true });
 }
@@ -523,8 +531,33 @@ function viewLogin(mode = 'login') {
 }
 
 // ---------- Seleção de herói ----------
+// Tela de carregamento com barra, como em jogo: espera as imagens da próxima tela antes de mostrar.
+// Só aparece se demorar (na primeira vez num aparelho novo); depois as imagens já estão guardadas.
+const imgOk = new Set(), iconUrl = (v, fb) => `/img/3d/${slug(v, fb)}.png`;
+async function preload(srcs) {
+  const need = [...new Set(srcs)].filter(x => x && !imgOk.has(x));
+  if (!need.length) return;
+  let n = 0, ov = null;
+  const show = setTimeout(() => {
+    ov = document.createElement('div'); ov.className = 'loader'; ov.setAttribute('role', 'progressbar'); ov.setAttribute('aria-label', 'Carregando');
+    ov.innerHTML = `<img src="/img/3d/game.png" alt=""><b class="d stroke">GameTask</b><div class="lbar"><i></i></div><span>Carregando…</span>`;
+    document.body.append(ov);
+  }, 180);
+  const step = () => { n++; if (ov) ov.querySelector('.lbar i').style.width = Math.round(n / need.length * 100) + '%'; };
+  const one = (src) => new Promise(r => {
+    const i = new Image();
+    i.onload = () => { imgOk.add(src); (i.decode ? i.decode().catch(() => {}) : Promise.resolve()).then(() => { step(); r(); }); };
+    i.onerror = () => { step(); r(); };
+    i.src = src;
+  });
+  await Promise.race([Promise.all(need.map(one)), new Promise(r => setTimeout(r, 8000))]);
+  clearTimeout(show);
+  if (ov) { ov.querySelector('.lbar i').style.width = '100%'; await new Promise(r => setTimeout(r, 220)); ov.classList.add('out'); setTimeout(() => ov.remove(), 320); }
+}
+
 async function viewPlayers(me = ME) {
   const kids = await api('GET', '/kids');
+  await preload([...kids.map(k => iconUrl(k.avatar, 'fox')), iconUrl('coin'), iconUrl('check'), iconUrl('lock'), iconUrl('bell')]);
   kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); });
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
@@ -557,6 +590,8 @@ async function viewKid(id) {
     if (!here()) { clearInterval(iv); return d; }
     latest = d; $('.timer-bg')?.paint?.();
     if ($('.sheet-bg,.burst')) return d;
+    if (first) await preload([iconUrl(d.kid.avatar, 'fox'), ...d.tasks.map(t => iconUrl(t.icon)), ...d.time.map(t => iconUrl(t.icon, 'game')),
+      ...d.goals.map(g => iconUrl(g.icon, 'trophy')), iconUrl('coin'), iconUrl('stopwatch'), iconUrl('check')]);
     render(d); first = false; return d;
   };
   refreshView = () => { if (here()) load().catch(() => {}); };
@@ -862,12 +897,20 @@ function messageSheet(on, pre = []) {
   const bg = sheet(pre.length === 1 ? `Recado para ${on.find(k => k.id === pre[0])?.name || ''}` : 'Mandar recado', `<div class="field"><span class="lab">Para quem</span><div class="kid-pick">${on.map(k => `<label class="kp-check"><input type="checkbox" name="to" value="${k.id}" ${!pre.length || pre.includes(k.id) ? 'checked' : ''}><span style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</span></label>`).join('')}</div></div>
     <div class="field"><label for="mt">Recado</label><textarea id="mt" name="text" rows="3" maxlength="300" placeholder="Venha jantar!" required></textarea>
     <div class="quick">${quick.map(q => `<button type="button" class="chip-btn" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div>
-    <p class="hint">Aparece na tela na hora e toca nos aparelhos com avisos ligados. A resposta chega como aviso para você.</p></div>`,
+    <p class="hint">Aparece na hora na tela das crianças que estiver aberta. A resposta chega como aviso para você.</p></div>
+    <div class="field" data-devs hidden><span class="lab">Tocar como alarme em</span><div class="dev-pick"></div></div>`,
     async (f) => {
-      const r = await api('POST', '/admin/messages', { text: f.text.value, kid_ids: $$('[name=to]:checked', f).map(x => +x.value) });
+      const devBox = $('[data-devs]', f), devices = devBox.hidden ? undefined : $$('[name=dev]:checked', f).map(x => x.value);
+      const r = await api('POST', '/admin/messages', { text: f.text.value, kid_ids: $$('[name=to]:checked', f).map(x => +x.value), devices });
       toast(r.sent ? `Recado enviado e tocou em ${r.sent} aparelho(s)` : 'Recado enviado. Aparece na tela do jogador.');
     }, { saveLabel: 'Enviar' });
   $$('[data-q]', bg).forEach(b => b.onclick = () => { bg.querySelector('#mt').value = b.dataset.q; sfx.tap(); });
+  api('GET', '/admin/devices').then(list => {
+    if (!list.length) return;
+    const box = $('[data-devs]', bg);
+    $('.dev-pick', box).innerHTML = list.map(d => `<label class="check"><input type="checkbox" name="dev" value="${esc(d.id)}" ${d.on ? 'checked' : ''}>${im('phone')}${esc(d.label)}</label>`).join('');
+    box.hidden = false;
+  }).catch(() => {});
 }
 
 async function adminPending(pane, refresh) {

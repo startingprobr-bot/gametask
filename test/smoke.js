@@ -435,6 +435,11 @@ const step = (m) => console.log('✔', m);
     assert.equal((await api('POST', '/api/fcm', { token: 'curto' })).status, 400);
     const fcmR = await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: false }); assert.equal(fcmR.server, false);
     await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: true }); // mesmo celular: atualiza, não duplica
+    await ok('POST', '/api/fcm', { token: 'tokenTablet_' + 'y'.repeat(40), label: 'Tablet das crianças', msgs: true, alarms: true });
+    await ok('POST', '/api/fcm', { token: 'tokenAna_' + 'z'.repeat(40), label: 'Celular da Ana', msgs: false, alarms: false });
+    const devs = await ok('GET', '/api/admin/devices');
+    assert.ok(devs.some(d => d.label === 'Tablet das crianças' && d.on)); assert.ok(devs.some(d => d.label === 'Celular da Ana' && !d.on));
+    await ok('POST', '/api/admin/messages', { text: 'Só no tablet', kid_ids: allIds, devices: devs.filter(d => d.on).map(d => d.id) });
     step('app Android registra o celular para recados com o app fechado');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
