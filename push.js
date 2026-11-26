@@ -16,7 +16,8 @@ const publicKey = () => getSetting('vapid_public');
 
 // kind: 'reminders' (lembretes) | 'approvals' (pedido de aprovação para os pais) | 'all'
 async function sendToFamily(fid, payload, kind = 'reminders') {
-  if (!ready) return 0;
+  const fcmOk = await sendFcm(fid, payload, kind);
+  if (!ready) return fcmOk;
   const where = kind === 'all' ? '' : ` AND ${kind === 'approvals' ? 'approvals' : 'reminders'}=1`;
   const [subs] = await pool.query(`SELECT * FROM push_subs WHERE family_id=?${where}`, [fid]);
   const body = JSON.stringify(payload);
@@ -30,7 +31,23 @@ async function sendToFamily(fid, payload, kind = 'reminders') {
     })));
   // registro para os pais conferirem em Ajustes → Avisos
   await pool.query('INSERT INTO push_sent (family_id,title,ok,fail,err) VALUES (?,?,?,?,?)',
-    [fid, String(payload.title || '').slice(0, 120), ok, fail, subs.length ? err : 'nenhum aparelho com avisos ligados']).catch(() => {});
+    [fid, String(payload.title || '').slice(0, 120), ok + fcmOk, fail, subs.length || fcmOk ? err : 'nenhum aparelho com avisos ligados']).catch(() => {});
+  return ok + fcmOk;
+}
+
+// App Android: avisos de horário (a…, t…) o próprio celular já marca como despertador, então não vão de novo.
+// Recado e fim do tempo de tela tocam como alarme; o resto vira notificação comum.
+const fcm = require('./fcm');
+async function sendFcm(fid, payload, kind) {
+  const tag = String(payload.tag || '');
+  if (!fcm.on() || /^[at]\d/.test(tag)) return 0;
+  const [rows] = await pool.query(`SELECT id,token FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
+  let ok = 0;
+  await Promise.all(rows.map(async (r) => {
+    const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag });
+    if (res === 'ok') ok++;
+    else if (res === 'gone') await pool.query('DELETE FROM fcm_tokens WHERE id=?', [r.id]).catch(() => {});
+  }));
   return ok;
 }
 

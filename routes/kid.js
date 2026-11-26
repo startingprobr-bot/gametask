@@ -249,6 +249,14 @@ router.post('/kids/:id/messages/:mid', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   await answer(req, res, kid.name, kid.id);
 });
+// App Android: guarda o endereço do celular no Firebase (para recados com o app fechado)
+router.post('/fcm', async (req, res) => {
+  const token = String(req.body.token || '').trim();
+  if (!/^[\w:.\-]{20,255}$/.test(token)) return res.status(400).json({ error: 'Token inválido' });
+  await pool.query('INSERT INTO fcm_tokens (family_id,token,approvals) VALUES (?,?,?) ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),approvals=VALUES(approvals)',
+    [req.fid, token, req.body.approvals === false ? 0 : 1]);
+  res.json({ ok: true, server: require('../fcm').on() });
+});
 // Alarmes dos próximos 7 dias para o app Android (plano anual, como os avisos no celular)
 router.get('/alarm-plan', async (req, res) => {
   if (!access(req.family).plus) return res.json({ plus: false, items: [] });

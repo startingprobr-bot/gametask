@@ -315,8 +315,17 @@ setInterval(checkMessages, 10000);
 const NATIVE = !!window.Capacitor?.isNativePlatform?.();
 const GtAlarm = NATIVE ? window.Capacitor?.Plugins?.GtAlarm : null;
 let alarmSig = '', alarmWait = 0;
+// registra o celular no Firebase uma vez por abertura (e quando muda a opção de aprovações)
+let fcmDone = '';
+async function registerFcm() {
+  if (!GtAlarm?.fcmToken || !ME.family) return null;
+  const approvals = store.get('gt-fcm-appr') !== '0';
+  try { const { token } = await GtAlarm.fcmToken(); const k = token + approvals; if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals }); fcmDone = k; return r.server; }
+  catch { return null; }
+}
 async function syncNativeAlarms() {
   if (!GtAlarm || !ME.family || !ME.access?.active) return;
+  registerFcm();
   try {
     const { items } = await api('GET', '/alarm-plan');
     for (const [k, c] of clocks) items.push({ id: 'c' + k, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
@@ -341,12 +350,15 @@ async function nativeAlarmBox(box) {
     ${row(st.fullScreen, 'Abrir por cima da tela bloqueada', '<button class="btn sm" data-nat="fullScreen">Liberar</button>')}
     ${row(st.battery, 'Funcionar com o app fechado (bateria sem restrição)', '<button class="btn sm" data-nat="battery">Liberar</button>')}
     ${st.xiaomi ? `<div class="nat-row">${im('phone')}<span class="grow"><b>Xiaomi:</b> ligue o GameTask em <b>Início automático</b>, senão o alarme só toca com o app aberto.</span><button class="btn sm" data-nat="autostart">Abrir</button></div>` : ''}
+    <label class="check"><input type="checkbox" id="natAppr" ${store.get('gt-fcm-appr') !== '0' ? 'checked' : ''}>Avisar aqui quando uma criança concluir uma missão</label>
+    <p class="hint">Recados tocam como alarme neste celular mesmo com o app fechado.</p>
     <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button></div>
     <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
   $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {
     if (b.dataset.nat === 'notif') await GtAlarm.askNotifications(); else await GtAlarm.openSettings({ what: b.dataset.nat });
     setTimeout(() => nativeAlarmBox(box).catch(() => {}), 800);
   }));
+  $('#natAppr', box).onchange = (e) => { store.set('gt-fcm-appr', e.target.checked ? '1' : '0'); registerFcm(); };
   $('#natTest', box).onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
   addEventListener('focus', () => nativeAlarmBox(box).catch(() => {}), { once: true });
 }

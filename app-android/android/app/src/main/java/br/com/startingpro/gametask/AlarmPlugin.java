@@ -59,6 +59,17 @@ public class AlarmPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Endereço deste celular no Firebase, para o servidor mandar recados com o app fechado */
+    @PluginMethod
+    public void fcmToken(PluginCall call) {
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnCompleteListener(t -> {
+                if (!t.isSuccessful() || t.getResult() == null) { call.reject("Sem token do Firebase"); return; }
+                JSObject r = new JSObject(); r.put("token", t.getResult()); call.resolve(r);
+            });
+        } catch (Exception e) { call.reject("Firebase indisponível"); }
+    }
+
     /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
     @PluginMethod
     public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }

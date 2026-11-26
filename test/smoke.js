@@ -432,6 +432,10 @@ const step = (m) => console.log('✔', m);
     assert.ok(Array.isArray(plan.items)); assert.ok(plan.items.every((x, i) => x.at > Date.now() && x.id && x.title && (!i || plan.items[i - 1].at <= x.at)));
     if (plan.plus) assert.ok(plan.items.some(x => x.id.startsWith('t'))); // há tarefas com horário (Escola 09:00, Jiu-jitsu)
     step('agenda de alarmes do app Android');
+    assert.equal((await api('POST', '/api/fcm', { token: 'curto' })).status, 400);
+    const fcmR = await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: false }); assert.equal(fcmR.server, false);
+    await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: true }); // mesmo celular: atualiza, não duplica
+    step('app Android registra o celular para recados com o app fechado');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

@@ -53,6 +53,10 @@ const SCHEMA = [
   amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', method VARCHAR(40) NULL,
   mp_payment_id VARCHAR(40) NULL, period_end DATE NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, paid_at TIMESTAMP NULL, INDEX(family_id), INDEX(status))`,
+// Celulares com o app Android: recebem recados e pedidos de aprovação pelo Firebase com o app fechado
+`CREATE TABLE IF NOT EXISTS fcm_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, token VARCHAR(255) NOT NULL, approvals TINYINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY t (token), INDEX(family_id))`,
 `CREATE TABLE IF NOT EXISTS push_subs (
   id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, endpoint VARCHAR(600) NOT NULL, p256dh VARCHAR(200) NOT NULL, auth VARCHAR(100) NOT NULL,
   label VARCHAR(60) NULL, reminders TINYINT NOT NULL DEFAULT 1, approvals TINYINT NOT NULL DEFAULT 0,
