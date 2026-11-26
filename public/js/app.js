@@ -295,13 +295,18 @@ function showMessage(kidId, m, done) {
   }));
 }
 // Procura recados novos a cada 10 s em qualquer tela das crianças (seleção de jogador ou tela de um filho)
-let msgOpen = false;
+let msgOpen = false, fcmTok = null, pushEndpoint = null;
 async function checkMessages() {
   if (msgOpen || PAINEL || !ME.family || !ME.access?.active || document.visibilityState !== 'visible') return;
   const [, a, b] = location.hash.split('/');
   if (a && a !== 'kid') return;
   try {
-    const list = await api('GET', '/messages');
+    const q = new URLSearchParams();
+    if (NATIVE && !fcmTok) { try { fcmTok = (await GtAlarm.fcmToken()).token; } catch {} }
+    if (fcmTok) q.set('t', fcmTok);
+    if (!NATIVE && pushEndpoint === null) { pushEndpoint = ''; try { pushEndpoint = (await mySub())?.endpoint || ''; } catch {} }
+    if (pushEndpoint) q.set('e', pushEndpoint);
+    const list = await api('GET', '/messages?' + q);
     if (!list.length || msgOpen) return;
     msgOpen = true;
     showMessage(a === 'kid' ? +b || null : null, list[0], () => { msgOpen = false; refreshView?.(); setTimeout(checkMessages, 400); });
@@ -322,7 +327,7 @@ let fcmDone = '';
 async function registerFcm() {
   if (!GtAlarm?.fcmToken || !ME.family) return null;
   const approvals = store.get('gt-fcm-appr') !== '0', msgs = store.get('gt-dev-msgs') !== '0', alarms = store.get('gt-dev-alarms') !== '0', label = devLabel();
-  try { const { token } = await GtAlarm.fcmToken(); const k = [token, approvals, msgs, alarms, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, label }); fcmDone = k; return r.server; }
+  try { const { token } = await GtAlarm.fcmToken(); fcmTok = token; const k = [token, approvals, msgs, alarms, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, label }); fcmDone = k; return r.server; }
   catch { return null; }
 }
 async function syncNativeAlarms() {
@@ -582,6 +587,22 @@ function viewLogin(mode = 'login') {
 }
 
 // ---------- Seleção de herói ----------
+// Carregamento ao trocar de aba: a barra só aparece se demorar
+async function withLoader(fn) {
+  let ov = null, pct = 8, tick = 0;
+  const show = setTimeout(() => {
+    ov = document.createElement('div'); ov.className = 'loader soft'; ov.setAttribute('role', 'progressbar'); ov.setAttribute('aria-label', 'Carregando');
+    ov.innerHTML = `<img src="/img/3d/game.png" alt=""><div class="lbar"><i style="width:${pct}%"></i></div><span>Carregando…</span>`;
+    document.body.append(ov);
+    tick = setInterval(() => { pct = Math.min(90, pct + (90 - pct) * .18); ov.querySelector('.lbar i').style.width = pct + '%'; }, 120);
+  }, 160);
+  try { return await fn(); }
+  finally {
+    clearTimeout(show); clearInterval(tick);
+    if (ov) { ov.querySelector('.lbar i').style.width = '100%'; setTimeout(() => { ov.classList.add('out'); setTimeout(() => ov.remove(), 300); }, 150); }
+  }
+}
+
 // Tela de carregamento com barra, como em jogo: espera as imagens da próxima tela antes de mostrar.
 // Só aparece se demorar (na primeira vez num aparelho novo); depois as imagens já estão guardadas.
 const imgOk = new Set(), iconUrl = (v, fb) => `/img/3d/${slug(v, fb)}.png`;
@@ -704,8 +725,7 @@ async function viewKid(id) {
         : doneLike(t.status) ? `<span class="status ok">${im('check')}Feito!</span>${t.status === 'pending' || d.kid.adult ? `<button class="link" data-undo="${t.id}">Desfazer</button>` : ''}`
         : `<span class="status no">${im('cross')}Refazer</span>`;
       return `<article class="mission ${doneLike(t.status) ? 'done' : t.status === 'rejected' ? 'rejected' : ''}" data-m="${t.id}" style="animation-delay:${i * 45}ms">
-        <div class="tile" data-tile="${t.id}">${im(t.icon)}</div>
-        <div class="info"><div class="ttl" data-say="${t.id}">${esc(t.title)}<button type="button" class="say" data-say="${t.id}" aria-label="Ouvir a missão">${SVG.on}</button></div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
+        <div class="info"><div class="ttl" data-say="${t.id}" role="button" tabindex="0" aria-label="${esc(t.title)}. Toque para ouvir"><span class="tile" data-tile="${t.id}">${im(t.icon)}</span><span class="tt">${esc(t.title)}</span></div>${t.description ? `<div class="desc">${esc(t.description)}</div>` : ''}<div class="chips">${chips}</div></div>
         <div class="act">${act}</div></article>`;
     };
     const head = todo.length ? (todo.length === 1 ? 'Falta 1!' : `Faltam ${todo.length}!`) : d.total ? 'Tudo feito!' : 'Dia livre!';
@@ -928,7 +948,7 @@ async function viewAdmin() {
     ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
     <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
     <main class="admin-body" id="pane"></main></div>`;
-  $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); viewAdmin().catch(e => toast(e.message, true)); });
+  $$('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; sfx.tap(); withLoader(viewAdmin).catch(e => toast(e.message, true)); });
   $('.tab.on')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   if ($('#exit')) $('#exit').onclick = guard(async () => { await api('POST', '/auth/parent/exit'); location.hash = '#/'; await route(); });
   const fpOn = $('#fpOn'); if (fpOn) {

@@ -1073,3 +1073,24 @@ button.meter:active{transform:scale(.98)}
 .wiz-done img{width:36px;height:36px}
 .wiz-card #wzTest{display:block;margin:0 auto 6px}
 .wiz-card .actions{justify-content:center;margin-top:12px}
+
+/* ---- Cartão da missão (v5): ícone junto ao título, etiquetas pequenas, botão embaixo no celular ---- */
+.mission .ttl{display:flex;align-items:center;gap:8px;font-size:19px;cursor:pointer}
+.mission .ttl .tile{flex:0 0 auto;width:38px;height:38px;border-radius:11px;border-width:2px;box-shadow:none}
+.mission .ttl .tile img{width:30px;height:30px}
+.mission .ttl .tt{min-width:0}
+.mission .chips{gap:4px;margin-top:6px}
+.mission .chip{height:22px;padding:0 7px 0 3px;gap:3px;font-size:12px;font-weight:600;border-width:1px;color:var(--ink-soft)}
+.mission .chip img{width:15px;height:15px}
+.mission .chip.hour{color:#fff}
+.mission .desc{font-size:14px;font-weight:600}
+@media (max-width:620px){
+  .mission{flex-direction:column;align-items:stretch;gap:8px;padding:12px}
+  .mission .act{flex-direction:row;align-items:center;justify-content:flex-end}
+  .mission .go{flex:1;min-height:46px;font-size:19px}
+  .mission .ttl .tile{width:34px;height:34px}.mission .ttl .tile img{width:27px;height:27px}
+}
+/* carregamento ao trocar de aba: mais leve, por cima do painel */
+.loader.soft{background:rgba(234,242,255,.82);backdrop-filter:blur(3px)}
+.loader.soft img{width:72px;height:72px}
+.loader.soft span{color:var(--ink-soft)}

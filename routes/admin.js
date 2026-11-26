@@ -526,7 +526,8 @@ router.post('/messages', wrap(async (req, res) => {
   const from = String(req.actor?.name || 'Pais').slice(0, 60);
   // um recado só, mesmo para vários: aparece uma vez em qualquer tela aberta e some quando alguém responde
   const names = to.length === kids.length && kids.length > 1 ? 'Todos' : to.map(k => k.name).join(', ').slice(0, 120);
-  await pool.query('INSERT INTO messages (family_id,kid_id,to_label,from_name,text) VALUES (?,?,?,?,?)', [req.fid, to.length === 1 ? to[0].id : null, names, from, text]);
+  const devs = Array.isArray(req.body.devices) ? req.body.devices.filter(d => /^[fp]\d+$/.test(d)).join(',').slice(0, 500) : null;
+  await pool.query('INSERT INTO messages (family_id,kid_id,to_label,from_name,text,devices) VALUES (?,?,?,?,?,?)', [req.fid, to.length === 1 ? to[0].id : null, names, from, text, devs]);
   let sent = 0;
   if (access(req.family).plus) {
     // aparelhos escolhidos (se a lista veio); sem lista, vale o padrão de cada aparelho

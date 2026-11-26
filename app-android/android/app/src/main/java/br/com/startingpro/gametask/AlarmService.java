@@ -57,6 +57,8 @@ public class AlarmService extends Service {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(NOTIF, n);
 
+        // com o app aberto na tela, o Android só mostra uma faixa: abre a tela do alarme por cima, com o Desligar
+        try { startActivity(full); } catch (Exception ignored) { }
         speech = body.isEmpty() ? title : title + ". " + body;
         on = true;
         handler.removeCallbacksAndMessages(null);

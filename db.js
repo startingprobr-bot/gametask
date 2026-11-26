@@ -161,6 +161,7 @@ const COLUMNS = [
   ['fix_wheels', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],  // 'fix' = correção (tira moedas), 'free' = roleta extra (dá moedas)
   ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
   ['messages', 'to_label', 'VARCHAR(120) NULL'],
+  ['messages', 'devices', 'VARCHAR(500) NULL'],         // aparelhos escolhidos ("f3,p2"); NULL = todos
   ['fcm_tokens', 'label', 'VARCHAR(60) NULL'],          // nome do aparelho (Tablet das crianças, Celular da Ana)
   ['fcm_tokens', 'msgs', 'TINYINT NOT NULL DEFAULT 1'],  // recados tocam neste aparelho
   ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'], // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")

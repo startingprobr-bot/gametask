@@ -266,9 +266,13 @@ router.get('/alarm-plan', async (req, res) => {
 });
 // Recados não lidos da família inteira: qualquer tela aberta (seleção de jogador ou tela de um filho) mostra e toca
 router.get('/messages', async (req, res) => {
-  const [rows] = await pool.query(`SELECT m.id,m.from_name,m.text,m.kid_id,COALESCE(k.name,m.to_label,'Todos') to_name FROM messages m LEFT JOIN kids k ON k.id=m.kid_id
+  const [rows] = await pool.query(`SELECT m.id,m.from_name,m.text,m.kid_id,m.devices,COALESCE(k.name,m.to_label,'Todos') to_name FROM messages m LEFT JOIN kids k ON k.id=m.kid_id
     WHERE m.family_id=? AND m.read_at IS NULL ORDER BY m.id LIMIT 5`, [req.fid]);
-  res.json(rows);
+  // quem é este aparelho: o app (token do Firebase) ou o navegador com avisos (endereço da inscrição)
+  const [[f]] = req.query.t ? await pool.query('SELECT id,msgs FROM fcm_tokens WHERE token=? AND family_id=?', [String(req.query.t), req.fid]) : [[]];
+  const [[p]] = req.query.e ? await pool.query('SELECT id FROM push_subs WHERE endpoint=? AND family_id=?', [String(req.query.e), req.fid]) : [[]];
+  const mine = [f && 'f' + f.id, p && 'p' + p.id].filter(Boolean);
+  res.json(rows.filter(m => m.devices == null ? !(f && !f.msgs) : m.devices.split(',').some(d => mine.includes(d))).map(({ devices, ...m }) => m));
 });
 router.post('/messages/:mid', async (req, res) => {
   const [[k]] = req.body.kid_id ? await pool.query('SELECT id,name FROM kids WHERE id=? AND family_id=?', [req.body.kid_id, req.fid]) : [[]];
