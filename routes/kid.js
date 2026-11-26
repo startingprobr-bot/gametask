@@ -27,7 +27,7 @@ router.get('/kids', async (req, res) => {
     const sh = await shares(req.fid, k.id);
     k.coins = k.adult ? null : r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
     k.total = tasks.length; k.done = Math.min(c.n, tasks.length);
-    const [[m]] = await pool.query('SELECT COUNT(*) n FROM messages WHERE kid_id=? AND read_at IS NULL', [k.id]);
+    const [[m]] = await pool.query('SELECT COUNT(*) n FROM messages WHERE family_id=? AND (kid_id=? OR kid_id IS NULL) AND read_at IS NULL', [req.fid, k.id]);
     k.msgs = m.n;
   }
   const [runs] = await pool.query('SELECT DISTINCT kid_id FROM time_runs WHERE family_id=?', [req.fid]);
@@ -111,7 +111,7 @@ router.get('/kids/:id/home', async (req, res) => {
     pending: r2(r.goal_mode === 'coins' ? pendingCoins : (pGoal[r.id] || 0)),
   }));
   const wheel = await wheelState(req.fid, kid.id, day, list);
-  const [messages] = await pool.query('SELECT id,from_name,text,created_at FROM messages WHERE kid_id=? AND read_at IS NULL ORDER BY id', [kid.id]);
+  const [messages] = await pool.query('SELECT id,from_name,text,created_at FROM messages WHERE family_id=? AND (kid_id=? OR kid_id IS NULL) AND read_at IS NULL ORDER BY id', [fid, kid.id]);
   const fix = await pendingFix(fid, kid.id);
   res.json({
     kid, day, balance: bal, pending_coins: pendingCoins, tasks: list, time, goals, wheel, messages, fix,
@@ -247,14 +247,30 @@ router.post('/kids/:id/task-timer/:tid', async (req, res) => {
 const REPLIES = ['Ok!', 'Já vou!', 'Preciso de ajuda'];
 router.post('/kids/:id/messages/:mid', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
+  await answer(req, res, kid.name, kid.id);
+});
+// Recados não lidos da família inteira: qualquer tela aberta (seleção de jogador ou tela de um filho) mostra e toca
+router.get('/messages', async (req, res) => {
+  const [rows] = await pool.query(`SELECT m.id,m.from_name,m.text,m.kid_id,COALESCE(k.name,m.to_label,'Todos') to_name FROM messages m LEFT JOIN kids k ON k.id=m.kid_id
+    WHERE m.family_id=? AND m.read_at IS NULL ORDER BY m.id LIMIT 5`, [req.fid]);
+  res.json(rows);
+});
+router.post('/messages/:mid', async (req, res) => {
+  const [[k]] = req.body.kid_id ? await pool.query('SELECT id,name FROM kids WHERE id=? AND family_id=?', [req.body.kid_id, req.fid]) : [[]];
+  await answer(req, res, k?.name || null, null);
+});
+// Marca como lido (resposta rápida opcional) e avisa os pais de quem respondeu
+async function answer(req, res, who, kidId) {
   const reply = REPLIES.includes(req.body.reply) ? req.body.reply : null;
-  const [r] = await pool.query('UPDATE messages SET read_at=NOW(),reply=? WHERE id=? AND kid_id=? AND read_at IS NULL', [reply, req.params.mid, kid.id]);
+  const [r] = await pool.query(`UPDATE messages SET read_at=NOW(),reply=? WHERE id=? AND family_id=? AND read_at IS NULL${kidId ? ' AND (kid_id=? OR kid_id IS NULL)' : ''}`,
+    kidId ? [reply, req.params.mid, req.fid, kidId] : [reply, req.params.mid, req.fid]);
   if (r.affectedRows && reply && access(req.family).plus) {
-    const [[m]] = await pool.query('SELECT text FROM messages WHERE id=?', [req.params.mid]);
-    push.sendToFamily(req.fid, { title: `${kid.name}: ${reply}`, body: `Resposta ao recado "${m.text.slice(0, 80)}"`, tag: 'reply' + req.params.mid, url: '/app#/admin' }, 'approvals').catch(() => {});
+    const [[m]] = await pool.query('SELECT text,to_label FROM messages WHERE id=?', [req.params.mid]);
+    const name = who || (m.to_label && m.to_label !== 'Todos' ? m.to_label : 'Alguém em casa');
+    push.sendToFamily(req.fid, { title: `${name}: ${reply}`, body: `Resposta ao recado "${m.text.slice(0, 80)}"`, tag: 'reply' + req.params.mid, url: '/app#/admin' }, 'approvals').catch(() => {});
   }
   res.json({ ok: true });
-});
+}
 
 // ---------- Roletas de correção ----------
 // Os pais escolhem quem e qual roleta; ela gira no aparelho dos pais ou fica esperando na tela do jogador.

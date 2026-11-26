@@ -417,6 +417,16 @@ const step = (m) => console.log('✔', m);
     assert.equal((await ok('GET', `/api/kids/${eva}/home`)).messages.length, 0);
     assert.equal((await ok('GET', '/api/admin/messages'))[0].reply, 'Já vou!');
     assert.ok(Array.isArray((await ok('GET', '/api/admin/push')).log)); step('recado para o filho com resposta rápida');
+    // recado para todos: um registro só, aparece em qualquer tela e some de todas quando alguém responde
+    const msgN = (await ok('GET', '/api/admin/messages')).length;
+    const allIds = (await ok('GET', '/api/kids')).map(k => k.id);
+    await ok('POST', '/api/admin/messages', { text: 'Fecha a janela', kid_ids: allIds });
+    assert.equal((await ok('GET', '/api/admin/messages')).length, msgN + 1);
+    const live = await ok('GET', '/api/messages'); assert.equal(live.length, 1); assert.equal(live[0].to_name, 'Todos');
+    assert.equal((await ok('GET', `/api/kids/${ber}/home`)).messages.length, 1);
+    await ok('POST', `/api/messages/${live[0].id}`, { reply: 'Ok!', kid_id: ber });
+    assert.equal((await ok('GET', '/api/messages')).length, 0); assert.equal((await ok('GET', `/api/kids/${eva}/home`)).messages.length, 0);
+    step('recado para todos: uma vez só, em qualquer tela');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

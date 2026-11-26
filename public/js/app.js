@@ -25,6 +25,7 @@ const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn',
 const slug = (v, fb = 'star') => KNOWN.has(v) ? v : (LEGACY[v] || fb);
 const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" class="${cls}" decoding="async">`;
 const SVG = {
+  mega: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 001 1h2l7 4V5L6 9H4a1 1 0 00-1 1z" fill="currentColor" fill-opacity=".15"/><path d="M16.5 8.5a5 5 0 010 7"/><path d="M19.5 6a8.5 8.5 0 010 12"/><path d="M7 15l1.2 4.5"/></svg>',
   finger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v3a8 8 0 01-1.3 4.4"/><path d="M8.6 13a14 14 0 01-.7 4.5"/><path d="M15.5 12.5c0 2.5-.3 4.8-1 7"/><path d="M5.4 8.6A7.5 7.5 0 0119.5 12c0 2 0 4-.4 6"/><path d="M4.5 13.5c.3-1 .5-2 .5-3"/><path d="M8.5 9.6A4 4 0 0112 8a4 4 0 014 4"/><path d="M7.8 4.8A10 10 0 0121 9.5"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.9"/><circle cx="15" cy="6" r="1.9"/><circle cx="9" cy="12" r="1.9"/><circle cx="15" cy="12" r="1.9"/><circle cx="9" cy="18" r="1.9"/><circle cx="15" cy="18" r="1.9"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 001.5.86l10.5-6.5a1 1 0 000-1.72L9.5 4.64A1 1 0 008 5.5z"/></svg>',
@@ -40,7 +41,9 @@ const SVG = {
 // ---------- API ----------
 async function api(method, url, body) {
   const pdev = PAINEL && store.get('gt-pdev');
-  const r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  let r;
+  try { r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
+  catch { throw new Error('Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
   const d = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
   if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
@@ -51,7 +54,9 @@ function toast(msg, bad) {
   const d = document.createElement('div'); d.textContent = msg; if (bad) d.className = 'bad';
   $('#toast').append(d); setTimeout(() => d.remove(), 2800);
 }
-const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (!e.silent) { toast(e.message, true); sfx.bad(); } } };
+// erro de programa (em inglês) vira uma frase simples; o detalhe fica no console
+const plainErr = (e) => e instanceof TypeError || e instanceof ReferenceError || e instanceof SyntaxError ? (console.error(e), 'Algo deu errado. Toque de novo.') : e.message;
+const guard = (fn) => async (...a) => { try { await fn(...a); } catch (e) { if (!e.silent) { toast(plainErr(e), true); sfx.bad(); } } };
 
 // ---------- Som ----------
 let actx; let muted = store.get('gt-mute') === '1';
@@ -264,25 +269,42 @@ function openWheel(o) {
 
 // Recado dos pais: aparece por cima da tela do jogador, toca e pede uma resposta rápida
 function showMessage(kidId, m, done) {
-  const bg = document.createElement('div'); bg.className = 'sheet-bg msg-bg';
+  const bg = document.createElement('div'); bg.className = 'sheet-bg msg-bg urgent';
+  const to = m.to_name && m.to_name !== 'Todos' ? ` para <b>${esc(m.to_name)}</b>` : m.to_name ? ' para <b>todos</b>' : '';
   bg.innerHTML = `<div class="msg-card" role="alertdialog" aria-label="Recado de ${esc(m.from_name)}">
-    <div class="msg-ic">${im('bell')}</div><p class="msg-from">Recado de <b>${esc(m.from_name)}</b></p>
+    <div class="msg-ic">${SVG.mega}</div><p class="msg-from">Recado de <b>${esc(m.from_name)}</b>${to}</p>
     <p class="msg-text">${esc(m.text)}</p>
+    <button type="button" class="btn ghost sm say-msg">${SVG.on}Ouvir de novo</button>
     <div class="msg-replies">${['Ok!', 'Já vou!', 'Preciso de ajuda'].map((r, i) => `<button class="btn ${i ? 'ghost' : 'green'}" data-r="${esc(r)}">${esc(r)}</button>`).join('')}</div></div>`;
   document.body.append(bg);
-  sfx.ring(); const again = setInterval(() => sfx.ring(), 4000); setTimeout(() => clearInterval(again), 12500);
+  // som alto mesmo com o jogo no mudo, até alguém responder
+  const ring = () => { tone([[1175, .14], [880, .14], [1175, .14], [880, .14], [1175, .14], [880, .3]], 'square', .28, true); navigator.vibrate?.([500, 150, 500, 150, 500]); };
+  ring(); const again = setInterval(ring, 2600);
   const read = () => say(`Recado de ${m.from_name}: ${m.text}`);
-  setTimeout(read, 1300);
-  bg.querySelector('.msg-text').insertAdjacentHTML('afterend', `<button type="button" class="btn ghost sm say-msg">${SVG.on}Ouvir de novo</button>`);
+  setTimeout(read, 1600);
   bg.querySelector('.say-msg').onclick = read;
-  navigator.vibrate?.([300, 120, 300]);
   $$('[data-r]', bg).forEach(b => b.onclick = guard(async () => {
     clearInterval(again); speechSynthesis?.cancel?.(); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
-    await api('POST', `/kids/${kidId}/messages/${m.id}`, { reply: b.dataset.r });
-    sfx.done(); bg.remove(); done?.();
+    try { await api('POST', `/messages/${m.id}`, { reply: b.dataset.r, kid_id: kidId }); }
+    finally { sfx.done(); bg.remove(); done?.(); }
   }));
-  $('[data-r]', bg).focus();
 }
+// Procura recados novos a cada 10 s em qualquer tela das crianças (seleção de jogador ou tela de um filho)
+let msgOpen = false;
+async function checkMessages() {
+  if (msgOpen || PAINEL || !ME.family || !ME.access?.active || document.visibilityState !== 'visible') return;
+  const [, a, b] = location.hash.split('/');
+  if (a && a !== 'kid') return;
+  try {
+    const list = await api('GET', '/messages');
+    if (!list.length || msgOpen) return;
+    msgOpen = true;
+    showMessage(a === 'kid' ? +b || null : null, list[0], () => { msgOpen = false; refreshView?.(); setTimeout(checkMessages, 400); });
+  } catch {}
+}
+setInterval(checkMessages, 10000);
+addEventListener('hashchange', () => setTimeout(checkMessages, 800));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMessages(); });
 
 function burst(icon, title, text, btn = 'Continuar', onClose) {
   sfx.win();
@@ -328,6 +350,7 @@ async function route() {
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   await viewPlayers(me);
+  checkMessages();
   paid?.();
   setTimeout(() => maybePushWizard().catch(() => {}), 1500);
 }
@@ -566,7 +589,7 @@ async function viewKid(id) {
     $('.done-list')?.addEventListener('toggle', (e) => { showDone = e.target.open; sfx.tap(); });
     $('#back').onclick = () => { sfx.tap(); location.hash = '#/'; };
     const spinIt = (w, celebrate) => openWheel({ ...bonusWheel(id, w), celebrate, done: () => load().catch(() => {}) });
-    if (d.messages?.length && !$('.sheet-bg,.burst')) showMessage(id, d.messages[0], () => load().catch(() => {}));
+    if (d.messages?.length) checkMessages();
     else if (d.fix?.length && !$('.sheet-bg,.burst')) openWheel({ ...(d.fix[0].kind === 'free' ? freeWheel : fixWheel)(d.fix[0], () => api('POST', `/kids/${id}/fix/${d.fix[0].id}/spin`, {})), done: () => load().catch(() => {}) });
     if ($('#wheelGo')) $('#wheelGo').onclick = () => { sfx.tap(); spinIt(d.wheel); };
     $$('[data-do]').forEach(b => b.onclick = guard(async () => {
@@ -802,10 +825,9 @@ async function adminPending(pane, refresh) {
 
 async function adminKids(pane, refresh) {
   const all = await api('GET', '/admin/kids'), kids = all.filter(k => !k.adult), adults = all.filter(k => k.adult);
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${im('bell')}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
-    ${kids.length ? `<div class="list">${kids.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
-      <div class="grow"><div class="t">${esc(k.name)}</div><div class="s">${!k.active ? 'Inativo' : k.auto_approve ? 'Tarefas aprovadas automaticamente' : 'Você confere as tarefas'}</div></div>
-      <div class="btns pair">${k.active ? `<button class="btn ghost sm" data-msg="${k.id}">${im('bell')}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${SVG.mega}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
+    ${kids.length ? `<div class="kid-rows">${kids.map(k => `<div class="kid-row ${k.active ? '' : 'off'}"><div class="kid-id"><span class="kid-av" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</span><b>${esc(k.name)}</b>${k.active ? '' : '<small>inativo</small>'}</div>
+      <div class="kid-act">${k.active ? `<button class="btn sm" data-msg="${k.id}">${SVG.mega}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">${im('pencil')}Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
     ${adults.length ? `<section class="box"><div class="box-h"><h2 class="d">Adultos no jogo</h2></div>
       <p class="lead">Pai, mãe ou outro responsável que faz a rotina junto, sem moedas. Quem sai do jogo continua com o acesso ao painel.</p>
       <div class="list">${adults.map(k => `<div class="item ${k.active ? '' : 'off'}"><div class="ic" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</div>
@@ -909,36 +931,26 @@ async function adminTasks(pane, refresh) {
   const when = (t) => t.carry ? `Até fazer (desde ${dmy(t.date)})` : t.type === 'daily' ? (t.weekdays.length === 7 ? 'Todo dia' : [...t.weekdays].map(d => DAYN[d]).join(', '))
     : `${dmy(t.date)}${t.repeat_weekly ? `, toda ${DAYN[new Date(t.date + 'T12:00:00').getDay()]}` : ''}`;
   const who = (t) => t.all_kids === 2 ? 'Toda a família' : t.all_kids ? 'Todos os filhos' : t.kid_ids.map(id => kids.find(k => k.id === id)?.name).filter(Boolean).join(', ') || 'Ninguém';
-  const line = (t, until) => [
-    esc(when(t)) + (t.time ? ' às ' + esc(t.time) : ''), until ? `<b class="until">até ${esc(until)}</b>` : '',
-    t.coins > 0 ? `${num(t.coins)} moedas` : '',
-    !kid ? t.reward_ids.map(r => rewards.find(x => x.id === r)).filter(r => r && !(r.kind === 'goal' && r.goal_mode === 'coins')).map(r => esc(r.title)).join(', ') : '', !kid ? esc(who(t)) : '',
-  ].filter(Boolean).join(' · ');
-  const untils = (ids) => { const m = {}; let next = null; for (let i = ids.length - 1; i >= 0; i--) { const t = byId[ids[i]]; if (t.time) next = t.time; else m[t.id] = next; } return m; };
+  // linha curta: quando (com o horário, se tiver) e moedas; na visão da família, para quem é (se não for de todos)
+  const line = (t) => [esc(when(t)) + (t.time ? ' · <b class="tm">' + esc(t.time) + '</b>' : ''), t.coins > 0 ? `${num(t.coins)} moedas` : '', !kid && t.all_kids !== 1 ? esc(who(t)) : ''].filter(Boolean).join(' · ');
+  const pen = (t) => `<button class="btn ghost sm icon-only" data-e="${t.id}" aria-label="Editar ${esc(t.title)}" title="Editar">${im('pencil')}</button>`;
   const plain = (t) => `<div class="item off"><div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div>
-      <div class="s">${line(t)}</div></div><div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`;
-  const rows = () => {
-    const u = untils(order);
-    return order.map(id => { const t = byId[id]; return `<div class="item" data-id="${t.id}">
+      <div class="s">${line(t)}</div></div><div class="btns">${pen(t)}</div></div>`;
+  const rows = () => order.map(id => { const t = byId[id]; return `<div class="item" data-id="${t.id}">
       <button type="button" class="grip" aria-label="Mover ${esc(t.title)}. Use as setas para subir ou descer">${SVG.grip}</button>
-      <div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div><div class="s">${line(t, u[t.id])}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-e="${t.id}">Editar</button></div></div>`; }).join('');
-  };
-  const lead = !order.length ? '' : kid
-    ? `Arraste pela alça para pôr na ordem em que ${esc(kid.name)} faz as tarefas. Uma tarefa sem horário acima de outra com horário deve ser feita antes dela. Arraste para o lado para tirar a tarefa só de ${esc(kid.name)}.${ko.custom ? ' <b>Ordem só de ' + esc(kid.name) + '.</b> <button type="button" class="link" id="fam">Usar a ordem da família</button>' : ''}`
-    : 'Arraste pela alça para montar a ordem da família. Ela vale para todos os filhos; quem tiver uma ordem própria volta a seguir esta. Arraste para o lado para apagar a tarefa de todos.';
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Tarefas</h2><div class="btns"><button class="btn ghost sm" id="cat">${im('sparkles')}Do catálogo</button><button class="btn green sm" id="new">Nova tarefa</button></div></div>
-    <div class="kid-pick" role="group" aria-label="Ver tarefas de">${kidsOn.map(k => `<button type="button" class="kp" data-kid="${k.id}" aria-pressed="${k.id === taskKid}" style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</button>`).join('')}
-      <button type="button" class="kp" data-kid="all" aria-pressed="${taskKid === 'all'}">${im('clipboard')}Todas</button></div>
-    ${lead ? `<p class="lead">${lead}</p>` : ''}
+      <div class="ic">${im(t.icon)}</div><div class="grow"><div class="t">${esc(t.title)}</div><div class="s">${line(t)}</div></div>
+      <div class="btns">${pen(t)}</div></div>`; }).join('');
+  const lead = !order.length ? '' : `Arraste <span class="grip-ic">${SVG.grip}</span> para mudar a ordem. Deslize para o lado para ${kid ? `tirar só de ${esc(kid.name)}` : 'apagar'}.${kid && ko.custom ? ` <button type="button" class="link" id="fam">Voltar para a ordem da família</button>` : ''}`;
+  const catN = (await api('GET', '/admin/catalog')).tasks.filter(t => !t.have).length;
+  pane.innerHTML = `<section class="box tasks-box"><div class="box-h"><h2 class="d">Tarefas</h2><div class="btns">${catN ? `<button class="btn ghost sm" id="cat">${im('sparkles')}Prontas (${catN})</button>` : ''}<button class="btn green sm" id="new">Nova tarefa</button></div></div>
+    <div class="kid-pick slim" role="group" aria-label="Ver tarefas de"><button type="button" class="kp" data-kid="all" aria-pressed="${taskKid === 'all'}">${im('people')}Família</button>${kidsOn.map(k => `<button type="button" class="kp" data-kid="${k.id}" aria-pressed="${k.id === taskKid}" style="--c:${esc(k.color)}">${im(k.avatar, '', 'fox')}${esc(k.name)}</button>`).join('')}</div>
+    ${lead ? `<p class="hint tasks-hint">${lead}</p>` : ''}
     ${order.length ? `<div class="list" id="tl">${rows()}</div>` : zero('clipboard', kid ? `${esc(kid.name)} ainda não tem tarefas ativas.` : 'Crie a primeira tarefa da casa.')}
     ${off.length ? `<h3 class="sub-h">Inativas</h3><div class="list">${off.map(plain).join('')}</div>` : ''}</section>`;
   $$('[data-kid]').forEach(b => b.onclick = () => { taskKid = b.dataset.kid === 'all' ? 'all' : +b.dataset.kid; sfx.tap(); adminTasks(pane, refresh).catch(e => toast(e.message, true)); });
   const fam = $('#fam'); if (fam) fam.onclick = guard(async () => { await api('DELETE', `/admin/kids/${kid.id}/order`); toast(`${kid.name} segue a ordem da família`); adminTasks(pane, refresh); });
   if ($('#tl')) sortable($('#tl'), guard(async (ids) => {
     order = ids;
-    const u = untils(ids); // atualiza o "até 9:00" na hora, sem recarregar
-    $$('#tl .item').forEach(el => { el.querySelector('.s').innerHTML = line(byId[el.dataset.id], u[el.dataset.id]); });
     if (kid) { await api('PUT', `/admin/kids/${kid.id}/order`, { ids }); if (!ko.custom) adminTasks(pane, refresh); }
     else await api('PUT', '/admin/tasks/order', { ids });
   }));
@@ -991,7 +1003,7 @@ async function adminTasks(pane, refresh) {
     f.addEventListener('change', upd); upd();
   };
   $('#new').onclick = () => wire(sheet('Nova tarefa', form(kid ? { ...blank(), all_kids: 0, kid_ids: [kid.id] } : undefined), async (f) => { await api('POST', '/admin/tasks', read(f)); toast('Tarefa criada'); refresh(); }, { saveLabel: 'Criar tarefa' }));
-  $('#cat').onclick = guard(async () => {
+  if ($('#cat')) $('#cat').onclick = guard(async () => {
     const c = await api('GET', '/admin/catalog'), free = c.tasks.filter(t => !t.have);
     if (!free.length) return toast('Todas as tarefas do catálogo já estão na sua lista.');
     sheet('Tarefas prontas', `<p class="lead" style="margin-top:6px">Marque as que quer adicionar. Elas valem para todos os filhos e entram nas recompensas ativas (o tempo de tela se redivide).</p>

@@ -13,6 +13,17 @@ const site = require('./site');
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+// Sem segredo de sessão em produção, qualquer um poderia forjar o login: melhor não subir.
+if (prod && !process.env.SESSION_SECRET) { console.error('SESSION_SECRET não configurado. Configure no EasyPanel.'); process.exit(1); }
+if (prod && process.env.SESSION_SECRET.length < 24) console.warn('ATENÇÃO: SESSION_SECRET curto. Use pelo menos 24 caracteres aleatórios.');
+// Cabeçalhos de proteção: não abrir dentro de site de terceiros, não adivinhar tipo de arquivo, só HTTPS
+app.use((req, res, next) => {
+  res.set({ 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' });
+  if (prod) res.set('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
 app.use(express.json());
 app.use(cookieSession({
   name: 'gt', keys: [process.env.SESSION_SECRET || 'dev-secret'],

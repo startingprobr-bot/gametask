@@ -156,6 +156,7 @@ const COLUMNS = [
   ['leads', 'wa_confirmed_at', 'TIMESTAMP NULL'],        // a pessoa mandou o código pelo WhatsApp (número confirmado)
   ['fix_wheels', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],  // 'fix' = correção (tira moedas), 'free' = roleta extra (dá moedas)
   ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
+  ['messages', 'to_label', 'VARCHAR(120) NULL'],          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
   ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)
@@ -179,6 +180,7 @@ async function migrate() {
   await pool.query("ALTER TABLE payments MODIFY plan ENUM('monthly','annual','plus') NOT NULL");
   // leads: e-mail virou opcional (a entrega é pelo WhatsApp) e o código é único
   await pool.query('ALTER TABLE leads MODIFY email VARCHAR(160) NULL');
+  await pool.query('ALTER TABLE messages MODIFY kid_id INT NULL'); // NULL = recado para vários jogadores
   const [[ci]] = await pool.query("SELECT COUNT(*) n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='leads' AND INDEX_NAME='c'");
   if (!ci.n) await pool.query('ALTER TABLE leads ADD UNIQUE KEY c (code)');
   // primeiro fluxo: o do quadro de tarefas, com os textos aprovados (nasce pausado; o dono ativa no painel)
