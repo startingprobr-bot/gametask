@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GameTask</string>
+    <string name="title_activity_main">GameTask</string>
+    <string name="package_name">br.com.startingpro.gametask</string>
+    <string name="custom_url_scheme">br.com.startingpro.gametask</string>
+</resources>

@@ -997,3 +997,8 @@ button.meter:active{transform:scale(.98)}
 .msg-card .say-msg{margin:4px auto 12px}
 @media (prefers-reduced-motion:reduce){.msg-bg.urgent{animation:none}}
 .tasks-box #tl .btn.icon-only{padding:0;width:42px}
+/* ---- App Android: alarme deste celular ---- */
+.nat-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:2px solid var(--mist);font-weight:800}
+.nat-row:first-of-type{border-top:0}
+.nat-row img{width:28px;height:28px}
+.nat-row.ok{color:var(--ink-soft)}

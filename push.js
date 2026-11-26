@@ -128,4 +128,37 @@ function start() {
   }).catch(e => console.error('push init', e.message));
 }
 
-module.exports = { start, init, tick, sendToFamily, sendToSub, publicKey, timeUp };
+// Agenda dos próximos dias para o app Android marcar como despertador no próprio celular
+// (toca na hora mesmo sem internet e no silencioso). Mesmas regras dos avisos acima.
+const addDays = (ymd, n) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const at = (ymd, hm, minus = 0) => new Date(`${ymd}T${hm.slice(0, 5)}:00-03:00`).getTime() - minus * 60000; // Brasília, sem horário de verão
+async function plan(fid, days = 7) {
+  const [[f]] = await pool.query('SELECT id,remind_before FROM families WHERE id=?', [fid]);
+  const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [fid]);
+  const kidName = Object.fromEntries(kids.map(k => [k.id, k.name]));
+  const [alarms] = await pool.query('SELECT * FROM alarms WHERE family_id=? AND active=1', [fid]);
+  const [tasks] = await pool.query('SELECT * FROM tasks WHERE family_id=? AND active=1 AND time IS NOT NULL', [fid]);
+  const [tk] = tasks.length ? await pool.query('SELECT task_id,kid_id FROM task_kids WHERE task_id IN (?)', [tasks.map(t => t.id)]) : [[]];
+  const d0 = today(), [done] = await pool.query("SELECT task_id,kid_id FROM completions WHERE family_id=? AND day=? AND status<>'rejected'", [fid, d0]);
+  const pre = f?.remind_before || 0, out = [], now = Date.now();
+  for (let i = 0; i < days; i++) {
+    const day = addDays(d0, i), wd = String(dow(day));
+    for (const a of alarms) {
+      if (!a.weekdays.includes(wd)) continue;
+      const who = a.kid_id ? kidName[a.kid_id] : null;
+      out.push({ id: `a${a.id}-${day}`, at: at(day, a.time), title: who ? `${who}, ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}` : a.title, body: `Aviso das ${a.time.slice(0, 5)}` });
+    }
+    for (const t of tasks) {
+      if (!taskOnDay(t, day)) continue;
+      let ids = t.all_kids ? kids.map(k => k.id) : tk.filter(x => x.task_id === t.id).map(x => x.kid_id).filter(id => kidName[id]);
+      if (i === 0) ids = ids.filter(id => !done.some(x => x.task_id === t.id && x.kid_id === id)); // hoje: só quem ainda não fez
+      if (!ids.length) continue;
+      const left = ids.map(id => kidName[id]), names = left.length === 1 ? left[0] : left.slice(0, -1).join(', ') + ' e ' + left.at(-1);
+      out.push({ id: `t${t.id}-${day}`, at: at(day, t.time), title: `${names}: ${t.title}`, body: `Hora da missão (${t.time.slice(0, 5)})!` });
+      if (pre) out.push({ id: `t${t.id}-${day}-pre`, at: at(day, t.time, pre), title: `${names}: ${t.title}`, body: `Missão daqui a ${pre} min (${t.time.slice(0, 5)}).` });
+    }
+  }
+  return out.filter(x => x.at > now).sort((a, b) => a.at - b.at).slice(0, 200);
+}
+
+module.exports = { start, init, tick, sendToFamily, sendToSub, publicKey, timeUp, plan };

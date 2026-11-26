@@ -427,6 +427,11 @@ const step = (m) => console.log('✔', m);
     await ok('POST', `/api/messages/${live[0].id}`, { reply: 'Ok!', kid_id: ber });
     assert.equal((await ok('GET', '/api/messages')).length, 0); assert.equal((await ok('GET', `/api/kids/${eva}/home`)).messages.length, 0);
     step('recado para todos: uma vez só, em qualquer tela');
+    // agenda de alarmes para o app Android: só futuro, em ordem, com id estável
+    const plan = await ok('GET', '/api/alarm-plan');
+    assert.ok(Array.isArray(plan.items)); assert.ok(plan.items.every((x, i) => x.at > Date.now() && x.id && x.title && (!i || plan.items[i - 1].at <= x.at)));
+    if (plan.plus) assert.ok(plan.items.some(x => x.id.startsWith('t'))); // há tarefas com horário (Escola 09:00, Jiu-jitsu)
+    step('agenda de alarmes do app Android');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

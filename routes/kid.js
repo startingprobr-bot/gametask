@@ -249,6 +249,11 @@ router.post('/kids/:id/messages/:mid', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;
   await answer(req, res, kid.name, kid.id);
 });
+// Alarmes dos próximos 7 dias para o app Android (plano anual, como os avisos no celular)
+router.get('/alarm-plan', async (req, res) => {
+  if (!access(req.family).plus) return res.json({ plus: false, items: [] });
+  res.json({ plus: true, items: await push.plan(req.fid) });
+});
 // Recados não lidos da família inteira: qualquer tela aberta (seleção de jogador ou tela de um filho) mostra e toca
 router.get('/messages', async (req, res) => {
   const [rows] = await pool.query(`SELECT m.id,m.from_name,m.text,m.kid_id,COALESCE(k.name,m.to_label,'Todos') to_name FROM messages m LEFT JOIN kids k ON k.id=m.kid_id

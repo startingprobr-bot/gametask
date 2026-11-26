@@ -22,16 +22,23 @@ const PAGES = {
   '/calculadora-de-mesada': 'mesada.html',
   '/tempo-de-tela-por-idade': 'tempo-de-tela.html',
   '/privacidade': 'privacidade.html',
+  '/ajuda': 'ajuda.html',
 };
-const page = (file) => (req, res) => {
-  const html = fs.readFileSync(path.join(PUB, file), 'utf8')
+const brl = (n) => (+n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const page = (file) => wrap(async (req, res) => {
+  let html = fs.readFileSync(path.join(PUB, file), 'utf8');
+  if (html.includes('{{GARANTIA}}') || html.includes('{{ANUAL}}')) { // preços e garantia vêm do painel do dono
+    const p = await require('./billing').prices();
+    html = html.replaceAll('{{ANUAL}}', brl(p.annual)).replaceAll('{{MENSAL}}', brl(p.monthly)).replaceAll('{{GARANTIA}}', String(p.guarantee_days));
+  }
+  html = html
     .replaceAll('{{SITE}}', site(req))
     .replaceAll('{{CONTATO}}', process.env.CONTACT_EMAIL || process.env.MAIL_FROM?.match(/[^<\s]+@[^>\s]+/)?.[0] || 'o e-mail que enviou a mensagem para você')
     .replaceAll('{{WA_ON}}', wapp.on() ? '1' : '')
     .replaceAll('{{ICONS}}', JSON.stringify([...ICONS].sort()))
     .replace('/css/site.css"', `/css/site.css?v=${SITE_CSS_V}"`);
   res.set('cache-control', 'no-cache').type('html').send(html);
-};
+});
 for (const [p, f] of Object.entries(PAGES)) router.get(p, page(f));
 
 router.get('/robots.txt', (req, res) => res.type('text/plain').send(

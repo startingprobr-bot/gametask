@@ -111,6 +111,7 @@ let refreshView = null, wakeLock = null;
 const mmss = (s) => { s = Math.max(0, Math.ceil(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
 const running = (t) => t.run !== null && t.run !== undefined;
 function syncClocks(kid, list, kind = '') {
+  if (typeof syncAlarmsSoon === 'function') syncAlarmsSoon();
   for (const [k, c] of clocks) if (c.kid === kid.id && c.kind === kind) clocks.delete(k);
   for (const x of list || []) {
     if (x.ended) alarm(kid, x, kind);
@@ -303,6 +304,47 @@ async function checkMessages() {
   } catch {}
 }
 setInterval(checkMessages, 10000);
+
+// ---------- App Android: alarme de despertador no próprio celular ----------
+// O site manda a agenda dos próximos 7 dias (avisos, missões com horário e cronômetros ligados aqui);
+// o app marca cada um como despertador, que toca mesmo no silencioso e sem internet.
+const NATIVE = !!window.Capacitor?.isNativePlatform?.();
+const GtAlarm = NATIVE ? window.Capacitor?.Plugins?.GtAlarm : null;
+let alarmSig = '', alarmWait = 0;
+async function syncNativeAlarms() {
+  if (!GtAlarm || !ME.family || !ME.access?.active) return;
+  try {
+    const { items } = await api('GET', '/alarm-plan');
+    for (const [k, c] of clocks) items.push({ id: 'c' + k, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
+    const sig = JSON.stringify(items.map(x => [x.id, x.at, x.title]));
+    if (sig === alarmSig) return;
+    await GtAlarm.sync({ items }); alarmSig = sig;
+  } catch {}
+}
+const syncAlarmsSoon = () => { clearTimeout(alarmWait); alarmWait = setTimeout(syncNativeAlarms, 1500); };
+if (GtAlarm) { setInterval(syncNativeAlarms, 5 * 60000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncNativeAlarms(); }); }
+
+// Ajustes > Alarme deste celular: o que falta liberar e um botão de teste
+async function nativeAlarmBox(box) {
+  const st = await GtAlarm.check();
+  const ok = st.notifications && st.exact && st.fullScreen;
+  const row = (good, text, btn) => `<div class="nat-row ${good ? 'ok' : ''}">${im(good ? 'check' : 'cross')}<span class="grow">${text}</span>${good ? '' : btn}</div>`;
+  box.dataset.sum = ok ? `Pronto · ${st.scheduled} alarme(s) marcado(s)` : 'Falta liberar no celular';
+  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Alarme deste celular</h2></div>'}
+    <p class="lead">Os avisos e as missões com horário tocam como despertador, mesmo no silencioso e sem internet.</p>
+    ${row(st.notifications, 'Mostrar avisos', '<button class="btn sm" data-nat="notif">Permitir</button>')}
+    ${row(st.exact, 'Tocar na hora exata', '<button class="btn sm" data-nat="exact">Liberar</button>')}
+    ${row(st.fullScreen, 'Abrir por cima da tela bloqueada', '<button class="btn sm" data-nat="fullScreen">Liberar</button>')}
+    <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button></div>
+    <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
+  $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {
+    if (b.dataset.nat === 'notif') await GtAlarm.askNotifications(); else await GtAlarm.openSettings({ what: b.dataset.nat });
+    setTimeout(() => nativeAlarmBox(box).catch(() => {}), 800);
+  }));
+  $('#natTest', box).onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
+  addEventListener('focus', () => nativeAlarmBox(box).catch(() => {}), { once: true });
+}
+
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMessages(); });
 
@@ -350,7 +392,7 @@ async function route() {
   if (a === 'kid' && b) return viewKid(+b);
   if (a === 'admin' || a === 'setup') return !me.parent ? viewPin() : me.onboarded ? viewAdmin() : viewSetup();
   await viewPlayers(me);
-  checkMessages();
+  checkMessages(); syncAlarmsSoon();
   paid?.();
   setTimeout(() => maybePushWizard().catch(() => {}), 1500);
 }
@@ -777,7 +819,7 @@ async function viewAdmin() {
   const offerFp = !pkIds().length && !store.get('gt-pk-skip') && await pkCan();
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
       ${ME.actor ? `<span class="who-chip">Olá, ${esc(ME.actor.name)}</span>` : ''}
-      ${plan}${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
+      ${plan}<a class="btn ghost sm help-link" href="/ajuda" target="_blank" rel="noopener">Ajuda</a>${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
       ${PAINEL ? '' : '<button class="btn ghost sm" id="exit">Voltar ao jogo</button>'}</div>
     ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
     <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
@@ -1254,6 +1296,7 @@ async function adminSettings(pane, refresh) {
       <div class="disg" role="radiogroup" aria-label="Disfarce do app">${DISGUISES.map(([k, n], i) => `<label><input type="radio" name="dg" value="${k}" ${i === 0 ? 'checked' : ''}><img src="/icons/d/${k}-192.png" alt=""><span>${n}</span></label>`).join('')}</div>
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
+    ${NATIVE && GtAlarm ? '<section class="box" id="natBox" data-sum="Alarme no silencioso"><div class="box-h"><h2 class="d">Alarme deste celular</h2></div></section>' : ''}
     <div id="alarms"></div>
     ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
     <section class="box" data-sum="Desconectar ou voltar a pedir o PIN"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
@@ -1313,11 +1356,12 @@ async function adminSettings(pane, refresh) {
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
   if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
   await adminAlarms($('#alarms'), refresh);
+  if ($('#natBox', pane)) await nativeAlarmBox($('#natBox', pane)).catch(() => {});
   accordion(pane);
 }
 
 // Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
-const ACC_IC = { 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+const ACC_IC = { 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
 function accordion(pane) {
   const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
   $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {
@@ -1812,7 +1856,7 @@ async function adminAlarms(pane, refresh) {
 const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 let wizShown = false;
 async function maybePushWizard() {
-  if (wizShown || !ME?.family || !ME.access?.plus || !pushOk() || !(standalone || PAINEL) || $('.sheet-bg')) return;
+  if (NATIVE || wizShown || !ME?.family || !ME.access?.plus || !pushOk() || !(standalone || PAINEL) || $('.sheet-bg')) return;
   const st = store.get('gt-pushwiz') || '';
   if (st === 'done' || (st.startsWith('later:') && Date.now() < +st.slice(6))) return;
   const sub = await mySub().catch(() => null);

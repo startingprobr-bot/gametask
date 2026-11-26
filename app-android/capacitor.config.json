@@ -1,0 +1,10 @@
+{
+  "appId": "br.com.startingpro.gametask",
+  "appName": "GameTask",
+  "webDir": "www",
+  "server": {
+    "url": "https://gametask.startingpro.com.br/app",
+    "allowNavigation": ["gametask.startingpro.com.br"]
+  },
+  "android": { "backgroundColor": "#16296b" }
+}
