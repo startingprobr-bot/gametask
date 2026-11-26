@@ -1429,6 +1429,7 @@ async function adminSettings(pane, refresh) {
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
     ${NATIVE && GtAlarm ? '<section class="box" id="natBox" data-sum="Alarme no silencioso"><div class="box-h"><h2 class="d">Alarme deste celular</h2></div></section>' : ''}
+    ${!NATIVE ? '<section class="box" data-sum="Alarmes no silencioso e recados com o app fechado"><div class="box-h"><h2 class="d">App para Android</h2></div><p class="lead">No Android, o app toca os alarmes e os recados como despertador, mesmo no silencioso. Versão de teste.</p><div class="actions"><a class="btn green sm" href="/android" target="_blank" rel="noopener">Baixar o app Android</a></div></section>' : ''}
     <div id="alarms"></div>
     ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
     <section class="box" data-sum="Desconectar ou voltar a pedir o PIN"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
@@ -1493,7 +1494,7 @@ async function adminSettings(pane, refresh) {
 }
 
 // Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
-const ACC_IC = { 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+const ACC_IC = { 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
 function accordion(pane) {
   const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
   $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {

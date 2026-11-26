@@ -4,3 +4,4 @@ node_modules
 .impeccable/config.local.json
 GameTaske/
 *.apk
+!public/android/GameTask.apk

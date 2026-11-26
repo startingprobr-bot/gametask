@@ -40,6 +40,8 @@ const page = (file) => wrap(async (req, res) => {
   res.set('cache-control', 'no-cache').type('html').send(html);
 });
 for (const [p, f] of Object.entries(PAGES)) router.get(p, page(f));
+// Download do app Android (versão de teste): fora do sitemap e do Google
+router.get('/android', page('android.html'));
 
 router.get('/robots.txt', (req, res) => res.type('text/plain').send(
   `User-agent: *\nAllow: /\nDisallow: /app\nDisallow: /painel\nDisallow: /api/\n\nSitemap: ${site(req)}/sitemap.xml\n`));
