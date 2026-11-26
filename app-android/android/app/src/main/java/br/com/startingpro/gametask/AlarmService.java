@@ -32,6 +32,8 @@ public class AlarmService extends Service {
     private MediaPlayer player;
     private Vibrator vibrator;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private String speech = "";
+    private boolean on;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -55,28 +57,44 @@ public class AlarmService extends Service {
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIF, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(NOTIF, n);
 
-        play();
+        speech = body.isEmpty() ? title : title + ". " + body;
+        on = true;
         handler.removeCallbacksAndMessages(null);
+        louder();
+        vibrate();
+        cycle();
         handler.postDelayed(this::stopSelf, 3 * 60 * 1000);
         return START_NOT_STICKY;
     }
 
-    private void play() {
-        stopSound();
+    // toca o toque uma vez, fala o que é para fazer, espera um pouco e repete (até desligar ou 3 minutos)
+    private void cycle() {
+        if (!on) return;
+        releasePlayer();
         try {
             Uri uri = Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.gt_alarm); // toque próprio do GameTask
             player = new MediaPlayer();
             player.setAudioAttributes(new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
             player.setDataSource(this, uri);
-            player.setLooping(true);
-            // se o volume de alarme estiver no zero, sobe para um nível audível
+            player.setOnCompletionListener(mp -> Speaker.say(this, speech, () -> handler.postDelayed(this::cycle, 900)));
+            player.prepare();
+            player.start();
+        } catch (Exception e) {
+            Speaker.say(this, speech, () -> handler.postDelayed(this::cycle, 1500));
+        }
+    }
+
+    // se o volume de alarme estiver baixo, sobe para um nível audível
+    private void louder() {
+        try {
             AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
             if (am.getStreamVolume(AudioManager.STREAM_ALARM) < max / 2) am.setStreamVolume(AudioManager.STREAM_ALARM, (int) Math.ceil(max * 0.7), 0);
-            player.prepare();
-            player.start();
         } catch (Exception ignored) { }
+    }
+
+    private void vibrate() {
         try {
             vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
             long[] p = { 0, 600, 300, 600, 300, 600, 1200 };
@@ -84,8 +102,14 @@ public class AlarmService extends Service {
         } catch (Exception ignored) { }
     }
 
-    private void stopSound() {
+    private void releasePlayer() {
         if (player != null) { try { player.stop(); } catch (Exception ignored) { } player.release(); player = null; }
+    }
+
+    private void stopSound() {
+        on = false;
+        Speaker.stop();
+        releasePlayer();
         if (vibrator != null) { vibrator.cancel(); vibrator = null; }
     }
 

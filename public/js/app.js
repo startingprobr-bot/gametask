@@ -95,7 +95,11 @@ function wireSound() {
 let ptVoice;
 const pickVoice = () => { const v = speechSynthesis.getVoices(); ptVoice = v.find(x => /pt[-_]BR/i.test(x.lang)) || v.find(x => /^pt/i.test(x.lang)) || null; };
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
+// fala sem o navegador ter voz (no app Android usa a voz do próprio Android)
+const nativeVoice = () => window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.GtAlarm;
+const hush = () => { try { window.speechSynthesis?.cancel(); } catch {} try { nativeVoice()?.stopSpeak(); } catch {} };
 function say(text) {
+  if (text && nativeVoice()) { nativeVoice().speak({ text }).catch(() => {}); return; }
   if (!('speechSynthesis' in window) || !text) return;
   try {
     speechSynthesis.cancel();
@@ -145,7 +149,7 @@ function alarm(kid, x, kind = '') {
   const ring = () => { tone([[880, .28], [660, .28], [880, .28], [660, .28], [880, .28], [660, .45]], 'square', .3, true); navigator.vibrate?.([400, 200, 400, 200, 400]); setTimeout(() => bg.isConnected && say(text), 1500); };
   ring(); const iv = setInterval(ring, 6000);
   const off = $('#alarmOff', bg); off.focus();
-  off.onclick = () => { clearInterval(iv); try { speechSynthesis.cancel(); } catch {} bg.remove(); };
+  off.onclick = () => { clearInterval(iv); hush(); bg.remove(); };
 }
 
 // ---------- Efeitos ----------
@@ -285,7 +289,7 @@ function showMessage(kidId, m, done) {
   setTimeout(read, 1600);
   bg.querySelector('.say-msg').onclick = read;
   $$('[data-r]', bg).forEach(b => b.onclick = guard(async () => {
-    clearInterval(again); speechSynthesis?.cancel?.(); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
+    clearInterval(again); hush(); $$('[data-r]', bg).forEach(x => { x.disabled = true; });
     try { await api('POST', `/messages/${m.id}`, { reply: b.dataset.r, kid_id: kidId }); }
     finally { sfx.done(); bg.remove(); done?.(); }
   }));
@@ -327,7 +331,7 @@ if (GtAlarm) { setInterval(syncNativeAlarms, 5 * 60000); document.addEventListen
 // Ajustes > Alarme deste celular: o que falta liberar e um botão de teste
 async function nativeAlarmBox(box) {
   const st = await GtAlarm.check();
-  const ok = st.notifications && st.exact && st.fullScreen;
+  const ok = st.notifications && st.exact && st.fullScreen && st.battery;
   const row = (good, text, btn) => `<div class="nat-row ${good ? 'ok' : ''}">${im(good ? 'check' : 'cross')}<span class="grow">${text}</span>${good ? '' : btn}</div>`;
   box.dataset.sum = ok ? `Pronto · ${st.scheduled} alarme(s) marcado(s)` : 'Falta liberar no celular';
   box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Alarme deste celular</h2></div>'}
@@ -335,6 +339,8 @@ async function nativeAlarmBox(box) {
     ${row(st.notifications, 'Mostrar avisos', '<button class="btn sm" data-nat="notif">Permitir</button>')}
     ${row(st.exact, 'Tocar na hora exata', '<button class="btn sm" data-nat="exact">Liberar</button>')}
     ${row(st.fullScreen, 'Abrir por cima da tela bloqueada', '<button class="btn sm" data-nat="fullScreen">Liberar</button>')}
+    ${row(st.battery, 'Funcionar com o app fechado (bateria sem restrição)', '<button class="btn sm" data-nat="battery">Liberar</button>')}
+    ${st.xiaomi ? `<div class="nat-row">${im('phone')}<span class="grow"><b>Xiaomi:</b> ligue o GameTask em <b>Início automático</b>, senão o alarme só toca com o app aberto.</span><button class="btn sm" data-nat="autostart">Abrir</button></div>` : ''}
     <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button></div>
     <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
   $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {

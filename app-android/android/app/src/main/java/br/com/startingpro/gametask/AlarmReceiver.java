@@ -18,6 +18,12 @@ public class AlarmReceiver extends BroadcastReceiver {
         Intent s = new Intent(ctx, AlarmService.class)
             .putExtra("title", intent.getStringExtra("title"))
             .putExtra("body", intent.getStringExtra("body"));
-        if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(s); else ctx.startService(s);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(s); else ctx.startService(s);
+        } catch (Exception e) { // sistema barrou o serviço: abre a tela do alarme direto
+            Intent a = new Intent(ctx, AlarmActivity.class).putExtra("title", intent.getStringExtra("title")).putExtra("body", intent.getStringExtra("body"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { ctx.startActivity(a); } catch (Exception ignored) { }
+        }
     }
 }

@@ -52,9 +52,19 @@ public class AlarmPlugin extends Plugin {
         boolean fs = true;
         if (Build.VERSION.SDK_INT >= 34) fs = ((NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE)).canUseFullScreenIntent();
         r.put("fullScreen", fs);
+        android.os.PowerManager pm = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+        r.put("battery", pm.isIgnoringBatteryOptimizations(ctx.getPackageName()));
+        r.put("xiaomi", "xiaomi".equalsIgnoreCase(Build.MANUFACTURER) || "redmi".equalsIgnoreCase(Build.BRAND) || "poco".equalsIgnoreCase(Build.BRAND));
         r.put("scheduled", AlarmScheduler.count(ctx));
         call.resolve(r);
     }
+
+    /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
+    @PluginMethod
+    public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }
+
+    @PluginMethod
+    public void stopSpeak(PluginCall call) { Speaker.stop(); call.resolve(); }
 
     @PluginMethod
     public void askNotifications(PluginCall call) {
@@ -73,13 +83,21 @@ public class AlarmPlugin extends Plugin {
         Intent i;
         if ("exact".equals(what) && Build.VERSION.SDK_INT >= 31) {
             i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.getPackageName()));
+        } else if ("battery".equals(what)) {
+            i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.getPackageName()));
+        } else if ("autostart".equals(what)) { // Xiaomi: tela "Início automático"
+            i = new Intent().setComponent(new android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
         } else if ("fullScreen".equals(what) && Build.VERSION.SDK_INT >= 34) {
             i = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + ctx.getPackageName()));
         } else {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try { ctx.startActivity(i); } catch (Exception e) { call.reject("Não deu para abrir as configurações"); return; }
+        try { ctx.startActivity(i); }
+        catch (Exception e) { // tela da marca não existe: abre os detalhes do app
+            try { ctx.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+            catch (Exception e2) { call.reject("Não deu para abrir as configurações"); return; }
+        }
         call.resolve();
     }
 
