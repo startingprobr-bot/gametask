@@ -448,6 +448,29 @@ const step = (m) => console.log('✔', m);
     await ok('POST', '/api/auth/parent/bio', { token: bioTok });
     await ok('GET', '/api/admin/pending');
     step('digital do app Android abre o painel');
+    // ligação da família: um aparelho liga, o outro vê tocando, atende, trocam sinais e desligam
+    const dev = (tok) => async (method, url, body) => {
+      const r = await fetch(BASE + url, { method, headers: { 'content-type': 'application/json', cookie, 'x-gt-dev': tok }, body: body ? JSON.stringify(body) : undefined });
+      return { status: r.status, data: await r.json().catch(() => null) };
+    };
+    const tabTok = 'tokenTablet_' + 'y'.repeat(40), anaTok = 'tokenAna_' + 'z'.repeat(40);
+    const tab = dev(tabTok), anaPh = dev(anaTok);
+    const targets = (await tab('GET', '/api/calls/targets')).data;
+    const anaDev = targets.find(t => t.label === 'Celular da Ana'); assert.ok(anaDev && !targets.some(t => t.label === 'Tablet das crianças'));
+    assert.equal((await api('POST', '/api/calls', { to: [anaDev.id] })).status, 400); // sem aparelho não liga
+    const cid = (await tab('POST', '/api/calls', { to: [anaDev.id], from: 'Eva' })).data.id;
+    const inc = (await anaPh('GET', '/api/calls/incoming')).data; assert.equal(inc[0].id, cid); assert.equal(inc[0].from, 'Eva');
+    assert.equal((await tab('GET', '/api/calls/incoming')).data.length, 0);
+    await tab('POST', `/api/calls/${cid}/signal`, { side: 'caller', kind: 'offer', body: { type: 'offer', sdp: 'x' } });
+    assert.equal((await anaPh('POST', `/api/calls/${cid}/accept`)).status, 200);
+    assert.equal((await anaPh('POST', `/api/calls/${cid}/accept`)).status, 409); // só um atende
+    const sg = (await anaPh('GET', `/api/calls/${cid}/signals?side=callee&after=0`)).data; assert.equal(sg.status, 'accepted'); assert.equal(sg.signals[0].kind, 'offer');
+    await anaPh('POST', `/api/calls/${cid}/signal`, { side: 'callee', kind: 'answer', body: { type: 'answer', sdp: 'y' } });
+    assert.equal((await tab('GET', `/api/calls/${cid}/signals?side=caller&after=0`)).data.signals[0].kind, 'answer');
+    await tab('POST', `/api/calls/${cid}/end`);
+    assert.equal((await anaPh('GET', `/api/calls/${cid}`)).data.status, 'ended');
+    assert.ok(Array.isArray((await tab('GET', '/api/calls/ice')).data));
+    step('ligação da família: chamar, tocar, atender, trocar sinais e desligar');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

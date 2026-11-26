@@ -27,8 +27,10 @@ public class GtMessagingService extends FirebaseMessagingService {
         Map<String, String> d = msg.getData();
         String title = d.get("title") != null ? d.get("title") : "GameTask";
         String body = d.get("body") != null ? d.get("body") : "";
-        if ("alarm".equals(d.get("type"))) {
+        boolean call = "call".equals(d.get("type"));
+        if ("alarm".equals(d.get("type")) || call) {
             Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body).putExtra("icon", d.get("icon"));
+            if (call) s.putExtra("call", d.get("call")); // ligação da família: toca com Atender e Recusar
             try {
                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(s); else startService(s);
                 return;

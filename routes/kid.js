@@ -255,9 +255,9 @@ router.post('/fcm', async (req, res) => {
   const token = String(req.body.token || '').trim();
   if (!/^[\w:.\-]{20,255}$/.test(token)) return res.status(400).json({ error: 'Token inválido' });
   const label = String(req.body.label || '').trim().slice(0, 60) || null, off = (v) => v === false ? 0 : 1;
-  await pool.query(`INSERT INTO fcm_tokens (family_id,token,approvals,label,msgs,alarms) VALUES (?,?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),approvals=VALUES(approvals),label=VALUES(label),msgs=VALUES(msgs),alarms=VALUES(alarms)`,
-    [req.fid, token, off(req.body.approvals), label, off(req.body.msgs), off(req.body.alarms)]);
+  await pool.query(`INSERT INTO fcm_tokens (family_id,token,approvals,label,msgs,alarms,calls) VALUES (?,?,?,?,?,?,?)
+    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),approvals=VALUES(approvals),label=VALUES(label),msgs=VALUES(msgs),alarms=VALUES(alarms),calls=VALUES(calls)`,
+    [req.fid, token, off(req.body.approvals), label, off(req.body.msgs), off(req.body.alarms), off(req.body.calls)]);
   res.json({ ok: true, server: require('../fcm').on() });
 });
 // Alarmes dos próximos 7 dias para o app Android (plano anual, como os avisos no celular)

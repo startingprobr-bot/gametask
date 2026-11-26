@@ -165,6 +165,28 @@ public class AlarmPlugin extends Plugin {
     @PluginMethod
     public void bioClear(PluginCall call) { Bio.save(getContext(), ""); call.resolve(); }
 
+    // ---------- Ligação da família ----------
+    /** Ligação atendida ou recusada na tela do Android enquanto o site estava fechado (lê e apaga) */
+    @PluginMethod
+    public void callPending(PluginCall call) {
+        android.content.SharedPreferences p = getContext().getSharedPreferences("gt_call", Context.MODE_PRIVATE);
+        JSObject r = new JSObject();
+        r.put("answer", p.getString("answer", ""));
+        r.put("declined", p.getString("declined", ""));
+        p.edit().clear().apply();
+        call.resolve(r);
+    }
+
+    /** Viva-voz durante a ligação (desligado volta para o modo normal) */
+    @PluginMethod
+    public void speaker(PluginCall call) {
+        android.media.AudioManager am = (android.media.AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
+        boolean on = call.getBoolean("on", true), end = call.getBoolean("end", false);
+        am.setMode(end ? android.media.AudioManager.MODE_NORMAL : android.media.AudioManager.MODE_IN_COMMUNICATION);
+        am.setSpeakerphoneOn(!end && on);
+        call.resolve();
+    }
+
     /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
     @PluginMethod
     public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }

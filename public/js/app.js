@@ -25,6 +25,8 @@ const LEGACY = { '🦊': 'fox', '🐱': 'cat', '🐶': 'dog', '🦄': 'unicorn',
 const slug = (v, fb = 'star') => KNOWN.has(v) ? v : (LEGACY[v] || fb);
 const im = (v, cls = '', fb) => `<img src="/img/3d/${slug(v, fb)}.png" alt="" class="${cls}" decoding="async">`;
 const SVG = {
+  phone: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.6a1 1 0 01-.25 1z"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>',
   mega: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4a1 1 0 001 1h2l7 4V5L6 9H4a1 1 0 00-1 1z" fill="currentColor" fill-opacity=".15"/><path d="M16.5 8.5a5 5 0 010 7"/><path d="M19.5 6a8.5 8.5 0 010 12"/><path d="M7 15l1.2 4.5"/></svg>',
   finger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 11v3a8 8 0 01-1.3 4.4"/><path d="M8.6 13a14 14 0 01-.7 4.5"/><path d="M15.5 12.5c0 2.5-.3 4.8-1 7"/><path d="M5.4 8.6A7.5 7.5 0 0119.5 12c0 2 0 4-.4 6"/><path d="M4.5 13.5c.3-1 .5-2 .5-3"/><path d="M8.5 9.6A4 4 0 0112 8a4 4 0 014 4"/><path d="M7.8 4.8A10 10 0 0121 9.5"/></svg>',
   grip: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.9"/><circle cx="15" cy="6" r="1.9"/><circle cx="9" cy="12" r="1.9"/><circle cx="15" cy="12" r="1.9"/><circle cx="9" cy="18" r="1.9"/><circle cx="15" cy="18" r="1.9"/></svg>',
@@ -87,9 +89,11 @@ const sfx = {
   fix: () => tone([[392, .2], [330, .2], [262, .45]], 'triangle', .09),
 };
 function soundBtn() {
-  return `<button class="btn ghost round" id="snd" aria-label="${muted ? 'Ligar som' : 'Desligar som'}">${muted ? SVG.off : SVG.on}</button>`;
+  const call = window.Capacitor?.isNativePlatform?.() ? `<button class="btn ghost round call-btn" id="callBtn" aria-label="Ligar para a família">${SVG.phone}</button>` : '';
+  return `${call}<button class="btn ghost round" id="snd" aria-label="${muted ? 'Ligar som' : 'Desligar som'}">${muted ? SVG.off : SVG.on}</button>`;
 }
 function wireSound() {
+  const cb = $('#callBtn'); if (cb) cb.onclick = () => { sfx.tap(); callPicker($('.topbar .who')?.textContent.trim() || ''); };
   const b = $('#snd'); if (!b) return;
   b.onclick = () => { muted = !muted; store.set('gt-mute', muted ? '1' : '0'); b.innerHTML = muted ? SVG.off : SVG.on; b.setAttribute('aria-label', muted ? 'Ligar som' : 'Desligar som'); sfx.tap(); };
 }
@@ -330,8 +334,8 @@ const devLabel = () => store.get('gt-dev-label') || (Math.min(screen.width, scre
 let fcmDone = '';
 async function registerFcm() {
   if (!GtAlarm?.fcmToken || !ME.family) return null;
-  const approvals = store.get('gt-fcm-appr') !== '0', msgs = store.get('gt-dev-msgs') !== '0', alarms = store.get('gt-dev-alarms') !== '0', label = devLabel();
-  try { const { token } = await GtAlarm.fcmToken(); fcmTok = token; const k = [token, approvals, msgs, alarms, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, label }); fcmDone = k; return r.server; }
+  const approvals = store.get('gt-fcm-appr') !== '0', msgs = store.get('gt-dev-msgs') !== '0', alarms = store.get('gt-dev-alarms') !== '0', calls = store.get('gt-dev-calls') !== '0', label = devLabel();
+  try { const { token } = await GtAlarm.fcmToken(); fcmTok = token; const k = [token, approvals, msgs, alarms, calls, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, calls, label }); fcmDone = k; return r.server; }
   catch { return null; }
 }
 async function syncNativeAlarms() {
@@ -364,6 +368,7 @@ async function nativeAlarmBox(box) {
     <div class="field nat-name"><label for="natName">Nome deste aparelho</label><input id="natName" maxlength="40" value="${esc(devLabel())}" placeholder="Tablet das crianças"><p class="hint">Aparece na hora de escolher onde o recado toca.</p></div>
     <label class="check"><input type="checkbox" id="natAlarms" ${store.get('gt-dev-alarms') !== '0' ? 'checked' : ''}>Tocar os alarmes de horário (avisos e missões)</label>
     <label class="check"><input type="checkbox" id="natMsgs" ${store.get('gt-dev-msgs') !== '0' ? 'checked' : ''}>Tocar os recados como alarme</label>
+    <label class="check"><input type="checkbox" id="natCalls" ${store.get('gt-dev-calls') !== '0' ? 'checked' : ''}>Receber ligações da família neste aparelho</label>
     <label class="check"><input type="checkbox" id="natAppr" ${store.get('gt-fcm-appr') !== '0' ? 'checked' : ''}>Avisar aqui quando uma criança concluir uma missão</label>
     <p class="hint">Em reunião? Desligue os alarmes e os recados aqui e use o app normalmente.</p>
     <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button><button class="btn ghost sm" id="natWiz">Passo a passo</button></div>
@@ -373,6 +378,7 @@ async function nativeAlarmBox(box) {
     setTimeout(() => nativeAlarmBox(box).catch(() => {}), 800);
   }));
   $('#natAppr', box).onchange = (e) => { store.set('gt-fcm-appr', e.target.checked ? '1' : '0'); registerFcm(); };
+  $('#natCalls', box).onchange = (e) => { store.set('gt-dev-calls', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Este aparelho recebe ligações' : 'Este aparelho não recebe ligações'); };
   $('#natMsgs', box).onchange = (e) => { store.set('gt-dev-msgs', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Recados vão tocar aqui' : 'Recados não tocam mais aqui'); };
   $('#natAlarms', box).onchange = (e) => { store.set('gt-dev-alarms', e.target.checked ? '1' : '0'); alarmSig = ''; registerFcm(); syncNativeAlarms(); toast(e.target.checked ? 'Alarmes de horário ligados aqui' : 'Alarmes de horário desligados aqui'); };
   $('#natName', box).onchange = (e) => { store.set('gt-dev-label', e.target.value.trim().slice(0, 40)); registerFcm(); toast('Nome salvo'); };
@@ -539,6 +545,154 @@ async function rewardMapPicker() {
   });
   await closed;
 }
+
+// ---------- Ligação da família (voz entre os aparelhos com o app) ----------
+// Quem liga cria a ligação; o servidor avisa os aparelhos escolhidos (tocam como ligação, mesmo com o app fechado).
+// A voz vai direto entre os aparelhos (WebRTC); o servidor só faz a apresentação dos dois lados.
+let call = null, iceCache = null;
+const callIce = async () => iceCache ||= await api('GET', '/calls/ice').catch(() => [{ urls: 'stun:stun.l.google.com:19302' }]);
+async function callPicker(kidName) {
+  const list = (await api('GET', '/calls/targets')).filter(t => t.calls);
+  if (!list.length) return toast('Nenhum aparelho recebe ligações. Ligue "Receber ligações" em Ajustes no celular de um responsável.', true);
+  const bg = sheet('Ligar para', `<p class="lead" style="margin-top:6px">Toque em quem você quer chamar. Só a família recebe.</p>
+    <div class="call-list">${list.map(t => `<button type="button" class="btn big call-to" data-to="${t.id}">${SVG.phone}<span>${esc(t.label)}</span></button>`).join('')}</div>`, null, { saveLabel: '' });
+  const sv = bg.querySelector('.actions .btn:not([data-x])'); if (sv) sv.hidden = true; // só a lista e o Cancelar
+  $$('[data-to]', bg).forEach(b => b.onclick = () => { bg.remove(); startCall([+b.dataset.to], b.textContent.trim(), kidName); });
+}
+function callScreen(title, sub) {
+  $('.call-bg')?.remove();
+  const bg = document.createElement('div'); bg.className = 'call-bg'; bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-label', title);
+  bg.innerHTML = `<div class="call-card"><p class="call-tag">Ligação da família</p><h2 class="d">${esc(title)}</h2><p class="call-sub" aria-live="polite">${esc(sub)}</p>
+    <div class="call-ic">${SVG.phone}</div><div class="call-btns"></div></div>`;
+  document.body.append(bg);
+  return bg;
+}
+const callSub = (t) => { const e = $('.call-bg .call-sub'); if (e) e.textContent = t; };
+let ringIv = 0;
+const ring = (on) => { clearInterval(ringIv); if (on) { const r = () => tone([[784, .2], [988, .2], [784, .2], [988, .35]], 'triangle', .22, true); r(); ringIv = setInterval(r, 2200); } };
+async function openPeer(side) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const pc = new RTCPeerConnection({ iceServers: await callIce() });
+  stream.getTracks().forEach(t => pc.addTrack(t, stream));
+  const audio = new Audio(); audio.autoplay = true;
+  pc.ontrack = (e) => { audio.srcObject = e.streams[0]; audio.play().catch(() => {}); };
+  pc.onicecandidate = (e) => { if (e.candidate && call) api('POST', `/calls/${call.id}/signal`, { side, kind: 'ice', body: e.candidate.toJSON() }).catch(() => {}); };
+  pc.onconnectionstatechange = () => {
+    if (!call) return;
+    if (pc.connectionState === 'connected') connected();
+    if (['failed', 'disconnected'].includes(pc.connectionState)) callSub(pc.connectionState === 'failed' ? 'Sem conexão entre os aparelhos' : 'Conexão instável…');
+    if (pc.connectionState === 'failed') setTimeout(() => endCall(), 2500);
+  };
+  return { pc, stream, audio };
+}
+// troca de sinais com o outro lado até a ligação acabar
+async function pollSignals() {
+  if (!call) return;
+  try {
+    const r = await api('GET', `/calls/${call.id}/signals?side=${call.side}&after=${call.after}`);
+    for (const sg of r.signals) {
+      call.after = sg.id;
+      if (sg.kind === 'offer' && call.side === 'callee') {
+        await call.pc.setRemoteDescription(sg.body);
+        const ans = await call.pc.createAnswer(); await call.pc.setLocalDescription(ans);
+        await api('POST', `/calls/${call.id}/signal`, { side: 'callee', kind: 'answer', body: call.pc.localDescription.toJSON() });
+        for (const c of call.queue.splice(0)) await call.pc.addIceCandidate(c).catch(() => {});
+      } else if (sg.kind === 'answer' && call.side === 'caller') {
+        await call.pc.setRemoteDescription(sg.body);
+        for (const c of call.queue.splice(0)) await call.pc.addIceCandidate(c).catch(() => {});
+      } else if (sg.kind === 'ice') {
+        if (call.pc.remoteDescription) await call.pc.addIceCandidate(sg.body).catch(() => {}); else call.queue.push(sg.body);
+      }
+    }
+    if (r.status === 'accepted' && call.side === 'caller' && !call.answered) { call.answered = true; ring(false); callSub('Conectando…'); }
+    if (['declined', 'missed', 'ended'].includes(r.status)) {
+      const msg = r.status === 'declined' ? 'Recusou a ligação' : r.status === 'missed' ? 'Não atendeu' : 'Ligação encerrada';
+      return endCall(msg, true);
+    }
+  } catch {}
+  if (call) call.poll = setTimeout(pollSignals, call.live ? 2500 : 700);
+}
+function connected() {
+  if (!call || call.live) return;
+  call.live = true; ring(false); sfx.done();
+  const t0 = Date.now();
+  call.clock = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); callSub(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`); }, 1000);
+  liveButtons();
+}
+function liveButtons() {
+  const box = $('.call-bg .call-btns'); if (!box) return;
+  box.innerHTML = `<button class="btn ghost round big-r" id="cMute" aria-label="Silenciar meu microfone">${SVG.mic}</button>
+    <button class="btn red big-r" id="cEnd" aria-label="Desligar">${SVG.phone}</button>
+    <button class="btn ghost round big-r" id="cSpk" aria-label="Viva-voz">${SVG.on}</button>`;
+  $('#cEnd').onclick = () => endCall();
+  $('#cMute').onclick = (e) => { const tr = call?.stream.getAudioTracks()[0]; if (!tr) return; tr.enabled = !tr.enabled; e.currentTarget.classList.toggle('off', !tr.enabled); };
+  let spk = true; window.Capacitor?.Plugins?.GtAlarm?.speaker?.({ on: true }).catch(() => {});
+  $('#cSpk').onclick = (e) => { spk = !spk; e.currentTarget.classList.toggle('off', !spk); window.Capacitor?.Plugins?.GtAlarm?.speaker?.({ on: spk }).catch(() => {}); };
+}
+async function startCall(to, label, kidName) {
+  if (call) return;
+  const bg = callScreen(label, 'Chamando…');
+  $('.call-btns', bg).innerHTML = `<button class="btn red big" id="cEnd">${SVG.phone}Desligar</button>`;
+  $('#cEnd', bg).onclick = () => endCall();
+  try {
+    const peer = await openPeer('caller');
+    const r = await api('POST', '/calls', { to, from: kidName || devLabel() });
+    call = { id: r.id, side: 'caller', after: 0, queue: [], ...peer };
+    const offer = await call.pc.createOffer(); await call.pc.setLocalDescription(offer);
+    await api('POST', `/calls/${call.id}/signal`, { side: 'caller', kind: 'offer', body: call.pc.localDescription.toJSON() });
+    ring(true); pollSignals();
+  } catch (e) { endCall(/Permission|NotAllowed/i.test(e.name + e.message) ? 'Permita o microfone para ligar' : e.message, true); }
+}
+async function answerCall(id, from) {
+  if (call) return;
+  ring(false);
+  const bg = callScreen(from || 'Ligação', 'Conectando…');
+  $('.call-btns', bg).innerHTML = `<button class="btn red big" id="cEnd">${SVG.phone}Desligar</button>`;
+  $('#cEnd', bg).onclick = () => endCall();
+  try {
+    await api('POST', `/calls/${id}/accept`);
+    const peer = await openPeer('callee');
+    call = { id, side: 'callee', after: 0, queue: [], ...peer };
+    pollSignals();
+  } catch (e) { endCall(/Permission|NotAllowed/i.test(e.name + e.message) ? 'Permita o microfone para atender' : e.message, true); }
+}
+function endCall(msg, remote) {
+  ring(false);
+  const c = call; call = null;
+  if (c) {
+    clearTimeout(c.poll); clearInterval(c.clock);
+    if (!remote) api('POST', `/calls/${c.id}/end`, {}).catch(() => {});
+    try { c.pc.close(); } catch {}
+    c.stream.getTracks().forEach(t => t.stop());
+    window.Capacitor?.Plugins?.GtAlarm?.speaker?.({ end: true }).catch(() => {});
+  }
+  const bg = $('.call-bg');
+  if (bg && msg) { callSub(msg); $('.call-btns', bg).innerHTML = ''; setTimeout(() => bg.remove(), 2200); } else bg?.remove();
+}
+// ligação chegando com o app aberto (com o app fechado, quem toca é o Android)
+let incomingShown = 0;
+async function checkCalls() {
+  if (!NATIVE || call || !fcmTok || !ME.family || document.visibilityState !== 'visible') return;
+  try {
+    const p = await GtAlarm.callPending?.();
+    if (p?.declined) api('POST', `/calls/${p.declined}/end`, { reason: 'declined' }).catch(() => {});
+    if (p?.answer) { const c = await api('GET', `/calls/${p.answer}`); if (c.status === 'ringing') return answerCall(+p.answer, c.from); }
+    if ($('.call-bg')) return;
+    const list = await api('GET', '/calls/incoming');
+    if (!list.length || list[0].id === incomingShown) return;
+    const inc = list[0]; incomingShown = inc.id;
+    const bg = callScreen(inc.from, 'Está te ligando');
+    bg.classList.add('incoming');
+    $('.call-btns', bg).innerHTML = `<button class="btn red big" id="cNo">Recusar</button><button class="btn green big" id="cYes">${SVG.phone}Atender</button>`;
+    ring(true); navigator.vibrate?.([400, 200, 400]);
+    $('#cNo', bg).onclick = () => { ring(false); api('POST', `/calls/${inc.id}/end`, { reason: 'declined' }).catch(() => {}); bg.remove(); };
+    $('#cYes', bg).onclick = () => { bg.remove(); answerCall(inc.id, inc.from); };
+    // parou de tocar do outro lado (desistiu ou outro aparelho atendeu)
+    const watch = setInterval(async () => { if (!bg.isConnected) return clearInterval(watch); const c = await api('GET', `/calls/${inc.id}`).catch(() => null); if (c && c.status !== 'ringing') { clearInterval(watch); ring(false); bg.remove(); } }, 1500);
+  } catch {}
+}
+setInterval(checkCalls, 3000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkCalls, 400); });
 
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMessages(); });
@@ -1128,7 +1282,7 @@ async function adminPending(pane, refresh) {
 
 async function adminKids(pane, refresh) {
   const all = await api('GET', '/admin/kids'), kids = all.filter(k => !k.adult), adults = all.filter(k => k.adult);
-  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${SVG.mega}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
+  pane.innerHTML = `<section class="box"><div class="box-h"><h2 class="d">Filhos</h2><div class="btns">${NATIVE ? `<button class="btn ghost sm" id="callAny">${SVG.phone}Ligar</button>` : ''}${kids.filter(k => k.active).length > 1 ? `<button class="btn ghost sm" id="msgAll">${SVG.mega}Recado para todos</button>` : ''}<button class="btn green sm" id="new">Adicionar filho</button></div></div>
     ${kids.length ? `<div class="kid-rows">${kids.map(k => `<div class="kid-row ${k.active ? '' : 'off'}"><div class="kid-id"><span class="kid-av" style="background:${esc(k.color)}33">${im(k.avatar, '', 'fox')}</span><b>${esc(k.name)}</b>${k.active ? '' : '<small>inativo</small>'}</div>
       <div class="kid-act">${k.active ? `<button class="btn sm" data-msg="${k.id}">${SVG.mega}Recado</button>` : ''}<button class="btn ghost sm" data-e="${k.id}">${im('pencil')}Editar</button></div></div>`).join('')}</div>` : zero('people', 'Adicione o primeiro jogador.')}</section>
     ${adults.length ? `<section class="box"><div class="box-h"><h2 class="d">Adultos no jogo</h2></div>
@@ -1148,6 +1302,7 @@ async function adminKids(pane, refresh) {
   const onK = all.filter(k => k.active);
   $$('[data-msg]').forEach(b => b.onclick = () => messageSheet(onK, [+b.dataset.msg]));
   const ma = $('#msgAll'); if (ma) ma.onclick = () => messageSheet(onK);
+  const ca = $('#callAny'); if (ca) ca.onclick = () => callPicker(ME.actor?.name || '');
   $('#new').onclick = () => sheet('Novo filho', form(), async (f) => { await api('POST', '/admin/kids', read(f)); toast('Jogador adicionado'); refresh(); }, { saveLabel: 'Adicionar' });
   $$('[data-e]').forEach(b => b.onclick = () => {
     const k = kids.find(x => x.id == b.dataset.e);

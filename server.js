@@ -175,6 +175,7 @@ app.use('/api/billing', billing.router);
 app.use('/api/owner', needFamily, needParent, needFull, needOwner, require('./routes/owner'));
 app.use('/api/admin', needFamily, billing.needActive, needParent, members.limitDaily, members.admin, require('./routes/admin'));
 app.use('/api', needFamily, billing.needActive, require('./routes/kid'));
+app.use('/api', needFamily, billing.needActive, require('./routes/calls'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Não encontrado' }));
 
 // Página de vendas em "/" para quem não está logado; o app fica em "/app" (e em "/" para aparelhos já conectados)

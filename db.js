@@ -53,6 +53,13 @@ const SCHEMA = [
   amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', method VARCHAR(40) NULL,
   mp_payment_id VARCHAR(40) NULL, period_end DATE NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, paid_at TIMESTAMP NULL, INDEX(family_id), INDEX(status))`,
+// Ligação da família (voz entre aparelhos com o app): a chamada e a troca de sinais entre os dois lados
+`CREATE TABLE IF NOT EXISTS calls (
+  id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, from_dev INT NULL, from_label VARCHAR(80) NOT NULL, to_ids VARCHAR(255) NOT NULL,
+  status VARCHAR(12) NOT NULL DEFAULT 'ringing', answered_by INT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, answered_at TIMESTAMP NULL, ended_at TIMESTAMP NULL, INDEX(family_id))`,
+`CREATE TABLE IF NOT EXISTS call_signals (
+  id INT AUTO_INCREMENT PRIMARY KEY, call_id INT NOT NULL, side VARCHAR(8) NOT NULL, kind VARCHAR(10) NOT NULL, body MEDIUMTEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX(call_id, id))`,
 // Celulares com o app Android: recebem recados e pedidos de aprovação pelo Firebase com o app fechado
 `CREATE TABLE IF NOT EXISTS fcm_tokens (
   id INT AUTO_INCREMENT PRIMARY KEY, family_id INT NOT NULL, token VARCHAR(255) NOT NULL, approvals TINYINT NOT NULL DEFAULT 1,
@@ -164,7 +171,8 @@ const COLUMNS = [
   ['messages', 'devices', 'VARCHAR(500) NULL'],         // aparelhos escolhidos ("f3,p2"); NULL = todos
   ['fcm_tokens', 'label', 'VARCHAR(60) NULL'],          // nome do aparelho (Tablet das crianças, Celular da Ana)
   ['fcm_tokens', 'msgs', 'TINYINT NOT NULL DEFAULT 1'],  // recados tocam neste aparelho
-  ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'], // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
+  ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'],
+  ['fcm_tokens', 'calls', 'TINYINT NOT NULL DEFAULT 1'],  // recebe ligações da família // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
   ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)

@@ -42,7 +42,8 @@ public class AlarmService extends Service {
         String body = intent != null && intent.getStringExtra("body") != null ? intent.getStringExtra("body") : "";
 
         channel();
-        Intent full = new Intent(this, AlarmActivity.class).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
+        String call = intent != null ? intent.getStringExtra("call") : null;
+        Intent full = new Intent(this, call != null ? CallActivity.class : AlarmActivity.class).putExtra("call", call).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent fullPi = PendingIntent.getActivity(this, 2, full, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         PendingIntent stopPi = PendingIntent.getService(this, 3, new Intent(this, AlarmService.class).setAction(STOP), PendingIntent.FLAG_IMMUTABLE);
@@ -59,13 +60,13 @@ public class AlarmService extends Service {
 
         // com o app aberto na tela, o Android só mostra uma faixa: abre a tela do alarme por cima, com o Desligar
         try { startActivity(full); } catch (Exception ignored) { }
-        speech = body.isEmpty() ? title : title + ". " + body;
+        speech = call != null ? title : body.isEmpty() ? title : title + ". " + body;
         on = true;
         handler.removeCallbacksAndMessages(null);
         louder();
         vibrate();
         cycle();
-        handler.postDelayed(this::stopSelf, 3 * 60 * 1000);
+        handler.postDelayed(this::stopSelf, call != null ? 45 * 1000 : 3 * 60 * 1000); // ligação toca 45 s
         return START_NOT_STICKY;
     }
 

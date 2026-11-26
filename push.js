@@ -132,6 +132,7 @@ async function tick() {
     pool.query('DELETE FROM push_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 3 DAY)').catch(() => {});
     pool.query('DELETE FROM push_sent WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)').catch(() => {});
     pool.query('DELETE FROM messages WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)').catch(() => {});
+    pool.query('DELETE FROM call_signals WHERE created_at < DATE_SUB(NOW(), INTERVAL 1 DAY)').catch(() => {});
   }
 }
 
