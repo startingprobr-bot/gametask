@@ -189,6 +189,8 @@ public class AlarmPlugin extends Plugin {
         Intent i;
         if ("exact".equals(what) && Build.VERSION.SDK_INT >= 31) {
             i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.getPackageName()));
+        } else if ("appinfo".equals(what)) {
+            i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.getPackageName()));
         } else if ("usage".equals(what)) {
             i = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
         } else if ("overlay".equals(what) && Build.VERSION.SDK_INT >= 23) {

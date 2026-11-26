@@ -1170,3 +1170,6 @@ button.meter:active{transform:scale(.98)}
 .bl-step .wiz-n{background:var(--yellow)}
 .bl-step.ok .wiz-n{background:var(--green)}
 @media (max-width:420px){.app-row .col,.app-head .col{flex-basis:46px}}
+.bl-help{margin-top:10px;padding:12px 14px;border-radius:14px;background:var(--mist);font-size:14px;font-weight:700;color:var(--ink-soft)}
+.bl-help b{color:var(--ink)}
+.bl-help .btn{display:flex;margin-top:10px}

@@ -462,7 +462,10 @@ async function blockBox(box) {
     box.innerHTML = `${head}<div class="bl-need">${im('lock')}<p><b>Para o bloqueio funcionar, o Android precisa de 2 permissões.</b> Sem elas o GameTask não consegue ver nem bloquear os jogos.</p></div>
       ${step(1, st.usage, 'Ver qual app está aberto', 'Na lista que abrir, procure GameTask e ligue a chave.', 'usage')}
       ${step(2, st.overlay, 'Mostrar a tela de bloqueio', 'Ligue "Permitir exibição sobre outros apps" para o GameTask.', 'overlay')}
-      <p class="hint">Depois de ligar, volte para o GameTask. Os próximos passos aparecem sozinhos.</p>`;
+      <p class="hint">Depois de ligar, volte para o GameTask. Os próximos passos aparecem sozinhos.</p>
+      <div class="bl-help"><b>Apareceu "Acesso negado" ou "configurações restritas"?</b> É uma proteção do Android para apps baixados fora da Play Store.
+        Abra as informações do GameTask, toque nos <b>três pontinhos (⋮)</b> no canto de cima, escolha <b>Permitir configurações restritas</b> e tente de novo.
+        <button class="btn ghost sm" data-bl="appinfo">Abrir informações do GameTask</button></div>`;
     $$('[data-bl]', box).forEach(btn => btn.onclick = guard(async () => { await GtAlarm.openSettings({ what: btn.dataset.bl }); }));
     addEventListener('focus', () => blockBox(box).catch(() => {}), { once: true });
     return;
