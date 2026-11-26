@@ -84,6 +84,7 @@ public class AlarmPlugin extends Plugin {
         r.put("on", BlockStore.enabled(ctx));
         r.put("pin", BlockStore.hasPin(ctx));
         r.put("groups", BlockStore.groups(ctx));
+        BlockService.sync(ctx); // garante o vigia ligado quando o bloqueio está ativo
         call.resolve(r);
     }
 
@@ -170,7 +171,7 @@ public class AlarmPlugin extends Plugin {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        BlockStore.pause(ctx, 3 * 60 * 1000); // o responsável está nas configurações pelo GameTask: não bloqueia
+        BlockStore.settingsGrace(ctx, 3 * 60 * 1000); // o responsável está nas configurações pelo GameTask: só elas ficam livres
         try { ctx.startActivity(i); }
         catch (Exception e) { // tela da marca não existe: abre os detalhes do app
             try { ctx.startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }

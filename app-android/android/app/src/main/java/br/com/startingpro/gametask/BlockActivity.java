@@ -42,9 +42,7 @@ public class BlockActivity extends Activity {
         try { Drawable d = getPackageManager().getApplicationIcon(pkg); app.setImageDrawable(d); } catch (Exception e) { app.setImageResource(R.mipmap.ic_launcher); }
         app.setAlpha(0.55f);
         root.addView(app, new LinearLayout.LayoutParams(dp(96), dp(96)));
-        TextView lock = text("🔒", 44, Color.WHITE, false);
-        lock.setPadding(0, dp(-30), 0, 0);
-        root.addView(lock);
+        root.addView(new View(this), new LinearLayout.LayoutParams(1, dp(16)));
 
         String what = "always".equals(group) ? "Este app está bloqueado" : "game".equals(group) ? "Hora de jogar? Ainda não!" : "Hora de vídeo? Ainda não!";
         String sub = "always".equals(group) ? "Só um responsável pode abrir este app."

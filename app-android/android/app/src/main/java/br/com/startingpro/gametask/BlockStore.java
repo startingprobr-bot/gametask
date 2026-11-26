@@ -35,6 +35,14 @@ public class BlockStore {
 
     static boolean paused(Context c) { return System.currentTimeMillis() < prefs(c).getLong("pause", 0); }
 
+    /** o responsável abriu as configurações pelo GameTask: só elas ficam livres por alguns minutos */
+    static void settingsGrace(Context c, long ms) { prefs(c).edit().putLong("settings", System.currentTimeMillis() + ms).apply(); }
+
+    private static boolean settingsApp(String pkg) {
+        return pkg.equals("com.android.settings") || pkg.equals("com.miui.securitycenter") || pkg.equals("com.samsung.android.lool")
+            || pkg.equals("com.android.permissioncontroller") || pkg.equals("com.google.android.permissioncontroller");
+    }
+
     /** responsável liberou este app com o PIN: vale até ele sair do app */
     static void unlock(Context c, String pkg) { prefs(c).edit().putString("unlocked", pkg == null ? "" : pkg).apply(); }
 
@@ -47,6 +55,7 @@ public class BlockStore {
     /** grupo que bloqueia este pacote agora, ou null se está livre */
     static String blockedGroup(Context c, String pkg) {
         if (pkg == null || !enabled(c) || paused(c) || pkg.equals(c.getPackageName()) || pkg.equals(unlocked(c))) return null;
+        if (settingsApp(pkg) && System.currentTimeMillis() < prefs(c).getLong("settings", 0)) return null;
         String g = groups(c).optString(pkg, "");
         if (g.isEmpty() || g.equals("free")) return null;
         if (g.equals("always")) return g;

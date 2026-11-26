@@ -26,4 +26,10 @@ public class MainActivity extends BridgeActivity {
         });
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).setAppearanceLightStatusBars(false);
     }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        BlockService.sync(this); // o vigia do bloqueio volta a rodar sempre que o app abre (ex.: depois de atualizar)
+    }
 }
