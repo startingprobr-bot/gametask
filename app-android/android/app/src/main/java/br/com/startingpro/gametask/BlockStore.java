@@ -83,9 +83,21 @@ public class BlockStore {
     }
 
     /** responsável liberou este app com o PIN: vale até ele sair do app */
-    static void unlock(Context c, String pkg) { prefs(c).edit().putString("unlocked", pkg == null ? "" : pkg).apply(); }
+    static synchronized void unlock(Context c, String pkg) {
+        if (pkg == null || pkg.isEmpty()) return;
+        JSONObject o = json(prefs(c).getString("unlockedApps", "{}"));
+        try { o.put(pkg, System.currentTimeMillis()); } catch (Exception ignored) { }
+        prefs(c).edit().putString("unlockedApps", o.toString()).apply();
+    }
 
-    static String unlocked(Context c) { return prefs(c).getString("unlocked", ""); }
+    /** o responsável liberou este app e a tela ainda não bloqueou desde então */
+    static boolean isUnlocked(Context c, String pkg) {
+        long t = json(prefs(c).getString("unlockedApps", "{}")).optLong(pkg, 0);
+        return t > 0 && System.currentTimeMillis() - t < 4 * 3600 * 1000;
+    }
+
+    /** a tela bloqueou: tudo que o responsável tinha liberado volta a ficar bloqueado */
+    static void clearUnlocked(Context c) { prefs(c).edit().remove("unlockedApps").apply(); }
 
     static boolean hasPin(Context c) { return !prefs(c).getString("pin", "").isEmpty(); }
 
@@ -93,7 +105,7 @@ public class BlockStore {
 
     /** grupo que bloqueia este pacote agora, ou null se está livre */
     static String blockedGroup(Context c, String pkg) {
-        if (pkg == null || !enabled(c) || paused(c) || pkg.equals(c.getPackageName()) || pkg.equals(unlocked(c))) return null;
+        if (pkg == null || !enabled(c) || paused(c) || pkg.equals(c.getPackageName()) || isUnlocked(c, pkg)) return null;
         if (settingsApp(pkg) && System.currentTimeMillis() < prefs(c).getLong("settings", 0)) return null;
         String g = groups(c).optString(pkg, "");
         if (g.isEmpty() || g.equals("free")) return null;

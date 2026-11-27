@@ -63,10 +63,21 @@ public class BlockService extends Service {
             .setOngoing(true).setPriority(NotificationCompat.PRIORITY_MIN).setContentIntent(open).build();
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIF, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(NOTIF, n);
+        if (!screenOffOn) {
+            android.content.IntentFilter f = new android.content.IntentFilter(Intent.ACTION_SCREEN_OFF);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, f, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(screenOff, f);
+            screenOffOn = true;
+        }
         h.removeCallbacksAndMessages(null);
         h.post(tick);
         return START_STICKY;
     }
+
+    // quando a tela bloqueia, o que o responsável tinha liberado volta a ficar bloqueado
+    private final android.content.BroadcastReceiver screenOff = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) { BlockStore.clearUnlocked(c); }
+    };
+    private boolean screenOffOn = false;
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -133,9 +144,6 @@ public class BlockService extends Service {
         String top = foreground();
         if (top != null) {
             current = top;
-            // saiu do app liberado com o PIN (foi para outro app ou para a tela inicial): bloqueia de novo
-            String un = BlockStore.unlocked(this);
-            if (!un.isEmpty() && !top.equals(un) && !top.equals(getPackageName()) && !top.equals("com.android.systemui")) BlockStore.unlock(this, "");
         }
         String g = BlockStore.blockedGroup(this, current);
         if (g == null) return;
@@ -204,7 +212,11 @@ public class BlockService extends Service {
         return last;
     }
 
-    @Override public void onDestroy() { h.removeCallbacksAndMessages(null); super.onDestroy(); }
+    @Override public void onDestroy() {
+        h.removeCallbacksAndMessages(null);
+        if (screenOffOn) { try { unregisterReceiver(screenOff); } catch (Exception ignored) { } screenOffOn = false; }
+        super.onDestroy();
+    }
 
     @Override public IBinder onBind(Intent i) { return null; }
 }

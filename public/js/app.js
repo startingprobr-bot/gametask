@@ -418,7 +418,7 @@ const DV_MODES = [['sound', 'Som e vibração'], ['vibrate', 'Só vibrar'], ['si
 const DV_TEND = [['mine', 'Só se a criança começar neste aparelho'], ['all', 'Sempre, de qualquer criança'], ['off', 'Nunca']];
 const DV_MEND = [['mine', 'Só se a criança começar neste aparelho'], ['off', 'Nunca']];
 async function devicesBox(box, refresh) {
-  if (GtAlarm && !fcmTok) { try { fcmTok = (await GtAlarm.fcmToken()).token; } catch {} } // para saber qual é "este aparelho"
+  if (GtAlarm && !fcmTok) { try { fcmTok = (await withTimeout(GtAlarm.fcmToken(), 2500)).token; } catch {} } // para saber qual é "este aparelho"
   const list = (await api('GET', '/admin/devices')).sort((a, b) => b.me - a.me || a.id.localeCompare(b.id));
   box.dataset.sum = list.length ? `${list.length} ${list.length === 1 ? 'aparelho' : 'aparelhos'}` : 'Nenhum ainda';
   const label = (v, opts) => opts.find(o => o[0] === v)?.[1] || v;
@@ -468,6 +468,19 @@ async function devicesBox(box, refresh) {
   });
 }
 
+// espera, mas desiste depois de alguns segundos (a tela nunca fica presa esperando o Google ou a internet)
+const withTimeout = (pr, ms, msg = 'Demorou demais') => Promise.race([pr, new Promise((_, no) => setTimeout(() => no(new Error(msg)), ms))]);
+// monta um bloco de Ajustes; se falhar, mostra o motivo e um botão para tentar de novo (em vez de ficar vazio)
+async function safeBlock(el, title, fn) {
+  try { await withTimeout(fn(), 12000, 'A internet está lenta. Toque em Tentar de novo.'); }
+  catch (e) {
+    el.dataset.sum = 'Não carregou';
+    el.innerHTML = `<div class="box-h"><h2 class="d">${esc(title)}</h2></div><p class="lead">Não deu para carregar: ${esc(e.message || String(e))}</p>
+      <div class="actions"><button type="button" class="btn sm" data-retry>Tentar de novo</button></div>`;
+    el.querySelector('[data-retry]').onclick = () => safeBlock(el, title, fn).then(() => { const sm = el.parentElement?.querySelector(':scope > summary small'); if (sm && el.dataset.sum) sm.textContent = el.dataset.sum; });
+  }
+}
+
 // Ajustes > Sons e alarmes: tudo sobre som e aviso num lugar só
 async function soundsGroup(box, refresh) {
   const sg = $('#sg', box);
@@ -475,8 +488,12 @@ async function soundsGroup(box, refresh) {
     ${NATIVE && GtAlarm ? '<section class="box" id="sgPerm"><div class="box-h"><h2 class="d">Permissões deste aparelho</h2></div></section>' : ''}
     ${full() ? '<section class="box" id="sgSnd"><div class="box-h"><h2 class="d">Som do fim do tempo</h2></div></section>' : ''}
     <div id="sgAl"></div>`;
-  await Promise.all([devicesBox($('#sgDev', sg), refresh), NATIVE && GtAlarm ? nativeAlarmBox($('#sgPerm', sg)) : null,
-    full() ? soundBox($('#sgSnd', sg)) : null, adminAlarms($('#sgAl', sg), refresh)].filter(Boolean).map(x => x.catch?.(() => {}) ?? x));
+  await Promise.all([
+    safeBlock($('#sgDev', sg), 'Aparelhos e alarmes', () => devicesBox($('#sgDev', sg), refresh)),
+    NATIVE && GtAlarm ? safeBlock($('#sgPerm', sg), 'Permissões deste aparelho', () => nativeAlarmBox($('#sgPerm', sg))) : null,
+    full() ? safeBlock($('#sgSnd', sg), 'Som do fim do tempo', () => soundBox($('#sgSnd', sg))) : null,
+    withTimeout(adminAlarms($('#sgAl', sg), refresh), 12000).catch(() => {}),
+  ].filter(Boolean));
   box.dataset.sum = 'Aparelhos, permissões, som do fim do tempo e avisos programados';
   accordion(sg);
 }

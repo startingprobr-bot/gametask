@@ -74,7 +74,7 @@ public class BlockActivity extends androidx.fragment.app.FragmentActivity {
         setContentView(root);
     }
 
-    // PIN de desbloqueio com teclado grande: libera este app até o responsável sair dele
+    // PIN de desbloqueio com teclado grande: libera este app até a tela bloquear
     private final StringBuilder typed = new StringBuilder();
     private TextView dots;
 
@@ -88,7 +88,7 @@ public class BlockActivity extends androidx.fragment.app.FragmentActivity {
             new int[] { Color.parseColor("#4aa8ff"), Color.parseColor("#2a6cf0"), Color.parseColor("#16296b") }));
         root.setPadding(dp(24), dp(48), dp(24), dp(40));
         root.addView(text("Sou responsável", 28, Color.WHITE, true));
-        TextView h = text("Digite o PIN de desbloqueio. O app fica liberado até você sair dele.", 17, Color.parseColor("#d6e4ff"), false);
+        TextView h = text("Digite o PIN de desbloqueio. O app fica liberado até a tela bloquear.", 17, Color.parseColor("#d6e4ff"), false);
         h.setPadding(0, dp(6), 0, dp(18));
         root.addView(h);
         dots = text("", 40, Color.WHITE, true);
@@ -132,14 +132,12 @@ public class BlockActivity extends androidx.fragment.app.FragmentActivity {
         paintDots();
     }
 
-    // libera o app bloqueado até o responsável sair dele e já abre o app
+    // libera o app até a tela bloquear e só tira esta tela de cima: o app aparece onde estava, sem reabrir pela página inicial
     private void openUnlocked() {
         String pkg = getIntent().getStringExtra("pkg");
         BlockStore.unlock(this, pkg);
-        Toast.makeText(this, "Liberado até você sair do app", Toast.LENGTH_SHORT).show();
-        Intent open = pkg == null ? null : getPackageManager().getLaunchIntentForPackage(pkg);
+        Toast.makeText(this, "Liberado até a tela bloquear", Toast.LENGTH_SHORT).show();
         finish();
-        if (open != null) startActivity(open);
     }
 
     private void paintDots() {
