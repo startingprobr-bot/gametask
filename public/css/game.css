@@ -1237,3 +1237,20 @@ button.meter:active{transform:scale(.98)}
 .snd-help b{color:var(--ink)}
 .snd-help a{color:var(--sky-2);font-weight:900}
 .actions label.btn{cursor:pointer}
+
+/* ---- Sons e alarmes: lista de aparelhos ---- */
+.dv-list{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.dv{border:2px solid var(--mist-2);border-radius:16px;background:#fff;overflow:hidden}
+.dv-h{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;background:none;border:0;font:inherit;text-align:left;color:var(--ink);cursor:pointer;min-height:60px}
+.dv-h>img{width:34px;height:34px;flex:0 0 auto}
+.dv-h b{font-size:16px}
+.dv-h small{display:block;font-weight:700;font-size:13px;color:var(--ink-soft);margin-top:1px}
+.dv-chev{flex:0 0 auto;width:9px;height:9px;border-right:3px solid var(--ink-soft);border-bottom:3px solid var(--ink-soft);transform:rotate(-45deg);transition:transform .25s var(--spring)}
+.dv.open .dv-chev{transform:rotate(45deg)}
+.dv-b{padding:4px 14px 14px;border-top:2px solid var(--mist)}
+.dv-b .field select{width:100%;min-height:46px;border-radius:12px;border:2px solid var(--mist-2);font:inherit;font-weight:700;padding:0 10px;background:#fff}
+.seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.seg3 button{min-height:46px;padding:4px 6px;border-radius:12px;border:2px solid var(--mist-2);background:#fff;font:inherit;font-weight:800;font-size:14px;color:var(--ink);cursor:pointer}
+.seg3 button[aria-checked=true]{background:#fff8d6;border-color:var(--navy);box-shadow:0 3px 0 var(--navy)}
+.acc-body .acc{margin-top:10px;border-width:2px;box-shadow:none}
+.acc-body .acc>summary{min-height:56px;padding:8px 12px}

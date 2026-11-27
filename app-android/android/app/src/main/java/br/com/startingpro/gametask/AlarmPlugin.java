@@ -137,6 +137,14 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Escolhas deste aparelho vindas da conta (modo e avisos falados) */
+    @PluginMethod
+    public void setPrefs(PluginCall call) {
+        String m = call.getString("mode", "sound");
+        BlockStore.setPrefs(getContext(), m.equals("vibrate") || m.equals("silent") ? m : "sound", call.getBoolean("warn", true));
+        call.resolve();
+    }
+
     // ---------- Som do fim do tempo escolhido pela família ----------
     @PluginMethod
     public void soundSet(PluginCall call) {

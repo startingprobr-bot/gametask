@@ -552,10 +552,32 @@ router.get('/messages', wrap(async (req, res) => {
 // Aparelhos onde o recado pode tocar: celulares com o app (f…) e aparelhos com avisos do navegador (p…)
 router.get('/devices', wrap(async (req, res) => {
   const me = req.get('x-gt-dev') || '';
-  const [f] = await pool.query('SELECT id,label,msgs,token FROM fcm_tokens WHERE family_id=? ORDER BY id', [req.fid]);
-  const [p] = await pool.query('SELECT id,label,endpoint FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
-  res.json([...f.map(x => ({ id: 'f' + x.id, label: x.label || 'Aparelho com o app', on: !!x.msgs, me: !!me && x.token === me })),
-    ...p.map(x => ({ id: 'p' + x.id, label: x.label || 'Navegador', on: true, me: !!me && x.endpoint === me }))]);
+  const [f] = await pool.query('SELECT id,label,msgs,token,mode,alarms,calls,approvals,t_end,m_end,warn FROM fcm_tokens WHERE family_id=? ORDER BY id', [req.fid]);
+  const [p] = await pool.query('SELECT id,label,endpoint,reminders,approvals FROM push_subs WHERE family_id=? ORDER BY id', [req.fid]);
+  res.json([...f.map(x => ({ kind: 'app', id: 'f' + x.id, label: x.label || 'Aparelho com o app', on: !!x.msgs, me: !!me && x.token === me,
+      mode: x.mode, alarms: !!x.alarms, msgs: !!x.msgs, calls: !!x.calls, approvals: !!x.approvals, t_end: x.t_end, m_end: x.m_end, warn: !!x.warn })),
+    ...p.map(x => ({ kind: 'web', id: 'p' + x.id, label: x.label || 'Navegador', on: true, me: !!me && x.endpoint === me, reminders: !!x.reminders, approvals: !!x.approvals }))]);
+}));
+// Escolhas de cada aparelho com o app (modo, quem toca o quê). Os pais mudam daqui, de qualquer aparelho.
+router.put('/devices/:id', wrap(async (req, res) => {
+  if (!req.actor?.full_access) return res.status(403).json({ error: 'Só um responsável com acesso completo pode mudar os aparelhos' });
+  const m = /^f(\d+)$/.exec(req.params.id); if (!m) return res.status(400).json({ error: 'Aparelho inválido' });
+  const b = req.body, sets = [], vals = [];
+  if (typeof b.label === 'string' && b.label.trim()) { sets.push('label=?'); vals.push(b.label.trim().slice(0, 60)); }
+  if (['sound', 'vibrate', 'silent'].includes(b.mode)) { sets.push('mode=?'); vals.push(b.mode); }
+  if (['mine', 'all', 'off'].includes(b.t_end)) { sets.push('t_end=?'); vals.push(b.t_end); }
+  if (['mine', 'off'].includes(b.m_end)) { sets.push('m_end=?'); vals.push(b.m_end); }
+  for (const c of ['alarms', 'msgs', 'calls', 'approvals', 'warn']) if (c in b) { sets.push(`${c}=?`); vals.push(bool(b[c]) ? 1 : 0); }
+  if (!sets.length) return res.status(400).json({ error: 'Nada para mudar' });
+  const [r] = await pool.query(`UPDATE fcm_tokens SET ${sets.join(',')} WHERE id=? AND family_id=?`, [...vals, +m[1], req.fid]);
+  if (!r.affectedRows) return res.status(404).json({ error: 'Aparelho não encontrado' });
+  res.json({ ok: true });
+}));
+router.delete('/devices/:id', wrap(async (req, res) => {
+  if (!req.actor?.full_access) return res.status(403).json({ error: 'Só um responsável com acesso completo pode remover aparelhos' });
+  const m = /^f(\d+)$/.exec(req.params.id); if (!m) return res.status(400).json({ error: 'Aparelho inválido' });
+  await pool.query('DELETE FROM fcm_tokens WHERE id=? AND family_id=?', [+m[1], req.fid]);
+  res.json({ ok: true });
 }));
 router.post('/messages', wrap(async (req, res) => {
   const text = String(req.body.text || '').trim().slice(0, 300);

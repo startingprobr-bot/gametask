@@ -85,6 +85,8 @@ public class BlockService extends Service {
      */
     private void warnings() {
         long end = BlockStore.warnEnd(this), now = System.currentTimeMillis();
+        if (!BlockStore.warnOn(this) || BlockStore.mode(this).equals("silent")) { if (warnFor != -2) { h.removeCallbacksAndMessages("fine"); warnFor = -2; } return; }
+        if (warnFor == -2) warnFor = -1;
         if (end != warnFor) { // outro cronômetro (ou o mesmo estendido): recomeça a contar
             h.removeCallbacksAndMessages("fine");
             warnFor = end; said.clear(); fineScheduled = false;
@@ -93,15 +95,32 @@ public class BlockService extends Service {
         if (end <= now) return;
         long left = end - now;
         String of = BlockStore.warnTitle(this).isEmpty() ? "" : " de " + BlockStore.warnTitle(this);
-        if (!said.contains(300) && left <= 300_000) { said.add(300); Speaker.say(this, "Restam 5 minutos" + of, null); }
-        if (!said.contains(180) && left <= 180_000) { said.add(180); Speaker.say(this, "Restam 3 minutos" + of, null); }
-        if (!said.contains(60) && left <= 60_000) { said.add(60); Speaker.say(this, "Falta 1 minuto" + of, null); }
+        if (!said.contains(300) && left <= 300_000) { said.add(300); cue("Restam 5 minutos" + of); }
+        if (!said.contains(180) && left <= 180_000) { said.add(180); cue("Restam 3 minutos" + of); }
+        if (!said.contains(60) && left <= 60_000) { said.add(60); cue("Falta 1 minuto" + of); }
         if (!fineScheduled && left <= 12_000) { // reta final: marca cada aviso na hora exata
             fineScheduled = true;
             final long endF = end;
-            if (!said.contains(10)) { said.add(10); at(endF - 10_000, () -> Speaker.say(this, "Faltam apenas 10 segundos", null)); }
-            for (int n = 5; n >= 1; n--) at(endF - n * 1000L, Thump::play);
+            if (!said.contains(10)) { said.add(10); at(endF - 10_000, () -> cue("Faltam apenas 10 segundos")); }
+            for (int n = 5; n >= 1; n--) at(endF - n * 1000L, this::beat);
         }
+    }
+
+    /** voz (ou uma vibração longa, no modo "só vibrar") */
+    private void cue(String phrase) {
+        if (BlockStore.mode(this).equals("vibrate")) buzz(500); else Speaker.say(this, phrase, null);
+    }
+
+    /** o "tum" dos últimos segundos (ou uma vibração curta) */
+    private void beat() {
+        if (BlockStore.mode(this).equals("vibrate")) buzz(160); else Thump.play();
+    }
+
+    private void buzz(long ms) {
+        try {
+            android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(android.os.VibrationEffect.createOneShot(ms, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); else v.vibrate(ms);
+        } catch (Exception ignored) { }
     }
 
     private void at(long when, Runnable r) {

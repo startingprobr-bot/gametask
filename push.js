@@ -44,13 +44,14 @@ const fcm = require('./fcm');
 async function sendFcm(fid, payload, kind) {
   const tag = String(payload.tag || '');
   if (!fcm.on() || /^[at]\d/.test(tag)) return 0;
-  let [rows] = await pool.query(`SELECT id,token,msgs FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
+  let [rows] = await pool.query(`SELECT id,token,msgs,t_end,mode FROM fcm_tokens WHERE family_id=?${kind === 'approvals' ? ' AND approvals=1' : ''}`, [fid]);
   if (payload.only) rows = rows.filter(r => payload.only.f.includes(r.id));       // recado: só os aparelhos marcados
   if (payload.skip) rows = rows.filter(r => r.token !== payload.skip);            // não avisa quem fez a ação
+  if (tag.startsWith('tu')) rows = rows.filter(r => r.t_end === 'all');            // fim do tempo de tela: só os aparelhos que pediram "sempre" (quem começou toca sozinho)
   else if (tag.startsWith('msg')) rows = rows.filter(r => r.msgs);                 // sem escolha: quem aceita recados
   let ok = 0;
   await Promise.all(rows.map(async (r) => {
-    const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag, icon: payload.icon || '' });
+    const res = await fcm.send(r.token, { type: payload.alarm ? 'alarm' : 'note', title: payload.title, body: payload.body, tag, icon: payload.icon || '', mode: r.mode || 'sound' });
     if (res === 'ok') ok++;
     else if (res === 'gone') await pool.query('DELETE FROM fcm_tokens WHERE id=?', [r.id]).catch(() => {});
   }));
@@ -84,7 +85,8 @@ const toMin = (hm) => +hm.slice(0, 2) * 60 + +hm.slice(3, 5);
 async function tick() {
   const day = today(), now = toMin(nowHM()), wd = String(dow(day));
   // famílias com aparelhos inscritos
-  const [fams] = await pool.query('SELECT DISTINCT f.id,f.email,f.plan,f.paid_until,f.trial_ends,f.remind_before FROM families f JOIN push_subs s ON s.family_id=f.id');
+  // famílias com aparelhos de aviso (navegador) ou com o app Android (o servidor percebe o fim do tempo de tela mesmo sem ninguém com o app aberto)
+  const [fams] = await pool.query('SELECT DISTINCT f.id,f.email,f.plan,f.paid_until,f.trial_ends,f.remind_before FROM families f WHERE f.id IN (SELECT family_id FROM push_subs) OR f.id IN (SELECT family_id FROM fcm_tokens)');
   for (const f of fams) {
     if (!access(f).plus) continue;
     const [kids] = await pool.query('SELECT id,name FROM kids WHERE family_id=? AND active=1', [f.id]);

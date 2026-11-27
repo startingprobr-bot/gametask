@@ -37,6 +37,13 @@ public class BlockStore {
 
     static String warnTitle(Context c) { return prefs(c).getString("warnTitle", ""); }
 
+    /** como este aparelho se comporta: sound (som e vibração) | vibrate (só vibra) | silent (silencioso); e se fala os avisos do tempo acabando */
+    static void setPrefs(Context c, String mode, boolean warn) { prefs(c).edit().putString("mode", mode).putBoolean("warn", warn).apply(); }
+
+    static String mode(Context c) { return prefs(c).getString("mode", "sound"); }
+
+    static boolean warnOn(Context c) { return prefs(c).getBoolean("warn", true); }
+
     /** o vigia precisa rodar enquanto o bloqueio está ligado OU há um cronômetro para avisar */
     static boolean needService(Context c) { return enabled(c) || warnEnd(c) > System.currentTimeMillis(); }
 

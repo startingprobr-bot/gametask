@@ -26,6 +26,15 @@ public class MainActivity extends BridgeActivity {
             return insets;
         });
         WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView()).setAppearanceLightStatusBars(false);
+
+        // Voltar: pergunta ao site se há uma tela para voltar (fecha janela, volta ao jogador...). Só na tela inicial sai do app.
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
+                getBridge().getWebView().evaluateJavascript("(function(){try{return window.__gtBack?window.__gtBack():false}catch(e){return false}})()", value -> {
+                    if (!"true".equals(value)) moveTaskToBack(true); // sem tela para voltar: guarda o app (não fecha)
+                });
+            }
+        });
     }
 
     @Override

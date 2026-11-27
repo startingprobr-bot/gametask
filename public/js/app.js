@@ -331,13 +331,29 @@ const GtAlarm = NATIVE ? window.Capacitor?.Plugins?.GtAlarm : null;
 let alarmSig = '', alarmWait = 0;
 // nome deste aparelho (ele escolhe em Ajustes); sem nome, "Tablet" ou "Celular" pelo tamanho da tela
 const devLabel = () => store.get('gt-dev-label') || (Math.min(screen.width, screen.height) >= 600 ? 'Tablet' : 'Celular');
-// registra o celular no Firebase uma vez por abertura (e quando muda alguma opção dele)
+// Escolhas deste aparelho (modo, quem toca o quê). Ficam na conta da família: os pais mudam de qualquer aparelho em Ajustes > Sons e alarmes.
+let devCfg = (() => { try { return JSON.parse(store.get('gt-dev-cfg') || 'null'); } catch { return null; } })() || { mode: 'sound', alarms: true, msgs: true, calls: true, approvals: true, t_end: 'mine', m_end: 'mine', warn: true };
+async function loadDevCfg() {
+  if (!GtAlarm) return;
+  try {
+    const c = await api('GET', '/device/settings'); devCfg = c; store.set('gt-dev-cfg', JSON.stringify(c));
+    GtAlarm.setPrefs?.({ mode: c.mode, warn: c.warn }).catch(() => {}); alarmSig = '';
+  } catch {}
+}
+// timers que ESTE aparelho começou (o alarme do fim toca só aqui, a menos que os pais peçam "sempre")
+const mineGet = () => { try { const m = JSON.parse(store.get('gt-mine') || '{}'), n = Date.now(); for (const k in m) if (m[k] < n - 6 * 3600e3) delete m[k]; return m; } catch { return {}; } };
+const markMine = (key) => { const m = mineGet(); m[key] = Date.now(); store.set('gt-mine', JSON.stringify(m)); alarmSig = ''; syncAlarmsSoon(); };
+
+// registra o celular no Firebase uma vez por abertura e pega as escolhas dele
 let fcmDone = '';
 async function registerFcm() {
   if (!GtAlarm?.fcmToken || !ME.family) return null;
-  const approvals = store.get('gt-fcm-appr') !== '0', msgs = store.get('gt-dev-msgs') !== '0', alarms = store.get('gt-dev-alarms') !== '0', calls = store.get('gt-dev-calls') !== '0', label = devLabel();
-  try { const { token } = await GtAlarm.fcmToken(); fcmTok = token; const k = [token, approvals, msgs, alarms, calls, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, calls, label }); fcmDone = k; return r.server; }
-  catch { return null; }
+  const label = devLabel();
+  try {
+    const { token } = await GtAlarm.fcmToken(); fcmTok = token;
+    const k = token + '|' + label; if (k === fcmDone) return true;
+    const r = await api('POST', '/fcm', { token, label }); fcmDone = k; await loadDevCfg(); return r.server;
+  } catch { return null; }
 }
 // Som do fim do tempo escolhido pela família: baixa e guarda no aparelho quando muda
 let soundTry = 0;
@@ -358,8 +374,13 @@ async function syncNativeAlarms() {
   if (!GtAlarm || !ME.family || !ME.access?.active) return;
   registerFcm(); syncEndSound();
   try {
-    const { items } = store.get('gt-dev-alarms') === '0' ? { items: [] } : await api('GET', '/alarm-plan');
-    for (const [k, c] of clocks) items.push({ id: 'c' + k, dk: c.kind ? `tt${c.kid}-${c.id}` : 'tu' + c.kid, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
+    const { items } = devCfg.alarms === false ? { items: [] } : await api('GET', '/alarm-plan');
+    const mine = mineGet();
+    for (const [k, c] of clocks) {
+      const rule = c.kind ? devCfg.m_end : devCfg.t_end;
+      if (rule === 'off' || (rule === 'mine' && !mine[k])) continue; // não começou aqui: quem toca é o aparelho de quem começou
+      items.push({ id: 'c' + k, dk: c.kind ? `tt${c.kid}-${c.id}` : 'tu' + c.kid, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
+    }
     const sig = JSON.stringify(items.map(x => [x.id, x.at, x.title]));
     if (sig === alarmSig) return;
     await GtAlarm.sync({ items }); alarmSig = sig;
@@ -368,39 +389,96 @@ async function syncNativeAlarms() {
 const syncAlarmsSoon = () => { clearTimeout(alarmWait); alarmWait = setTimeout(syncNativeAlarms, 1500); };
 if (GtAlarm) { setInterval(syncNativeAlarms, 5 * 60000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncNativeAlarms(); }); }
 
-// Ajustes > Alarme deste celular: o que falta liberar e um botão de teste
+// Ajustes > Sons e alarmes > Permissões deste aparelho: o que falta liberar no Android e um botão de teste
 async function nativeAlarmBox(box) {
   const st = await GtAlarm.check();
   const ok = st.notifications && st.exact && st.fullScreen && st.battery;
   const row = (good, text, btn) => `<div class="nat-row ${good ? 'ok' : ''}">${im(good ? 'check' : 'cross')}<span class="grow">${text}</span>${good ? '' : btn}</div>`;
-  box.dataset.sum = ok ? `Pronto · ${st.scheduled} alarme(s) marcado(s)` : 'Falta liberar no celular';
-  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Alarme deste celular</h2></div>'}
-    <p class="lead">Os avisos e as missões com horário tocam como despertador, mesmo no silencioso e sem internet.</p>
+  box.dataset.sum = ok ? 'Tudo liberado' : 'Falta liberar no Android';
+  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Permissões deste aparelho</h2></div>'}
+    <p class="lead">Para os alarmes tocarem na hora certa, mesmo com o app fechado e no silencioso.</p>
     ${row(st.notifications, 'Mostrar avisos', '<button class="btn sm" data-nat="notif">Permitir</button>')}
     ${row(st.exact, 'Tocar na hora exata', '<button class="btn sm" data-nat="exact">Liberar</button>')}
     ${row(st.fullScreen, 'Abrir por cima da tela bloqueada', '<button class="btn sm" data-nat="fullScreen">Liberar</button>')}
     ${row(st.battery, 'Funcionar com o app fechado (bateria sem restrição)', '<button class="btn sm" data-nat="battery">Liberar</button>')}
     ${st.xiaomi ? `<div class="nat-row">${im('phone')}<span class="grow"><b>Xiaomi:</b> ligue o GameTask em <b>Início automático</b>, senão o alarme só toca com o app aberto.</span><button class="btn sm" data-nat="autostart">Abrir</button></div>` : ''}
-    <div class="field nat-name"><label for="natName">Nome deste aparelho</label><input id="natName" maxlength="40" value="${esc(devLabel())}" placeholder="Tablet das crianças"><p class="hint">Aparece na hora de escolher onde o recado toca.</p></div>
-    <label class="check"><input type="checkbox" id="natAlarms" ${store.get('gt-dev-alarms') !== '0' ? 'checked' : ''}>Tocar os alarmes de horário (avisos e missões)</label>
-    <label class="check"><input type="checkbox" id="natMsgs" ${store.get('gt-dev-msgs') !== '0' ? 'checked' : ''}>Tocar os recados como alarme</label>
-    <label class="check"><input type="checkbox" id="natCalls" ${store.get('gt-dev-calls') !== '0' ? 'checked' : ''}>Receber ligações da família neste aparelho</label>
-    <label class="check"><input type="checkbox" id="natAppr" ${store.get('gt-fcm-appr') !== '0' ? 'checked' : ''}>Avisar aqui quando uma criança concluir uma missão</label>
-    <p class="hint">Em reunião? Desligue os alarmes e os recados aqui e use o app normalmente.</p>
     <div class="actions"><button class="btn green sm" id="natTest">Testar alarme (toca em 10 s)</button><button class="btn ghost sm" id="natWiz">Passo a passo</button></div>
-    <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias. O som sai no volume de alarme do celular.</p>`;
+    <p class="hint">${st.scheduled} alarme(s) marcado(s) para os próximos 7 dias.</p>`;
   $$('[data-nat]', box).forEach(b => b.onclick = guard(async () => {
     if (b.dataset.nat === 'notif') await GtAlarm.askNotifications(); else await GtAlarm.openSettings({ what: b.dataset.nat });
     setTimeout(() => nativeAlarmBox(box).catch(() => {}), 800);
   }));
-  $('#natAppr', box).onchange = (e) => { store.set('gt-fcm-appr', e.target.checked ? '1' : '0'); registerFcm(); };
-  $('#natCalls', box).onchange = (e) => { store.set('gt-dev-calls', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Este aparelho recebe ligações' : 'Este aparelho não recebe ligações'); };
-  $('#natMsgs', box).onchange = (e) => { store.set('gt-dev-msgs', e.target.checked ? '1' : '0'); registerFcm(); toast(e.target.checked ? 'Recados vão tocar aqui' : 'Recados não tocam mais aqui'); };
-  $('#natAlarms', box).onchange = (e) => { store.set('gt-dev-alarms', e.target.checked ? '1' : '0'); alarmSig = ''; registerFcm(); syncNativeAlarms(); toast(e.target.checked ? 'Alarmes de horário ligados aqui' : 'Alarmes de horário desligados aqui'); };
-  $('#natName', box).onchange = (e) => { store.set('gt-dev-label', e.target.value.trim().slice(0, 40)); registerFcm(); toast('Nome salvo'); };
   $('#natWiz', box).onclick = () => nativeWizard(true);
   $('#natTest', box).onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
   addEventListener('focus', () => nativeAlarmBox(box).catch(() => {}), { once: true });
+}
+
+// Ajustes > Sons e alarmes > Aparelhos: cada aparelho da família (app e navegador) com tudo que se escolhe sobre ele
+const DV_MODES = [['sound', 'Som e vibração'], ['vibrate', 'Só vibrar'], ['silent', 'Silencioso']];
+const DV_TEND = [['mine', 'Só se a criança começar neste aparelho'], ['all', 'Sempre, de qualquer criança'], ['off', 'Nunca']];
+const DV_MEND = [['mine', 'Só se a criança começar neste aparelho'], ['off', 'Nunca']];
+async function devicesBox(box, refresh) {
+  if (GtAlarm && !fcmTok) { try { fcmTok = (await GtAlarm.fcmToken()).token; } catch {} } // para saber qual é "este aparelho"
+  const list = (await api('GET', '/admin/devices')).sort((a, b) => b.me - a.me || a.id.localeCompare(b.id));
+  box.dataset.sum = list.length ? `${list.length} ${list.length === 1 ? 'aparelho' : 'aparelhos'}` : 'Nenhum ainda';
+  const label = (v, opts) => opts.find(o => o[0] === v)?.[1] || v;
+  const sw = (k, text, on, hint) => `<label class="check"><input type="checkbox" data-k="${k}" ${on ? 'checked' : ''}>${text}</label>${hint ? `<p class="hint">${hint}</p>` : ''}`;
+  const sel = (k, opts, cur) => `<select data-k="${k}">${opts.map(([v, l]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const card = (d) => {
+    const web = d.kind === 'web';
+    const sub = web ? `Navegador · ${[d.reminders && 'lembretes', d.approvals && 'missão concluída'].filter(Boolean).join(' e ') || 'sem avisos'}`
+      : `${label(d.mode, DV_MODES)} · fim do tempo: ${d.t_end === 'all' ? 'sempre' : d.t_end === 'off' ? 'nunca' : 'só onde começou'}`;
+    return `<div class="dv" data-id="${d.id}"><button type="button" class="dv-h" aria-expanded="false">${im(/tablet/i.test(d.label) ? 'tablet' : 'phone', '', 'phone')}
+        <span class="grow"><b>${esc(d.label)}</b>${d.me ? ' <span class="tag ok">este aparelho</span>' : ''}<small>${esc(sub)}</small></span><i class="dv-chev"></i></button>
+      <div class="dv-b" hidden>
+        <div class="field"><label>Nome</label><input data-k="label" value="${esc(d.label)}" maxlength="${web ? 60 : 40}"></div>
+        ${web ? `${sw('reminders', 'Lembretes das crianças (missões com horário e avisos)', d.reminders)}${sw('approvals', 'Missão concluída (pedido de aprovação)', d.approvals)}`
+        : `<div class="field"><span class="lab">Como este aparelho avisa</span><div class="seg3" role="radiogroup">${DV_MODES.map(([v, l]) => `<button type="button" role="radio" aria-checked="${d.mode === v}" data-seg="mode" data-v="${v}">${l}</button>`).join('')}</div>
+          <p class="hint">Vale para todos os alarmes e recados deste aparelho. Ligações sempre tocam.</p></div>
+        <div class="field"><label>Quando acabar o <b>tempo de tela</b> de uma criança, toca</label>${sel('t_end', DV_TEND, d.t_end)}
+          <p class="hint">"Só se começar neste aparelho": toca onde a criança deu o play. Para ser avisado também, marque <b>Sempre</b> no aparelho de um responsável.</p></div>
+        <div class="field"><label>Quando acabar o <b>cronômetro de uma missão</b>, toca</label>${sel('m_end', DV_MEND, d.m_end)}</div>
+        ${sw('alarms', 'Lembretes de missões com horário e avisos programados', d.alarms)}
+        ${sw('warn', 'Avisos falados: restam 5, 3 e 1 minuto, 10 segundos e as batidas', d.warn)}
+        ${sw('msgs', 'Recados dos pais', d.msgs)}
+        ${sw('calls', 'Ligações da família', d.calls)}
+        ${sw('approvals', 'Aviso de missão concluída (pedido de aprovação)', d.approvals)}`}
+        <div class="actions">${d.me && !web && NATIVE ? '<button type="button" class="btn green sm" data-test>Testar alarme</button>' : ''}${d.me ? '' : '<button type="button" class="btn red sm" data-rm>Remover</button>'}</div>
+      </div></div>`;
+  };
+  box.innerHTML = `${box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Aparelhos e alarmes</h2></div>'}
+    <p class="lead">Escolha, para cada aparelho, como ele avisa e o que toca nele. Você pode ajustar o tablet das crianças pelo seu celular.</p>
+    ${list.length ? `<div class="dv-list">${list.map(card).join('')}</div>` : zero('phone', 'Os aparelhos aparecem aqui quando abrirem o app Android ou ligarem os avisos.')}`;
+  $$('.dv', box).forEach(el => {
+    const d = list.find(x => x.id === el.dataset.id), web = d.kind === 'web';
+    $('.dv-h', el).onclick = () => { const b = $('.dv-b', el), o = b.hidden; b.hidden = !o; $('.dv-h', el).setAttribute('aria-expanded', String(o)); el.classList.toggle('open', o); sfx.tap(); };
+    const save = guard(async (patch) => {
+      Object.assign(d, patch);
+      if (web) await api('PUT', '/admin/push/' + d.id.slice(1), { label: d.label, reminders: d.reminders, approvals: d.approvals });
+      else await api('PUT', '/admin/devices/' + d.id, patch);
+      toast('Salvo'); if (d.me) { await loadDevCfg(); syncNativeAlarms(); }
+      $('.dv-h .grow b', el).textContent = d.label; $('.dv-h small', el).textContent = web ? `Navegador · ${[d.reminders && 'lembretes', d.approvals && 'missão concluída'].filter(Boolean).join(' e ') || 'sem avisos'}` : `${label(d.mode, DV_MODES)} · fim do tempo: ${d.t_end === 'all' ? 'sempre' : d.t_end === 'off' ? 'nunca' : 'só onde começou'}`;
+      if (d.me && patch.label) store.set('gt-dev-label', patch.label);
+    });
+    $$('[data-k]', el).forEach(i => i.onchange = () => save({ [i.dataset.k]: i.type === 'checkbox' ? i.checked : i.value.trim() }));
+    $$('[data-seg]', el).forEach(b => b.onclick = () => { $$('[data-seg]', el).forEach(x => x.setAttribute('aria-checked', String(x === b))); save({ [b.dataset.seg]: b.dataset.v }); });
+    const t = $('[data-test]', el); if (t) t.onclick = guard(async () => { await GtAlarm.test({ seconds: 8 }); toast('O alarme toca em 8 segundos.'); });
+    const rm = $('[data-rm]', el); if (rm) rm.onclick = () => sheet(`Remover "${d.label}"?`, '<p class="lead" style="margin-top:6px">Esse aparelho deixa de receber alarmes e recados. Se ele abrir o app de novo, aparece aqui outra vez.</p>',
+      async () => { await api('DELETE', web ? '/admin/push/' + d.id.slice(1) : '/admin/devices/' + d.id); toast('Aparelho removido'); devicesBox(box, refresh); }, { saveLabel: 'Remover', danger: true });
+  });
+}
+
+// Ajustes > Sons e alarmes: tudo sobre som e aviso num lugar só
+async function soundsGroup(box, refresh) {
+  const sg = $('#sg', box);
+  sg.innerHTML = `<section class="box" id="sgDev"><div class="box-h"><h2 class="d">Aparelhos e alarmes</h2></div></section>
+    ${NATIVE && GtAlarm ? '<section class="box" id="sgPerm"><div class="box-h"><h2 class="d">Permissões deste aparelho</h2></div></section>' : ''}
+    ${full() ? '<section class="box" id="sgSnd"><div class="box-h"><h2 class="d">Som do fim do tempo</h2></div></section>' : ''}
+    <div id="sgAl"></div>`;
+  await Promise.all([devicesBox($('#sgDev', sg), refresh), NATIVE && GtAlarm ? nativeAlarmBox($('#sgPerm', sg)) : null,
+    full() ? soundBox($('#sgSnd', sg)) : null, adminAlarms($('#sgAl', sg), refresh)].filter(Boolean).map(x => x.catch?.(() => {}) ?? x));
+  box.dataset.sum = 'Aparelhos, permissões, som do fim do tempo e avisos programados';
+  accordion(sg);
 }
 
 // Assistente "Preparar este aparelho": abre sozinho no app Android enquanto faltar alguma permissão do alarme.
@@ -444,7 +522,7 @@ async function nativeWizard(force) {
     }));
     const t = $('#wzTest', bg); if (t) t.onclick = guard(async () => { await GtAlarm.test({ seconds: 10 }); toast('O alarme toca em 10 segundos. Pode bloquear a tela.'); });
     const l = $('#wzLater', bg); if (l) l.onclick = () => { store.set('gt-natwiz-later', String(Date.now() + 24 * 3600e3)); close(); };
-    const o = $('#wzOk', bg); if (o) o.onclick = () => { sfx.win(); store.set('gt-dev-label', $('#wzName', bg).value.trim().slice(0, 40) || devLabel()); close(); toast('Aparelho pronto para os alarmes'); };
+    const o = $('#wzOk', bg); if (o) o.onclick = () => { sfx.win(); const nm = $('#wzName', bg).value.trim().slice(0, 40) || devLabel(); store.set('gt-dev-label', nm); api('PUT', '/device/label', { label: nm }).catch(() => {}); close(); toast('Aparelho pronto para os alarmes'); };
   };
   // ao voltar das telas do Android, confere de novo
   const refresh = async () => { if (document.visibilityState !== 'visible' || !bg.isConnected) return; try { st = await GtAlarm.check(); } catch {} paint(); };
@@ -713,6 +791,23 @@ async function checkCalls() {
 }
 setInterval(checkCalls, 1500);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkCalls, 400); });
+
+// Botão voltar do Android: volta uma tela (fecha a janela aberta, volta ao jogador...). O app pergunta aqui; sem tela para voltar, ele só guarda o app.
+window.__gtBack = () => {
+  const click = (sel) => { const e = $(sel); if (e) e.click(); return true; };
+  if ($('.call-bg,.alarm-bg,.msg-bg,.wheel-bg,.burst,.loader:not(.soft)')) return true; // ligação, alarme, recado e roleta não fecham com o voltar
+  if ($('.kpin-bg')) return click('.kpin-bg [data-c]');
+  if ($('.full-panel')) return click('.full-panel [data-close]');
+  if ($('.timer-bg')) return click('.timer-bg .timer-x');
+  if ($('.wiz-bg')) return click('#wzLater') || true;
+  const sh = $('.sheet-bg'); if (sh) { const x = $('[data-x]', sh); if (x) x.click(); else sh.remove(); return true; }
+  const [, a, b] = location.hash.split('/');
+  if (a === 'kid' && b) { location.hash = '#/'; return true; }
+  if (a === 'admin') { if (tab !== 'pending') { tab = 'pending'; withLoader(viewAdmin).catch(() => {}); } else location.hash = '#/'; return true; }
+  if (a === 'dono') { location.hash = '#/admin'; return true; }
+  if (a === 'assinar') { location.hash = '#/'; return true; }
+  return false;
+};
 
 addEventListener('hashchange', () => setTimeout(checkMessages, 800));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkMessages(); });
@@ -1011,6 +1106,7 @@ async function viewKid(id) {
         const r = run ? await api('POST', `/kids/${id}/timer/${tid}`, { action: 'pause' })
           : await withKidPin(latest.kid, `Para começar ${x.title}`, (pin) => api('POST', `/kids/${id}/timer/${tid}`, { action: 'start', pin }));
         if (!r) return;
+        if (!run) markMine(key);
         latest.time = r.time; syncClocks(latest.kid, r.time); bg.paint();
       });
       const dn = $('[data-donate]', bg); if (dn) dn.onclick = guard(async () => { sfx.tap(); await donateSheet(x); });
@@ -1127,6 +1223,7 @@ async function viewKid(id) {
       b.disabled = true; sfx.tap();
       const tid = +b.dataset.tt, on = clocks.has(`${id}:t${tid}`);
       await api('POST', `/kids/${id}/task-timer/${tid}`, { action: on ? 'pause' : 'start' });
+      if (!on) markMine(`${id}:t${tid}`);
       await load();
     }));
     $$('[data-undo]').forEach(b => b.onclick = guard(async () => { sfx.tap(); await api('DELETE', `/kids/${id}/complete/${b.dataset.undo}`); await load(); }));
@@ -1808,11 +1905,10 @@ async function adminSettings(pane, refresh) {
       <div class="disg" role="radiogroup" aria-label="Disfarce do app">${DISGUISES.map(([k, n], i) => `<label><input type="radio" name="dg" value="${k}" ${i === 0 ? 'checked' : ''}><img src="/icons/d/${k}-192.png" alt=""><span>${n}</span></label>`).join('')}</div>
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
-    ${full() ? '<section class="box" id="soundBox" data-sum="Som padrão"><div class="box-h"><h2 class="d">Som do fim do tempo</h2></div></section>' : ''}
-    ${NATIVE && GtAlarm ? '<section class="box" id="natBox" data-sum="Alarme no silencioso"><div class="box-h"><h2 class="d">Alarme deste celular</h2></div></section>' : ''}
+    <section class="box" id="sgroup" data-sum="Carregando…"><div class="box-h"><h2 class="d">Sons e alarmes</h2></div><div id="sg"></div></section>
     ${NATIVE && GtAlarm?.blockCheck ? '<section class="box" id="blockBox" data-sum="Desligado"><div class="box-h"><h2 class="d">Bloqueio de apps</h2></div></section>' : ''}
     ${!NATIVE ? '<section class="box" data-sum="Alarmes no silencioso e recados com o app fechado"><div class="box-h"><h2 class="d">App para Android</h2></div><p class="lead">No Android, o app toca os alarmes e os recados como despertador, mesmo no silencioso. Versão de teste.</p><div class="actions"><a class="btn green sm" href="/android" target="_blank" rel="noopener">Baixar o app Android</a></div></section>' : ''}
-    <div id="alarms"></div>
+
     ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
     <section class="box" data-sum="Desconectar ou voltar a pedir o PIN"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
   const fg = $('#forget', pane); if (fg) fg.onclick = guard(async () => { await api('DELETE', '/auth/parent/device'); store.set('gt-pdev', ''); toast('Pronto: o app vai pedir o PIN ao abrir'); await route(); });
@@ -1871,9 +1967,7 @@ async function adminSettings(pane, refresh) {
   $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Este aparelho vai pedir o e-mail e a senha de novo.</p>',
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
   if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
-  await adminAlarms($('#alarms'), refresh);
-  if ($('#soundBox', pane)) await soundBox($('#soundBox', pane)).catch(() => {});
-  if ($('#natBox', pane)) await nativeAlarmBox($('#natBox', pane)).catch(() => {});
+  await soundsGroup($('#sgroup', pane), refresh).catch(() => {});
   if ($('#blockBox', pane)) await blockBox($('#blockBox', pane)).catch(() => {});
   accordion(pane);
 }
@@ -1910,10 +2004,10 @@ async function soundBox(box) {
 }
 
 // Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
-const ACC_IC = { 'Som do fim do tempo': 'bell', 'Bloqueio de apps': 'lock', 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+const ACC_IC = { 'Sons e alarmes': 'bell', 'Aparelhos e alarmes': 'phone', 'Permissões deste aparelho': 'check', 'Som do fim do tempo': 'bell', 'Bloqueio de apps': 'lock', 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
 function accordion(pane) {
   const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
-  $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {
+  $$(':scope > .box, :scope > #sgAl > .box', pane).forEach(el => {
     const h = $('.box-h h2', el); if (!h) return;
     const title = h.textContent.trim(), d = document.createElement('details'), sum = document.createElement('summary');
     d.className = 'box acc';
@@ -1923,7 +2017,7 @@ function accordion(pane) {
     el.classList.remove('box'); el.classList.add('acc-body');
     el.before(d); d.append(sum, el);
     d.open = open.has(title);
-    d.addEventListener('toggle', () => { if (d.open) { open.add(title); sfx.tap(); } else open.delete(title); store.set('gt-acc', [...open].join('|')); });
+    d.addEventListener('toggle', () => { const o = new Set((store.get('gt-acc') || '').split('|').filter(Boolean)); if (d.open) { o.add(title); sfx.tap(); } else o.delete(title); store.set('gt-acc', [...o].join('|')); });
   });
 }
 
@@ -2330,7 +2424,7 @@ async function adminAlarms(pane, refresh) {
        <label class="check"><input type="checkbox" id="da" ${guessLabel() === 'Celular' ? 'checked' : ''}>Pedidos de aprovação (quando uma criança conclui uma missão)</label>
        <div class="actions"><button class="btn green" id="on">${im('phone')}Ligar avisos neste aparelho</button></div>`;
 
-  // no app Android quem avisa é o alarme do próprio celular (bloco "Alarme deste celular"); os avisos do navegador não valem lá
+  // no app Android quem avisa é o alarme do próprio aparelho; os avisos do navegador não valem lá
   pane.innerHTML = `${NATIVE ? '' : `<section class="box" data-sum="${!p.plus ? 'No plano anual' : mine ? 'Ligados' : 'Desligados'}"><div class="box-h"><h2 class="d">Avisos neste aparelho</h2></div>${device}</section>`}
     <section class="box" data-sum="${alarms.length ? `${alarms.length} ${alarms.length === 1 ? 'aviso' : 'avisos'}` : 'Nenhum ainda'}"><div class="box-h"><h2 class="d">Avisos programados</h2>${p.plus && full() ? '<button class="btn green sm" id="new">Novo aviso</button>' : ''}</div>
       <p class="lead">Alarmes que tocam nos aparelhos da família, como "Hora de ir para a escola" de segunda a sexta.</p>
@@ -2343,10 +2437,7 @@ async function adminAlarms(pane, refresh) {
       <p class="lead">Se um aviso não tocou, veja aqui se ele saiu e em quantos aparelhos chegou.</p>
       ${p.log?.length ? `<div class="list">${p.log.map(l => `<div class="item"><div class="ic">${im(l.fail || !l.ok ? 'cross' : 'check')}</div><div class="grow"><div class="t">${esc(l.title)}</div>
         <div class="s">${new Date(l.created_at.replace(' ', 'T') + (l.created_at.endsWith('Z') ? '' : 'Z')).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · chegou em ${l.ok} aparelho(s)${l.fail ? ` · falhou em ${l.fail}` : ''}${l.err ? ` · ${esc(l.err)}` : ''}</div></div></div>`).join('')}</div>`
-        : zero('clock', 'Nenhum aviso enviado ainda.')}</section>` : ''}
-    ${p.devices.length ? `<section class="box"><div class="box-h"><h2 class="d">Aparelhos com avisos</h2></div><div class="list">${p.devices.map(d => `<div class="item"><div class="ic">${im(/celular/i.test(d.label) ? 'phone' : /computador/i.test(d.label) ? 'laptop' : 'tv')}</div>
-      <div class="grow"><div class="t">${esc(d.label)}${mine && mine.id === d.id ? ' <span class="tag ok">este</span>' : ''}</div><div class="s">${[d.reminders && 'Lembretes', d.approvals && 'Aprovações'].filter(Boolean).join(' · ') || 'Nada marcado'} · desde ${dmy(d.created_at)}</div></div>
-      <div class="btns"><button class="btn ghost sm" data-dev="${d.id}">Ajustar</button></div></div>`).join('')}</div></section>` : ''}`;
+        : zero('clock', 'Nenhum aviso enviado ainda.')}</section>` : ''}`;
 
   const on = $('#on'); if (on) on.onclick = guard(async () => {
     on.disabled = true;

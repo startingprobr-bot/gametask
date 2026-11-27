@@ -34,6 +34,7 @@ public class GtMessagingService extends FirebaseMessagingService {
         if ("alarm".equals(d.get("type")) || call) {
             Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body).putExtra("icon", d.get("icon")).putExtra("dk", tag);
             if (call) s.putExtra("call", d.get("call")); // ligação da família: toca com Atender e Recusar
+            s.putExtra("mode", d.get("mode")); // modo deste aparelho, como a conta sabe
             try {
                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(s); else startService(s);
                 return;

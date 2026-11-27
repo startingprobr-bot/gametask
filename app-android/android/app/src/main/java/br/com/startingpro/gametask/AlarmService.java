@@ -34,6 +34,7 @@ public class AlarmService extends Service {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String speech = "";
     private boolean endAlarm;
+    private String mode = "sound";
     private boolean on;
 
     @Override
@@ -46,6 +47,8 @@ public class AlarmService extends Service {
         String call = intent != null ? intent.getStringExtra("call") : null;
         String dk = intent != null ? intent.getStringExtra("dk") : null;
         endAlarm = dk != null && dk.startsWith("tu"); // fim do tempo de tela: usa o som escolhido pela família
+        String mx = intent != null ? intent.getStringExtra("mode") : null;
+        mode = call != null ? "sound" : (mx != null && !mx.isEmpty() ? mx : BlockStore.mode(this)); // ligação sempre toca
         Intent full = new Intent(this, call != null ? CallActivity.class : AlarmActivity.class).putExtra("call", call).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent fullPi = PendingIntent.getActivity(this, 2, full, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -66,10 +69,10 @@ public class AlarmService extends Service {
         speech = call != null ? title : body.isEmpty() ? title : title + ". " + body;
         on = true;
         handler.removeCallbacksAndMessages(null);
-        louder();
-        vibrate();
-        cycle();
-        handler.postDelayed(this::stopSelf, call != null ? 45 * 1000 : 3 * 60 * 1000); // ligação toca 45 s
+        if (mode.equals("sound")) louder();
+        if (!mode.equals("silent")) vibrate();
+        if (mode.equals("sound")) cycle();
+        handler.postDelayed(this::stopSelf, call != null ? 45 * 1000 : mode.equals("sound") ? 3 * 60 * 1000 : mode.equals("vibrate") ? 40 * 1000 : 90 * 1000); // ligação toca 45 s
         return START_NOT_STICKY;
     }
 

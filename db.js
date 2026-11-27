@@ -178,7 +178,11 @@ const COLUMNS = [
   ['fcm_tokens', 'label', 'VARCHAR(60) NULL'],          // nome do aparelho (Tablet das crianças, Celular da Ana)
   ['fcm_tokens', 'msgs', 'TINYINT NOT NULL DEFAULT 1'],  // recados tocam neste aparelho
   ['fcm_tokens', 'alarms', 'TINYINT NOT NULL DEFAULT 1'],
-  ['fcm_tokens', 'calls', 'TINYINT NOT NULL DEFAULT 1'],  // recebe ligações da família // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
+  ['fcm_tokens', 'calls', 'TINYINT NOT NULL DEFAULT 1'],  // recebe ligações da família
+  ['fcm_tokens', 'mode', "VARCHAR(8) NOT NULL DEFAULT 'sound'"],   // sound = som e vibração | vibrate = só vibra | silent = silencioso
+  ['fcm_tokens', 't_end', "VARCHAR(5) NOT NULL DEFAULT 'mine'"],   // fim do tempo de tela: mine = só se começou neste aparelho | all = sempre | off
+  ['fcm_tokens', 'm_end', "VARCHAR(5) NOT NULL DEFAULT 'mine'"],   // fim do cronômetro de missão: mine | off
+  ['fcm_tokens', 'warn', 'TINYINT NOT NULL DEFAULT 1'],            // avisos falados de que o tempo está acabando // alarmes de horário tocam neste aparelho          // recado para vários: um registro só ("Todos" ou "Eva e Bernardo")
   ['leads', 'opt_out_at', 'TIMESTAMP NULL'],             // respondeu SAIR              // cupom de desconto usado neste pagamento           // tarefa com cronômetro (ex.: ler 45 min); 0 = sem                        // recompensa só de um filho (NULL = todos)            // redefinição de senha de um responsável convidado   // aprovação automática passou da família para cada filho
 ];
 // Sem teste grátis: quem assina tem garantia de devolução do dinheiro (dias configurados no painel do dono)

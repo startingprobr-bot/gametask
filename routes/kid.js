@@ -320,11 +320,25 @@ router.post('/kids/:id/messages/:mid', async (req, res) => {
 router.post('/fcm', async (req, res) => {
   const token = String(req.body.token || '').trim();
   if (!/^[\w:.\-]{20,255}$/.test(token)) return res.status(400).json({ error: 'Token inválido' });
-  const label = String(req.body.label || '').trim().slice(0, 60) || null, off = (v) => v === false ? 0 : 1;
-  await pool.query(`INSERT INTO fcm_tokens (family_id,token,approvals,label,msgs,alarms,calls) VALUES (?,?,?,?,?,?,?)
-    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id),approvals=VALUES(approvals),label=VALUES(label),msgs=VALUES(msgs),alarms=VALUES(alarms),calls=VALUES(calls)`,
-    [req.fid, token, off(req.body.approvals), label, off(req.body.msgs), off(req.body.alarms), off(req.body.calls)]);
+  const label = String(req.body.label || '').trim().slice(0, 60) || null;
+  // aparelho novo: tablet começa sem o aviso de missão concluída (é o das crianças); depois os pais ajustam em Ajustes > Sons e alarmes
+  await pool.query(`INSERT INTO fcm_tokens (family_id,token,approvals,label) VALUES (?,?,?,?)
+    ON DUPLICATE KEY UPDATE family_id=VALUES(family_id), label=COALESCE(NULLIF(label,''), VALUES(label))`,
+    [req.fid, token, /tablet/i.test(label || '') ? 0 : 1, label]);
   res.json({ ok: true, server: require('../fcm').on() });
+});
+// O próprio aparelho muda o nome dele (assistente de primeira vez)
+router.put('/device/label', async (req, res) => {
+  const label = String(req.body.label || '').trim().slice(0, 60);
+  if (!label) return res.status(400).json({ error: 'Escreva um nome' });
+  const [r] = await pool.query('UPDATE fcm_tokens SET label=? WHERE token=? AND family_id=?', [label, req.get('x-gt-dev') || '', req.fid]);
+  res.json({ ok: !!r.affectedRows });
+});
+// As escolhas deste aparelho (feitas pelos pais): o app aplica ao abrir
+router.get('/device/settings', async (req, res) => {
+  const [[d]] = await pool.query('SELECT id,label,mode,alarms,msgs,calls,approvals,t_end,m_end,warn FROM fcm_tokens WHERE token=? AND family_id=?', [req.get('x-gt-dev') || '', req.fid]);
+  if (!d) return res.status(404).json({ error: 'Aparelho não registrado' });
+  res.json({ ...d, alarms: !!d.alarms, msgs: !!d.msgs, calls: !!d.calls, approvals: !!d.approvals, warn: !!d.warn });
 });
 // Alarmes dos próximos 7 dias para o app Android (plano anual, como os avisos no celular)
 router.get('/alarm-plan', async (req, res) => {

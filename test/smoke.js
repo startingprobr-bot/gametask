@@ -436,7 +436,23 @@ const step = (m) => console.log('✔', m);
     const fcmR = await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: false }); assert.equal(fcmR.server, false);
     await ok('POST', '/api/fcm', { token: 'tokenDeTeste_' + 'x'.repeat(40), approvals: true }); // mesmo celular: atualiza, não duplica
     await ok('POST', '/api/fcm', { token: 'tokenTablet_' + 'y'.repeat(40), label: 'Tablet das crianças', msgs: true, alarms: true });
-    await ok('POST', '/api/fcm', { token: 'tokenAna_' + 'z'.repeat(40), label: 'Celular da Ana', msgs: false, alarms: false });
+    await ok('POST', '/api/fcm', { token: 'tokenAna_' + 'z'.repeat(40), label: 'Celular da Ana' });
+    // as escolhas do aparelho ficam na conta e os pais mudam de qualquer aparelho
+    const devsAll = await ok('GET', '/api/admin/devices');
+    const anaF = devsAll.find(d => d.label === 'Celular da Ana'), tabF = devsAll.find(d => d.label === 'Tablet das crianças');
+    assert.deepEqual([anaF.mode, anaF.t_end, anaF.m_end, anaF.warn, anaF.approvals], ['sound', 'mine', 'mine', true, true]);
+    assert.equal(tabF.approvals, false); // tablet novo não recebe "missão concluída"
+    assert.equal((await api('PUT', `/api/admin/devices/${anaF.id}`, { mode: 'ruidoso' })).status, 400);
+    await ok('PUT', `/api/admin/devices/${anaF.id}`, { msgs: false, alarms: false, mode: 'vibrate', t_end: 'all', label: 'Celular da Ana (trabalho)' });
+    await ok('PUT', `/api/admin/devices/${anaF.id}`, { label: 'Celular da Ana' });
+    const mySet = await fetch(BASE + '/api/device/settings', { headers: { cookie, 'x-gt-dev': 'tokenAna_' + 'z'.repeat(40) } }).then(r => r.json());
+    assert.deepEqual([mySet.mode, mySet.t_end, mySet.msgs, mySet.alarms], ['vibrate', 'all', false, false]);
+    assert.equal((await fetch(BASE + '/api/device/settings', { headers: { cookie, 'x-gt-dev': 'nao-existe' } })).status, 404);
+    await ok('POST', '/api/fcm', { token: 'tokenAna_' + 'z'.repeat(40), label: 'Outro nome' }); // registrar de novo não desfaz as escolhas
+    assert.equal((await ok('GET', '/api/admin/devices')).find(d => d.id === anaF.id).mode, 'vibrate');
+    const rn = await fetch(BASE + '/api/device/label', { method: 'PUT', headers: { cookie, 'x-gt-dev': 'tokenAna_' + 'z'.repeat(40), 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Celular da Ana' }) });
+    assert.equal((await rn.json()).ok, true);
+    assert.equal((await ok('GET', '/api/admin/devices')).find(d => d.id === anaF.id).label, 'Celular da Ana');
     const devs = await ok('GET', '/api/admin/devices');
     assert.ok(devs.some(d => d.label === 'Tablet das crianças' && d.on)); assert.ok(devs.some(d => d.label === 'Celular da Ana' && !d.on));
     await ok('POST', '/api/admin/messages', { text: 'Só no tablet', kid_ids: allIds, devices: devs.filter(d => d.on).map(d => d.id) });
