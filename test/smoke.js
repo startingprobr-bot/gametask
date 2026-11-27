@@ -525,6 +525,20 @@ const step = (m) => console.log('✔', m);
     await ok('POST', pinUrl, { action: 'start' }); await ok('POST', pinUrl, { action: 'pause' });
     assert.equal((await ok('GET', `/api/kids/${eva}/screen`)).running.length, 0);
     step('bloqueio dos pais: para o cronômetro, recusa o play e libera depois');
+    // som do fim do tempo escolhido pela família
+    const putSound = (type, buf, name = 'campainha.mp3') => fetch(BASE + '/api/admin/sound', { method: 'POST', headers: { 'content-type': type, cookie, 'x-name': encodeURIComponent(name) }, body: buf });
+    assert.equal((await ok('GET', '/api/sound/info')).has, false);
+    assert.equal((await putSound('text/plain', Buffer.alloc(500, 1))).status, 400);          // não é áudio
+    assert.equal((await putSound('audio/mpeg', Buffer.alloc(900 * 1024, 1))).status, 413);   // grande demais
+    const snd = Buffer.from(Array.from({ length: 2000 }, (_, i) => i % 251));
+    assert.equal((await putSound('audio/mpeg', snd, 'Campainha do fim.mp3')).status, 200);
+    const inf = await ok('GET', '/api/sound/info'); assert.equal(inf.has, true); assert.equal(inf.name, 'Campainha do fim.mp3'); assert.equal(inf.size, 2000); assert.ok(inf.v.length > 10);
+    const got = await fetch(BASE + '/api/sound/end', { headers: { cookie } });
+    assert.equal(got.status, 200); assert.equal(got.headers.get('content-type'), 'audio/mpeg'); assert.ok(Buffer.from(await got.arrayBuffer()).equals(snd));
+    await ok('DELETE', '/api/admin/sound');
+    assert.equal((await ok('GET', '/api/sound/info')).has, false);
+    assert.equal((await fetch(BASE + '/api/sound/end', { headers: { cookie } })).status, 404);
+    step('som do fim do tempo: envia, confere, recusa o que não é áudio e volta ao padrão');
 
     // apagar filho (some de vez) e tirar adulto do jogo (continua responsável)
     const tmp = (await ok('POST', '/api/admin/kids', { name: 'Temporário', avatar: 'cat', color: '#ff4fae' })).id;

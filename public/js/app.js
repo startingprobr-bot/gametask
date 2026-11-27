@@ -146,6 +146,7 @@ setInterval(() => {
   if (!clocks.size && wakeLock && wakeLock !== 'wait') { wakeLock.release().catch(() => {}); wakeLock = null; }
 }, 250);
 function alarm(kid, x, kind = '') {
+  if (window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.GtAlarm) return; // o Android já tocou (e não toca de novo aqui)
   const key = `${kid.id}:${kind}${x.id}`;
   if (Date.now() - (rang.get(key) || 0) < 120000) return;
   rang.set(key, Date.now());
@@ -338,12 +339,27 @@ async function registerFcm() {
   try { const { token } = await GtAlarm.fcmToken(); fcmTok = token; const k = [token, approvals, msgs, alarms, calls, label].join('|'); if (k === fcmDone) return true; const r = await api('POST', '/fcm', { token, approvals, msgs, alarms, calls, label }); fcmDone = k; return r.server; }
   catch { return null; }
 }
+// Som do fim do tempo escolhido pela família: baixa e guarda no aparelho quando muda
+let soundTry = 0;
+async function syncEndSound(force) {
+  if (!GtAlarm?.soundSet || !ME.family || (!force && Date.now() - soundTry < 600000)) return;
+  soundTry = Date.now();
+  try {
+    const i = await api('GET', '/sound/info'), mine = store.get('gt-sound-v') || '';
+    if (!i.has) { if (mine) { await GtAlarm.soundClear(); store.set('gt-sound-v', ''); } return; }
+    if (i.v === mine) return;
+    const r = await fetch('/api/sound/end'); if (!r.ok) return;
+    const bytes = new Uint8Array(await r.arrayBuffer()); let bin = '';
+    for (let k = 0; k < bytes.length; k += 0x8000) bin += String.fromCharCode(...bytes.subarray(k, k + 0x8000));
+    await GtAlarm.soundSet({ data: btoa(bin) }); store.set('gt-sound-v', i.v);
+  } catch {}
+}
 async function syncNativeAlarms() {
   if (!GtAlarm || !ME.family || !ME.access?.active) return;
-  registerFcm();
+  registerFcm(); syncEndSound();
   try {
     const { items } = store.get('gt-dev-alarms') === '0' ? { items: [] } : await api('GET', '/alarm-plan');
-    for (const [k, c] of clocks) items.push({ id: 'c' + k, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
+    for (const [k, c] of clocks) items.push({ id: 'c' + k, dk: c.kind ? `tt${c.kid}-${c.id}` : 'tu' + c.kid, at: Math.round(c.ends), title: c.kind ? `${c.name}: missão cumprida!` : `${c.name}: acabou o tempo`, body: c.title });
     const sig = JSON.stringify(items.map(x => [x.id, x.at, x.title]));
     if (sig === alarmSig) return;
     await GtAlarm.sync({ items }); alarmSig = sig;
@@ -448,9 +464,12 @@ function blockAllowSync() {
   if (!GtAlarm?.blockAllow) return;
   const map = blockMap(), allowed = {}, me = blockKid();
   for (const [, c] of clocks) { const g = !c.kind && c.kid === me && map[c.id]; if (g) allowed[g] = Math.max(allowed[g] || 0, Math.round(c.ends)); }
-  const sig = JSON.stringify([allowed, me, map]);
+  // cronômetro de tela desta criança que acaba primeiro (para avisar: faltam 5, 3, 1 min, 10 s e as batidas)
+  let ends = 0, etitle = '';
+  for (const [, c] of clocks) if (!c.kind && c.kid === me && (!ends || c.ends < ends)) { ends = Math.round(c.ends); etitle = c.title || ''; }
+  const sig = JSON.stringify([allowed, me, map, ends]);
   if (sig === blockSig) return;
-  blockSig = sig; GtAlarm.blockAllow({ allowed, kid: me, map }).catch(() => {});
+  blockSig = sig; GtAlarm.blockAllow({ allowed, kid: me, map, ends, etitle }).catch(() => {});
 }
 setInterval(blockAllowSync, 1000);
 
@@ -1789,6 +1808,7 @@ async function adminSettings(pane, refresh) {
       <div class="disg" role="radiogroup" aria-label="Disfarce do app">${DISGUISES.map(([k, n], i) => `<label><input type="radio" name="dg" value="${k}" ${i === 0 ? 'checked' : ''}><img src="/icons/d/${k}-192.png" alt=""><span>${n}</span></label>`).join('')}</div>
       <div class="actions"><button class="btn green sm" id="sepGo">Instalar neste aparelho</button><button class="btn ghost sm" id="sepCopy">Copiar link</button></div>
       <p class="hint">Abre uma página no navegador. No Android, toque em <b>Instalar</b>. No iPhone, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>. Para outro celular, copie o link e abra lá.</p></section>
+    ${full() ? '<section class="box" id="soundBox" data-sum="Som padrão"><div class="box-h"><h2 class="d">Som do fim do tempo</h2></div></section>' : ''}
     ${NATIVE && GtAlarm ? '<section class="box" id="natBox" data-sum="Alarme no silencioso"><div class="box-h"><h2 class="d">Alarme deste celular</h2></div></section>' : ''}
     ${NATIVE && GtAlarm?.blockCheck ? '<section class="box" id="blockBox" data-sum="Desligado"><div class="box-h"><h2 class="d">Bloqueio de apps</h2></div></section>' : ''}
     ${!NATIVE ? '<section class="box" data-sum="Alarmes no silencioso e recados com o app fechado"><div class="box-h"><h2 class="d">App para Android</h2></div><p class="lead">No Android, o app toca os alarmes e os recados como despertador, mesmo no silencioso. Versão de teste.</p><div class="actions"><a class="btn green sm" href="/android" target="_blank" rel="noopener">Baixar o app Android</a></div></section>' : ''}
@@ -1852,13 +1872,45 @@ async function adminSettings(pane, refresh) {
     async () => { await api('POST', '/auth/logout'); location.hash = '#/login'; await route(); }, { saveLabel: 'Desconectar', danger: true });
   if ($('#guar', pane) && ME.access?.status === 'paid') api('GET', '/billing/status').then(s => guaranteeBox($('#guar', pane), s.guarantee)).catch(() => {});
   await adminAlarms($('#alarms'), refresh);
+  if ($('#soundBox', pane)) await soundBox($('#soundBox', pane)).catch(() => {});
   if ($('#natBox', pane)) await nativeAlarmBox($('#natBox', pane)).catch(() => {});
   if ($('#blockBox', pane)) await blockBox($('#blockBox', pane)).catch(() => {});
   accordion(pane);
 }
 
+// Som do fim do tempo de tela: a família escolhe um arquivo de áudio (os aparelhos com o app baixam e guardam)
+async function soundBox(box) {
+  const i = await api('GET', '/sound/info');
+  box.dataset.sum = i.has ? i.name : 'Som padrão do GameTask';
+  const sm = box.parentElement?.querySelector(':scope > summary small'); if (sm) sm.textContent = box.dataset.sum;
+  const head = box.classList.contains('acc-body') ? '' : '<div class="box-h"><h2 class="d">Som do fim do tempo</h2></div>';
+  box.innerHTML = `${head}<p class="lead">É o som que toca quando o tempo de tela de uma criança acaba. Escolha um arquivo de áudio curto (até 700 KB).</p>
+    <div class="snd-now">${im('bell')}<span class="grow"><b>${i.has ? esc(i.name) : 'Som padrão do GameTask'}</b>${i.has ? `<small>${(i.size / 1024).toFixed(0)} KB</small>` : ''}</span></div>
+    <div class="actions"><label class="btn green sm">Escolher um som<input id="sndFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a" hidden></label>
+      ${i.has ? '<button type="button" class="btn ghost sm" id="sndPlay">Ouvir</button><button type="button" class="btn ghost sm" id="sndDel">Voltar ao padrão</button>' : ''}</div>
+    <div class="snd-help"><b>Onde achar sons grátis</b>
+      <p>Baixe o arquivo (mp3) e depois toque em <b>Escolher um som</b>. Procure por "alarm", "bell" ou "timer".</p>
+      <p><a href="https://pixabay.com/sound-effects/" target="_blank" rel="noopener">Pixabay: efeitos sonoros</a> · <a href="https://mixkit.co/free-sound-effects/" target="_blank" rel="noopener">Mixkit: efeitos sonoros</a></p>
+      <small>Confira a licença de cada som na própria página antes de baixar.</small></div>`;
+  $('#sndFile', box).onchange = guard(async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 700 * 1024) throw new Error('Arquivo grande demais. Escolha um som de até 700 KB (alguns segundos).');
+    const type = f.type || (/\.mp3$/i.test(f.name) ? 'audio/mpeg' : /\.wav$/i.test(f.name) ? 'audio/wav' : /\.ogg$/i.test(f.name) ? 'audio/ogg' : /\.(m4a|aac)$/i.test(f.name) ? 'audio/mp4' : '');
+    const pdev = PAINEL && store.get('gt-pdev'), me = devId();
+    const r = await fetch('/api/admin/sound', { method: 'POST', body: f, headers: { 'content-type': type, 'x-name': encodeURIComponent(f.name), ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Não deu para enviar o som');
+    sfx.win(); toast('Som salvo! Os aparelhos vão usar o novo som.'); syncEndSound(true); soundBox(box);
+  });
+  const pl = $('#sndPlay', box); if (pl) pl.onclick = guard(async () => {
+    const r = await fetch('/api/sound/end'); if (!r.ok) throw new Error('Não deu para tocar o som');
+    const a = new Audio(URL.createObjectURL(await r.blob())); await a.play();
+  });
+  const dl = $('#sndDel', box); if (dl) dl.onclick = guard(async () => { await api('DELETE', '/admin/sound'); toast('Voltou ao som padrão'); syncEndSound(true); soundBox(box); });
+}
+
 // Sanfona: cada bloco vira uma linha (ícone, título e resumo) que abre ao tocar. Lembra o que estava aberto.
-const ACC_IC = { 'Bloqueio de apps': 'lock', 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
+const ACC_IC = { 'Som do fim do tempo': 'bell', 'Bloqueio de apps': 'lock', 'App para Android': 'phone', 'Alarme deste celular': 'clock', 'Moedas': 'coin', 'Meu acesso': 'lock', 'Responsáveis': 'people', 'Área dos pais separada': 'phone', 'Avisos neste aparelho': 'bell', 'Avisos programados': 'clock', 'Últimos avisos enviados': 'check', 'Assinatura': 'moneybag', 'Este aparelho': 'gear' };
 function accordion(pane) {
   const open = new Set((store.get('gt-acc') || '').split('|').filter(Boolean));
   $$(':scope > .box, :scope > #alarms > .box', pane).forEach(el => {

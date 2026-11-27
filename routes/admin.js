@@ -18,6 +18,24 @@ router.post('/kids', wrap(async (req, res) => {
   const [r] = await pool.query('INSERT INTO kids (family_id,name,avatar,color,auto_approve) VALUES (?,?,?,?,?)', [req.fid, name.trim(), avatar, color, bool(auto_approve)]);
   res.json({ id: r.insertId });
 }));
+// ---------- Som do fim do tempo de tela (a família escolhe um arquivo de áudio) ----------
+const SOUND_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/ogg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/webm'];
+router.post('/sound', require('express').raw({ type: () => true, limit: '800kb' }), wrap(async (req, res) => {
+  if (!req.actor?.full_access) return res.status(403).json({ error: 'Só um responsável com acesso completo pode trocar o som' });
+  const type = String(req.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!SOUND_TYPES.includes(type)) return res.status(400).json({ error: 'Use um arquivo de áudio: mp3, wav, ogg ou m4a' });
+  if (!Buffer.isBuffer(req.body) || req.body.length < 200) return res.status(400).json({ error: 'Arquivo vazio' });
+  if (req.body.length > 700 * 1024) return res.status(413).json({ error: 'Arquivo grande demais. Use um som de até 700 KB (alguns segundos)' });
+  const name = decodeURIComponent(String(req.get('x-name') || 'som')).replace(/[\u0000-\u001f<>]/g, '').slice(0, 100) || 'som';
+  await pool.query('UPDATE families SET end_sound=?,end_sound_name=?,end_sound_type=? WHERE id=?', [req.body, name, type, req.fid]);
+  res.json({ ok: true, name });
+}));
+router.delete('/sound', wrap(async (req, res) => {
+  if (!req.actor?.full_access) return res.status(403).json({ error: 'Só um responsável com acesso completo pode trocar o som' });
+  await pool.query('UPDATE families SET end_sound=NULL,end_sound_name=NULL,end_sound_type=NULL WHERE id=?', [req.fid]);
+  res.json({ ok: true });
+}));
+
 // Bloquear (ou liberar) o tempo de tela de uma criança agora: para os cronômetros e os jogos bloqueiam até liberar
 router.post('/kids/:id/lock', wrap(async (req, res) => {
   const [[k]] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE id=? AND family_id=? AND adult=0', [req.params.id, req.fid]);

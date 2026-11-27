@@ -29,17 +29,20 @@ public class BlockService extends Service {
     private String current = "";
     private long lastShown = 0, lastPoll = 0;
     private volatile boolean polling = false;
+    private long warnFor = -1;
+    private final java.util.Set<Integer> said = new java.util.HashSet<>();
+    private boolean fineScheduled = false;
     static final String BASE = "https://gametask.startingpro.com.br";
 
     /** pede uma conferência imediata (aviso do Firebase: alguém pausou, começou ou bloqueou) */
     static void poll(Context c) {
-        if (!BlockStore.enabled(c)) return;
+        if (!BlockStore.needService(c) && BlockStore.kid(c) <= 0) return;
         try { c.startService(new Intent(c, BlockService.class).setAction("POLL")); } catch (Exception ignored) { }
     }
 
     static void sync(Context c) {
         Intent i = new Intent(c, BlockService.class);
-        if (!BlockStore.enabled(c)) { c.stopService(i); return; }
+        if (!BlockStore.needService(c)) { c.stopService(i); return; }
         try { if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i); } catch (Exception ignored) { }
     }
 
@@ -67,13 +70,45 @@ public class BlockService extends Service {
 
     private final Runnable tick = new Runnable() {
         @Override public void run() {
-            if (!BlockStore.enabled(BlockService.this)) { stopSelf(); return; }
+            if (!BlockStore.needService(BlockService.this)) { stopSelf(); return; }
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-            if (pm.isInteractive()) check();
+            if (BlockStore.enabled(BlockService.this) && pm.isInteractive()) check();
+            warnings();
             if (System.currentTimeMillis() - lastPoll > 6000) { lastPoll = System.currentTimeMillis(); askServer(); }
             h.postDelayed(this, 900);
         }
     };
+
+    /**
+     * Avisos de que o tempo de tela está acabando, falados e sem atrapalhar o jogo:
+     * 5 min, 3 min, 1 min e 10 segundos; e uma batida ("tum") por segundo nos últimos 5.
+     */
+    private void warnings() {
+        long end = BlockStore.warnEnd(this), now = System.currentTimeMillis();
+        if (end != warnFor) { // outro cronômetro (ou o mesmo estendido): recomeça a contar
+            h.removeCallbacksAndMessages("fine");
+            warnFor = end; said.clear(); fineScheduled = false;
+            if (end > now) for (int t : new int[] { 300, 180, 60, 10 }) if ((end - now) / 1000 < t) said.add(t); // já passou deste ponto
+        }
+        if (end <= now) return;
+        long left = end - now;
+        String of = BlockStore.warnTitle(this).isEmpty() ? "" : " de " + BlockStore.warnTitle(this);
+        if (!said.contains(300) && left <= 300_000) { said.add(300); Speaker.say(this, "Restam 5 minutos" + of, null); }
+        if (!said.contains(180) && left <= 180_000) { said.add(180); Speaker.say(this, "Restam 3 minutos" + of, null); }
+        if (!said.contains(60) && left <= 60_000) { said.add(60); Speaker.say(this, "Falta 1 minuto" + of, null); }
+        if (!fineScheduled && left <= 12_000) { // reta final: marca cada aviso na hora exata
+            fineScheduled = true;
+            final long endF = end;
+            if (!said.contains(10)) { said.add(10); at(endF - 10_000, () -> Speaker.say(this, "Faltam apenas 10 segundos", null)); }
+            for (int n = 5; n >= 1; n--) at(endF - n * 1000L, Thump::play);
+        }
+    }
+
+    private void at(long when, Runnable r) {
+        long d = when - System.currentTimeMillis();
+        if (d < -300) return; // já passou
+        h.postAtTime(r, "fine", android.os.SystemClock.uptimeMillis() + Math.max(0, d));
+    }
 
     private void check() {
         String top = foreground();
@@ -125,6 +160,9 @@ public class BlockService extends Service {
                     if (!g.isEmpty()) allowed.put(g, Math.max(allowed.optLong(g, 0), now + x.optLong("secs") * 1000));
                 }
                 BlockStore.setAllowed(ctx, allowed.toString()); // verdade do servidor: se pausou em outro lugar, some daqui também
+                long end = 0; String ttl = BlockStore.warnTitle(ctx);
+                for (int i = 0; run != null && i < run.length(); i++) end = Math.max(end, now + run.getJSONObject(i).optLong("secs") * 1000);
+                if (Math.abs(end - BlockStore.warnEnd(ctx)) > 2500) BlockStore.setWarn(ctx, end, end == 0 ? "" : ttl);
             } catch (Exception ignored) {
             } finally {
                 if (c != null) c.disconnect();

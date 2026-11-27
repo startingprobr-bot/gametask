@@ -16,7 +16,9 @@ public class AlarmReceiver extends BroadcastReceiver {
             BlockService.sync(ctx); // bloqueio de apps volta sozinho depois de reiniciar
             return;
         }
+        if (!BlockStore.firstRing(ctx, intent.getStringExtra("dk"))) return; // o mesmo alarme já tocou (Firebase ou outro aviso)
         Intent s = new Intent(ctx, AlarmService.class)
+            .putExtra("dk", intent.getStringExtra("dk"))
             .putExtra("title", intent.getStringExtra("title"))
             .putExtra("body", intent.getStringExtra("body"))
             .putExtra("icon", intent.getStringExtra("icon"));

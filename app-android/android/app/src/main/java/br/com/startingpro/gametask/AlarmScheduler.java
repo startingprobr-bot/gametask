@@ -42,17 +42,17 @@ public class AlarmScheduler {
         for (int i = 0; i < items.length(); i++) {
             JSONObject it = items.optJSONObject(i);
             if (it == null || it.optLong("at") <= now) continue;
-            set(ctx, it.optString("id"), it.optLong("at"), it.optString("title"), it.optString("body"), it.optString("icon"));
+            set(ctx, it.optString("id"), it.optLong("at"), it.optString("title"), it.optString("body"), it.optString("icon"), it.optString("dk"));
         }
     }
 
-    static void scheduleOne(Context ctx, String id, long at, String title, String body, String icon) { set(ctx, id, at, title, body, icon == null ? "" : icon); }
+    static void scheduleOne(Context ctx, String id, long at, String title, String body, String icon) { set(ctx, id, at, title, body, icon == null ? "" : icon, ""); }
 
     static int count(Context ctx) { return saved(ctx).length(); }
 
-    private static void set(Context ctx, String id, long at, String title, String body, String icon) {
+    private static void set(Context ctx, String id, long at, String title, String body, String icon, String dk) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        PendingIntent pi = PendingIntent.getBroadcast(ctx, id.hashCode(), intent(ctx, id, title, body).putExtra("icon", icon),
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, id.hashCode(), intent(ctx, id, title, body).putExtra("icon", icon).putExtra("dk", dk),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         if (canExact(ctx)) {
             // aparece como despertador no sistema e acorda o celular mesmo em economia de bateria

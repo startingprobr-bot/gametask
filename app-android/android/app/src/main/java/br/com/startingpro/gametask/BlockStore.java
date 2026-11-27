@@ -30,6 +30,26 @@ public class BlockStore {
 
     static void setAllowed(Context c, String allowedJson) { prefs(c).edit().putString("allowed", allowedJson).apply(); }
 
+    /** quando o cronômetro desta criança chega a zero (0 = nenhum rodando) e o nome do prêmio, para os avisos falados */
+    static void setWarn(Context c, long endMs, String title) { prefs(c).edit().putLong("warnEnd", endMs).putString("warnTitle", title == null ? "" : title).apply(); }
+
+    static long warnEnd(Context c) { return prefs(c).getLong("warnEnd", 0); }
+
+    static String warnTitle(Context c) { return prefs(c).getString("warnTitle", ""); }
+
+    /** o vigia precisa rodar enquanto o bloqueio está ligado OU há um cronômetro para avisar */
+    static boolean needService(Context c) { return enabled(c) || warnEnd(c) > System.currentTimeMillis(); }
+
+    /** Evita o mesmo alarme duas vezes (o do Android, o do Firebase e o do app): mesma chave em menos de 2 minutos = ignora */
+    static boolean firstRing(Context c, String key) {
+        if (key == null || key.isEmpty()) return true;
+        SharedPreferences p = prefs(c);
+        long now = System.currentTimeMillis();
+        if (key.equals(p.getString("ringKey", "")) && now - p.getLong("ringAt", 0) < 120000) return false;
+        p.edit().putString("ringKey", key).putLong("ringAt", now).apply();
+        return true;
+    }
+
     /** criança que usa este aparelho e qual prêmio libera qual grupo ({ "idDoPremio": "game" | "video" }) */
     static void setKid(Context c, long kid, String mapJson) { prefs(c).edit().putLong("kid", kid).putString("map", mapJson).apply(); }
 

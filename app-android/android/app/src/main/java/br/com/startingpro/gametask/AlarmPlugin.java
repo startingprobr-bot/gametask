@@ -131,9 +131,26 @@ public class AlarmPlugin extends Plugin {
     public void blockAllow(PluginCall call) {
         BlockStore.setAllowed(getContext(), call.getObject("allowed", new JSObject()).toString());
         if (call.hasOption("kid")) BlockStore.setKid(getContext(), call.getInt("kid", 0), call.getObject("map", new JSObject()).toString());
+        if (call.hasOption("ends")) BlockStore.setWarn(getContext(), call.getLong("ends", 0L), call.getString("etitle", ""));
+        BlockService.sync(getContext()); // liga ou desliga o vigia conforme precisar
         BlockService.poll(getContext()); // confere com o servidor logo depois de mudar a criança ou o mapa
         call.resolve();
     }
+
+    // ---------- Som do fim do tempo escolhido pela família ----------
+    @PluginMethod
+    public void soundSet(PluginCall call) {
+        try {
+            byte[] b = android.util.Base64.decode(call.getString("data", ""), android.util.Base64.DEFAULT);
+            if (b.length < 200 || b.length > 1024 * 1024) { call.reject("Arquivo inválido"); return; }
+            java.io.File f = new java.io.File(getContext().getFilesDir(), "end_sound");
+            try (java.io.FileOutputStream o = new java.io.FileOutputStream(f)) { o.write(b); }
+            call.resolve();
+        } catch (Exception e) { call.reject("Não deu para guardar o som"); }
+    }
+
+    @PluginMethod
+    public void soundClear(PluginCall call) { new java.io.File(getContext().getFilesDir(), "end_sound").delete(); call.resolve(); }
 
     // ---------- Digital (biometria do Android) ----------
     /** available: há digital/rosto cadastrado; enrolled: o painel já está ligado à digital neste aparelho */

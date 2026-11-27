@@ -169,6 +169,9 @@ const COLUMNS = [
   ['fix_spins', 'kind', "VARCHAR(8) NOT NULL DEFAULT 'fix'"],
   ['messages', 'to_label', 'VARCHAR(120) NULL'],
   ['messages', 'devices', 'VARCHAR(500) NULL'],         // aparelhos escolhidos ("f3,p2"); NULL = todos
+  ['families', 'end_sound', 'MEDIUMBLOB NULL'],          // som escolhido pela família para o fim do tempo de tela
+  ['families', 'end_sound_name', 'VARCHAR(100) NULL'],
+  ['families', 'end_sound_type', 'VARCHAR(40) NULL'],
   ['kids', 'locked', 'TINYINT NOT NULL DEFAULT 0'],      // pais bloquearam o tempo de tela desta criança até liberar
   ['kids', 'pin_hash', 'VARCHAR(80) NULL'],              // PIN da criança: pedido ao dar o play no tempo de tela e ao doar minutos
   ['rewards', 'donate', 'TINYINT NOT NULL DEFAULT 0'],   // permite doar minutos entre irmãos

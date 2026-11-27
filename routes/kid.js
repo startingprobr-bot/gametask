@@ -195,6 +195,16 @@ router.post('/kids/:id/timer/:rid', async (req, res) => {
   push.nudge(req.fid).catch(() => {}); // os outros aparelhos conferem na hora (bloqueiam ou liberam sem esperar)
   res.json({ time: await kidTime(req.fid, kid) });
 });
+// Som do fim do tempo escolhido pela família: o app baixa e guarda no aparelho (v muda quando troca)
+router.get('/sound/info', async (req, res) => {
+  const [[f]] = await pool.query('SELECT end_sound_name name, end_sound_type type, LENGTH(end_sound) size, MD5(end_sound) v FROM families WHERE id=?', [req.fid]);
+  res.json({ has: !!f?.size, name: f?.name || null, type: f?.type || null, size: +f?.size || 0, v: f?.v || '' });
+});
+router.get('/sound/end', async (req, res) => {
+  const [[f]] = await pool.query('SELECT end_sound, end_sound_type FROM families WHERE id=?', [req.fid]);
+  if (!f?.end_sound) return res.status(404).json({ error: 'Sem som escolhido' });
+  res.set({ 'content-type': f.end_sound_type || 'audio/mpeg', 'cache-control': 'private, max-age=0' }).send(f.end_sound);
+});
 // Situação do tempo de tela desta criança, leve: o app Android confere sozinho, mesmo com o GameTask em segundo plano
 router.get('/kids/:id/screen', async (req, res) => {
   const kid = await ownKid(req, res); if (!kid) return;

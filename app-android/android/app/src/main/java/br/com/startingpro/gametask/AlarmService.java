@@ -33,6 +33,7 @@ public class AlarmService extends Service {
     private Vibrator vibrator;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String speech = "";
+    private boolean endAlarm;
     private boolean on;
 
     @Override
@@ -43,6 +44,8 @@ public class AlarmService extends Service {
 
         channel();
         String call = intent != null ? intent.getStringExtra("call") : null;
+        String dk = intent != null ? intent.getStringExtra("dk") : null;
+        endAlarm = dk != null && dk.startsWith("tu"); // fim do tempo de tela: usa o som escolhido pela família
         Intent full = new Intent(this, call != null ? CallActivity.class : AlarmActivity.class).putExtra("call", call).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent fullPi = PendingIntent.getActivity(this, 2, full, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -79,7 +82,9 @@ public class AlarmService extends Service {
             player = new MediaPlayer();
             player.setAudioAttributes(new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-            player.setDataSource(this, uri);
+            java.io.File mine = new java.io.File(getFilesDir(), "end_sound");
+            if (endAlarm && mine.exists()) { try { player.setDataSource(mine.getAbsolutePath()); } catch (Exception e) { player.reset(); player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()); player.setDataSource(this, uri); } }
+            else player.setDataSource(this, uri);
             player.setOnCompletionListener(mp -> Speaker.say(this, speech, () -> handler.postDelayed(this::cycle, 900)));
             player.prepare();
             player.start();

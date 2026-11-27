@@ -29,8 +29,10 @@ public class GtMessagingService extends FirebaseMessagingService {
         String title = d.get("title") != null ? d.get("title") : "GameTask";
         String body = d.get("body") != null ? d.get("body") : "";
         boolean call = "call".equals(d.get("type"));
+        String tag = d.get("tag");
+        if ("alarm".equals(d.get("type")) && tag != null && tag.startsWith("tu") && !BlockStore.firstRing(this, tag)) return; // fim do tempo: já tocou aqui
         if ("alarm".equals(d.get("type")) || call) {
-            Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body).putExtra("icon", d.get("icon"));
+            Intent s = new Intent(this, AlarmService.class).putExtra("title", title).putExtra("body", body).putExtra("icon", d.get("icon")).putExtra("dk", tag);
             if (call) s.putExtra("call", d.get("call")); // ligação da família: toca com Atender e Recusar
             try {
                 if (Build.VERSION.SDK_INT >= 26) startForegroundService(s); else startService(s);
