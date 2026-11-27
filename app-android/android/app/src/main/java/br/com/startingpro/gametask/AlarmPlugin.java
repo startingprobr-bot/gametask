@@ -145,6 +145,67 @@ public class AlarmPlugin extends Plugin {
         call.resolve();
     }
 
+    // ---------- Atualizar o app pelo próprio app ----------
+    /** versão instalada e se este app sabe se atualizar sozinho (só a versão baixada do site; a da Play Store não) */
+    @PluginMethod
+    public void appInfo(PluginCall call) {
+        Context ctx = getContext();
+        JSObject r = new JSObject();
+        try {
+            android.content.pm.PackageInfo pi = ctx.getPackageManager().getPackageInfo(ctx.getPackageName(), 0);
+            r.put("versionCode", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode);
+            r.put("versionName", pi.versionName);
+        } catch (Exception e) { r.put("versionCode", 0); }
+        r.put("canSelfUpdate", BuildConfig.SELF_UPDATE);
+        r.put("canInstall", Build.VERSION.SDK_INT < 26 || ctx.getPackageManager().canRequestPackageInstalls());
+        call.resolve(r);
+    }
+
+    /** Baixa o APK do site e entrega ao instalador do Android. O Android pode pedir a confirmação (e se o app foi instalado por ele, nas próximas vezes pode ser sem perguntar). */
+    @PluginMethod
+    public void updateApp(PluginCall call) {
+        final Context ctx = getContext();
+        if (!BuildConfig.SELF_UPDATE) { call.reject("Este app é atualizado pela loja."); return; }
+        if (Build.VERSION.SDK_INT >= 26 && !ctx.getPackageManager().canRequestPackageInstalls()) { call.reject("permission"); return; }
+        final String url = call.getString("url", "");
+        if (!url.startsWith(AlarmPlugin.SITE + "/")) { call.reject("Endereço inválido."); return; }
+        new Thread(() -> {
+            java.net.HttpURLConnection c = null;
+            android.content.pm.PackageInstaller.Session s = null;
+            try {
+                c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                c.setConnectTimeout(10000); c.setReadTimeout(20000);
+                if (c.getResponseCode() != 200) { call.reject("O servidor não respondeu (" + c.getResponseCode() + ")."); return; }
+                long total = c.getContentLengthLong();
+                android.content.pm.PackageInstaller pi = ctx.getPackageManager().getPackageInstaller();
+                android.content.pm.PackageInstaller.SessionParams sp = new android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+                sp.setAppPackageName(ctx.getPackageName());
+                if (Build.VERSION.SDK_INT >= 31) sp.setRequireUserAction(android.content.pm.PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+                int id = pi.createSession(sp);
+                s = pi.openSession(id);
+                try (java.io.InputStream in = c.getInputStream(); java.io.OutputStream out = s.openWrite("gametask", 0, total > 0 ? total : -1)) {
+                    byte[] buf = new byte[65536]; long done = 0; int n, last = -1;
+                    while ((n = in.read(buf)) > 0) {
+                        out.write(buf, 0, n); done += n;
+                        int pct = total > 0 ? (int) (done * 100 / total) : 0;
+                        if (pct != last) { last = pct; JSObject e = new JSObject(); e.put("pct", pct); notifyListeners("updateProgress", e); }
+                    }
+                    s.fsync(out);
+                }
+                Intent i = new Intent(ctx, InstallReceiver.class).setAction("br.com.startingpro.gametask.INSTALL");
+                android.app.PendingIntent pend = android.app.PendingIntent.getBroadcast(ctx, id, i, android.app.PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? android.app.PendingIntent.FLAG_MUTABLE : 0));
+                s.commit(pend.getIntentSender());
+                s = null;
+                call.resolve();
+            } catch (Exception e) {
+                if (s != null) { try { s.abandon(); } catch (Exception ignored) { } }
+                call.reject("Não deu para baixar a atualização. Confira a internet e tente de novo.");
+            } finally { if (c != null) c.disconnect(); }
+        }).start();
+    }
+
+    static final String SITE = "https://gametask.startingpro.com.br";
+
     // ---------- Som do fim do tempo escolhido pela família ----------
     @PluginMethod
     public void soundSet(PluginCall call) {
@@ -216,7 +277,16 @@ public class AlarmPlugin extends Plugin {
 
     /** Fala o texto com a voz do Android (no app, o site não tem voz própria) */
     @PluginMethod
-    public void speak(PluginCall call) { Speaker.say(getContext(), call.getString("text", ""), null); call.resolve(); }
+    public void speak(PluginCall call) {
+        Context ctx = getContext();
+        boolean loud = call.getBoolean("loud", false);
+        Speaker.say(ctx, call.getString("text", ""), null, loud);
+        android.media.AudioManager am = (android.media.AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+        int stream = loud ? android.media.AudioManager.STREAM_ALARM : android.media.AudioManager.STREAM_MUSIC;
+        JSObject r = new JSObject();
+        r.put("vol", am.getStreamVolume(stream)); // 0 = volume no mínimo: o app avisa para aumentar
+        call.resolve(r);
+    }
 
     @PluginMethod
     public void stopSpeak(PluginCall call) { Speaker.stop(); call.resolve(); }
@@ -240,6 +310,8 @@ public class AlarmPlugin extends Plugin {
             i = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + ctx.getPackageName()));
         } else if ("appinfo".equals(what)) {
             i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + ctx.getPackageName()));
+        } else if ("install".equals(what) && Build.VERSION.SDK_INT >= 26) {
+            i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.getPackageName()));
         } else if ("usage".equals(what)) {
             i = new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS);
         } else if ("overlay".equals(what) && Build.VERSION.SDK_INT >= 23) {

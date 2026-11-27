@@ -15,18 +15,22 @@ public class Speaker {
     private static String pending;
     private static Runnable pendingDone;
 
-    static synchronized void say(Context ctx, String text, Runnable done) {
+    private static boolean loudNow = true;
+
+    /** Alarmes e avisos: pelo volume de alarme (tocam até no silencioso) */
+    static void say(Context ctx, String text, Runnable done) { say(ctx, text, done, true); }
+
+    /** loud = true: volume de alarme; false: volume de mídia (ler a tarefa para a criança) */
+    static synchronized void say(Context ctx, String text, Runnable done, boolean loud) {
         if (text == null || text.trim().isEmpty()) { if (done != null) done.run(); return; }
+        loudNow = loud;
         if (tts == null) {
             pending = text; pendingDone = done;
             tts = new TextToSpeech(ctx.getApplicationContext(), status -> {
                 synchronized (Speaker.class) {
                     ready = status == TextToSpeech.SUCCESS;
-                    if (ready) {
-                        tts.setLanguage(new Locale("pt", "BR"));
-                        tts.setAudioAttributes(new AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
-                    }
+                    if (ready) tts.setLanguage(new Locale("pt", "BR"));
+                    else tts = null; // a voz não iniciou: tenta de novo na próxima vez
                     if (pending != null) { String p = pending; Runnable d = pendingDone; pending = null; pendingDone = null; speak(p, d); }
                 }
             });
@@ -36,8 +40,12 @@ public class Speaker {
         speak(text, done);
     }
 
+    static boolean isReady() { return tts != null && ready; }
+
     private static void speak(String text, Runnable done) {
-        if (!ready) { if (done != null) done.run(); return; }
+        if (!ready || tts == null) { ready = false; if (done != null) done.run(); return; }
+        tts.setAudioAttributes(new AudioAttributes.Builder()
+            .setUsage(loudNow ? AudioAttributes.USAGE_ALARM : AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
             @Override public void onStart(String id) { }
             @Override public void onDone(String id) { if (done != null) done.run(); }

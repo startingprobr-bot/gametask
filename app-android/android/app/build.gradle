@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 
+def buildCode = Long.valueOf(System.currentTimeMillis().intdiv(60000L)).intValue()
+
 android {
     namespace = "br.com.startingpro.gametask"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +9,10 @@ android {
         applicationId "br.com.startingpro.gametask"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        versionCode buildCode   // minutos desde 1970: sempre cresce
         versionName "1.0"
+        // true: o app baixa a atualização do site (link "Atualizar app"). Na Play Store isso fica false: a loja atualiza.
+        buildConfigField "boolean", "SELF_UPDATE", "true"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,6 +20,7 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    buildFeatures { buildConfig = true }
     buildTypes {
         release {
             minifyEnabled false

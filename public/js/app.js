@@ -105,8 +105,12 @@ if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener
 // fala sem o navegador ter voz (no app Android usa a voz do próprio Android)
 const nativeVoice = () => window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.GtAlarm;
 const hush = () => { try { window.speechSynthesis?.cancel(); } catch {} try { nativeVoice()?.stopSpeak(); } catch {} };
-function say(text) {
-  if (text && nativeVoice()) { nativeVoice().speak({ text }).catch(() => {}); return; }
+// loud = true: pelo volume de alarme (recado urgente); padrão: volume de mídia (ler a tarefa para a criança)
+function say(text, loud = false) {
+  if (text && nativeVoice()) {
+    nativeVoice().speak({ text, loud }).then(r => { if (r && r.vol === 0) toast('O volume do aparelho está no mínimo. Aumente para ouvir.', true); }).catch(() => {});
+    return;
+  }
   if (!('speechSynthesis' in window) || !text) return;
   try {
     speechSynthesis.cancel();
@@ -293,7 +297,7 @@ function showMessage(kidId, m, done) {
   // som alto mesmo com o jogo no mudo, até alguém responder
   const ring = () => { tone([[1175, .14], [880, .14], [1175, .14], [880, .14], [1175, .14], [880, .3]], 'square', .28, true); navigator.vibrate?.([500, 150, 500, 150, 500]); };
   ring(); const again = setInterval(ring, 2600);
-  const read = () => say(`Recado de ${m.from_name}: ${m.text}`);
+  const read = () => say(`Recado de ${m.from_name}: ${m.text}`, true);
   setTimeout(read, 1600);
   bg.querySelector('.say-msg').onclick = read;
   $$('[data-r]', bg).forEach(b => b.onclick = guard(async () => {
@@ -809,6 +813,42 @@ async function checkCalls() {
 setInterval(checkCalls, 1500);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(checkCalls, 400); });
 
+// ---------- Atualizar o app Android pelo próprio app ----------
+// O site guarda a versão mais nova em /android/version.json. O link "Atualizar app" compara, baixa e entrega ao Android instalar.
+const appVersion = async () => { const r = await fetch('/android/version.json', { cache: 'no-store' }); if (!r.ok) throw new Error('sem versão'); return r.json(); };
+async function appUpdateHint(btn) {
+  try {
+    const [info, v] = await Promise.all([GtAlarm.appInfo(), appVersion()]);
+    if (!info.canSelfUpdate) { btn.hidden = true; return; } // na Play Store quem atualiza é a loja
+    if (v.versionCode > info.versionCode) { btn.textContent = 'Atualizar app (versão nova)'; btn.classList.add('new'); }
+  } catch {}
+}
+async function appUpdate() {
+  const info = await GtAlarm.appInfo();
+  if (!info.canSelfUpdate) return toast('Este app é atualizado pela loja de aplicativos.');
+  let v; try { v = await appVersion(); } catch { return toast('Sem conexão para procurar a atualização.', true); }
+  if (v.versionCode <= info.versionCode) return toast('Você já está com a versão mais recente.');
+  sheet('Nova versão do GameTask', `<p class="lead" style="margin-top:6px">Tem uma versão mais nova. O app baixa e instala sozinho (uns 8 MB) e depois reabre. Se o Android pedir uma confirmação, toque em <b>Atualizar</b>.</p>`,
+    async () => { await doAppUpdate(); }, { saveLabel: 'Atualizar agora' });
+}
+async function doAppUpdate() {
+  const ov = document.createElement('div'); ov.className = 'loader soft'; ov.setAttribute('role', 'progressbar');
+  ov.innerHTML = `<img src="/img/3d/game.png" alt=""><b class="d">Baixando a atualização</b><div class="lbar"><i style="width:3%"></i></div><span>Não feche o app</span>`;
+  document.body.append(ov);
+  const h = await GtAlarm.addListener('updateProgress', (e) => { $('.lbar i', ov).style.width = Math.max(3, e.pct) + '%'; $('span', ov).textContent = e.pct + '%'; });
+  try {
+    await GtAlarm.updateApp({ url: location.origin + '/android/GameTask.apk' });
+    $('b', ov).textContent = 'Instalando…'; $('span', ov).textContent = 'Confirme se o Android perguntar';
+    setTimeout(() => ov.remove(), 15000); // se a instalação não abrir, não deixa a tela presa
+  } catch (e) {
+    ov.remove();
+    if (/permission/.test(e.message || '')) {
+      sheet('Falta uma permissão', `<p class="lead" style="margin-top:6px">Para o GameTask se atualizar sozinho, o Android precisa da permissão <b>"Instalar apps desta fonte"</b>. Toque no botão, ligue a chave do GameTask e volte para tocar em <b>Atualizar app</b> de novo.</p>`,
+        async () => { await GtAlarm.openSettings({ what: 'install' }); }, { saveLabel: 'Abrir a permissão' });
+    } else toast(e.message || 'Não deu para atualizar.', true);
+  } finally { h.remove?.(); }
+}
+
 // Botão voltar do Android: volta uma tela (fecha a janela aberta, volta ao jogador...). O app pergunta aqui; sem tela para voltar, ele só guarda o app.
 window.__gtBack = () => {
   const click = (sel) => { const e = $(sel); if (e) e.click(); return true; };
@@ -1073,6 +1113,7 @@ async function viewPlayers(me = ME) {
         ${k.msgs ? `<span class="msg-badge" aria-label="Recado novo">${im('bell')}</span>` : ''}${im(k.avatar, 'art', 'fox')}<div class="plate"><div class="d stroke-sm">${esc(k.name)}</div><small>${k.adult ? '' : `${im('coin')}<b class="num">${num(k.coins)}</b><i class="dot"></i>`}${im('check')}<b class="num">${k.done}/${k.total}</b></small><div class="mini"><i style="width:${k.total ? k.done / k.total * 100 : 0}%"></i></div></div></button>`).join('')}</div>`
       : `<div class="empty">${im('people')}<p class="d">Peça para um adulto cadastrar os jogadores.</p></div>`}
       <div class="parent-door"><button class="btn ghost sm" id="adm">${im('lock')} Painel dos pais</button></div>
+      ${NATIVE && GtAlarm?.appInfo ? '<div class="upd-row"><button type="button" class="upd-link" id="upd">Atualizar app</button></div>' : ''}
     </div></div>`;
   wireSound();
   $$('.hero').forEach(h => h.onclick = () => {
@@ -1081,6 +1122,7 @@ async function viewPlayers(me = ME) {
     setTimeout(() => { location.hash = '#/kid/' + h.dataset.id; }, reduced ? 0 : 240);
   });
   $('#adm').onclick = () => { sfx.tap(); location.hash = '#/admin'; };
+  const upd = $('#upd'); if (upd) { upd.onclick = guard(appUpdate); appUpdateHint(upd); }
 }
 
 // ---------- Lobby da criança ----------

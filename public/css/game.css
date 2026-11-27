@@ -1254,3 +1254,8 @@ button.meter:active{transform:scale(.98)}
 .seg3 button[aria-checked=true]{background:#fff8d6;border-color:var(--navy);box-shadow:0 3px 0 var(--navy)}
 .acc-body .acc{margin-top:10px;border-width:2px;box-shadow:none}
 .acc-body .acc>summary{min-height:56px;padding:8px 12px}
+
+/* ---- Link pequeno "Atualizar app" na escolha de jogador ---- */
+.upd-row{text-align:center;margin:6px 0 14px}
+.upd-link{background:none;border:0;padding:6px 10px;font:inherit;font-size:12px;font-weight:700;color:rgba(255,255,255,.72);text-decoration:underline;cursor:pointer}
+.upd-link.new{color:#ffe970;font-weight:900}
