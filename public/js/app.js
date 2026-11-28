@@ -58,7 +58,7 @@ const SVG = {
 // ---------- API ----------
 // este aparelho: token do app Android ou o endereço dos avisos do navegador (quando houver)
 const devId = () => (typeof fcmTok !== 'undefined' && fcmTok) || (typeof pushEndpoint !== 'undefined' && pushEndpoint) || '';
-async function api(method, url, body) {
+async function api(method, url, body, again = 0) {
   const pdev = PAINEL && store.get('gt-pdev');
   let r;
   const me = devId();
@@ -69,11 +69,18 @@ async function api(method, url, body) {
   try { r = await Promise.race([late, fetch('/api' + url, { method, signal: ab.signal, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined })]); }
   catch (e) { throw new Error(e?.name === 'AbortError' ? 'O GameTask está demorando para responder. Confira a internet e tente de novo.' : 'Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
   finally { clearTimeout(to); }
-  const d = await r.json().catch(() => ({}));
+  const d = await r.json().catch(() => null);
+  // resposta sem explicação (servidor reiniciando ou o proxy no meio): espera um pouco e tenta de novo, até 2 vezes,
+  // só em leitura (GET), que não muda nada no servidor
+  if (!r.ok && !d && method === 'GET' && again < 2) { await new Promise(ok => setTimeout(ok, 1500 * (again + 1))); return api(method, url, body, again + 1); }
+  if (!r.ok && !d) {
+    console.warn('GameTask: resposta sem explicação', r.status, method, url);
+    throw Object.assign(new Error(r.status >= 500 ? `O servidor do GameTask não respondeu direito agora (erro ${r.status}). Tente de novo em instantes.` : `Algo deu errado (erro ${r.status}). Tente de novo.`), { status: r.status });
+  }
   if (r.status === 401 && !url.startsWith('/auth/')) { meAt = 0; location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
   if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
-  if (!r.ok) throw Object.assign(new Error(d.error || 'Algo deu errado. Tente de novo.'), { code: d.code, status: r.status });
-  return d;
+  if (!r.ok) throw Object.assign(new Error(d.error || `Algo deu errado (erro ${r.status}). Tente de novo.`), { code: d.code, status: r.status });
+  return d || {};
 }
 function toast(msg, bad) {
   const d = document.createElement('div'); d.textContent = msg; if (bad) d.className = 'bad';
@@ -1131,7 +1138,67 @@ async function preload(srcs) {
   if (ov) { ov.querySelector('.lbar i').style.width = '100%'; await new Promise(r => setTimeout(r, 220)); ov.classList.add('out'); setTimeout(() => ov.remove(), 320); }
 }
 
+// ---------- Carregamento (preloader) ----------
+// Tela de carregamento com barra de progresso. O jogo e o painel dos pais têm cada um o seu.
+function bigLoader(title, sub, img = 'game') {
+  const ov = document.createElement('div'); ov.className = 'loader'; ov.setAttribute('role', 'progressbar'); ov.setAttribute('aria-label', sub);
+  ov.innerHTML = `<img src="/img/3d/${img}.png" alt=""><b class="d stroke">${esc(title)}</b><div class="lbar"><i style="width:4%"></i></div><span>${esc(sub)}</span>`;
+  document.body.append(ov);
+  return {
+    set(p, txt) { $('.lbar i', ov).style.width = Math.max(4, Math.min(100, p)) + '%'; if (txt) $('span', ov).textContent = txt; },
+    async done() { $('.lbar i', ov).style.width = '100%'; await new Promise(r => setTimeout(r, 200)); ov.classList.add('out'); setTimeout(() => ov.remove(), 320); },
+  };
+}
+// carrega imagens contando o progresso (cada uma no máximo uma vez por abertura do app)
+function loadImgs(srcs, onStep) {
+  const need = [...new Set(srcs)].filter(x => x && !imgOk.has(x));
+  let n = 0;
+  return Promise.all(need.map(src => new Promise(r => {
+    const i = new Image();
+    const end = () => { n++; onStep?.(n, need.length); r(); };
+    i.onload = () => { imgOk.add(src); (i.decode ? i.decode().catch(() => {}) : Promise.resolve()).then(end); };
+    i.onerror = end; i.src = src;
+  })));
+}
+// Preloader do JOGO, uma vez ao abrir o app: jogadores, a tela de cada criança, todos os ícones e a voz.
+// Depois disso, entrar num perfil e tocar numa tarefa respondem na hora. (Não carrega nada do painel dos pais.)
+let gameWarm = null;
+function warmGame() {
+  if (gameWarm) return gameWarm;
+  return gameWarm = (async () => {
+    const L = bigLoader('GameTask', 'Preparando o jogo…');
+    try {
+      GtAlarm?.voiceWarm?.().catch(() => {}); // a voz liga agora, não no primeiro toque
+      const kids = await withTimeout(api('GET', '/kids'), 12000).then(k => { keep.set('kids', k); return k; }).catch(() => keep.get('kids'));
+      if (!kids) return;
+      L.set(15, 'Carregando os jogadores…');
+      let got = 0;
+      const homes = await withTimeout(Promise.all(kids.map(k => api('GET', `/kids/${k.id}/home`)
+        .then(d => { keep.set('home' + k.id, d); return d; }).catch(() => keep.get('home' + k.id))
+        .finally(() => L.set(15 + ++got / kids.length * 35)))), 12000).catch(() => kids.map(k => keep.get('home' + k.id)));
+      const srcs = [...kids.map(k => iconUrl(k.avatar, 'fox')), ...['coin', 'check', 'lock', 'bell', 'stopwatch', 'trophy', 'game', 'alarm', 'star'].map(x => iconUrl(x))];
+      for (const d of homes) if (d) srcs.push(...d.tasks.map(t => iconUrl(t.icon)), ...d.time.map(t => iconUrl(t.icon, 'game')), ...d.goals.map(g => iconUrl(g.icon, 'trophy')));
+      L.set(50, 'Carregando as missões…');
+      await withTimeout(loadImgs(srcs, (n, t) => L.set(50 + n / t * 50)), 10000).catch(() => {});
+    } finally { await L.done(); }
+  })();
+}
+
+// Preloader do PAINEL DOS PAIS: só quando alguém entra no painel (o jogo não espera por ele)
+let adminWarm = null;
+function warmAdmin() {
+  if (adminWarm) return adminWarm;
+  return adminWarm = (async () => {
+    const L = bigLoader('Painel dos pais', 'Abrindo o painel…', 'lock');
+    try {
+      L.set(30);
+      await withTimeout(loadImgs(TABS.map(([, ic]) => iconUrl(ic)), (n, t) => L.set(30 + n / t * 60)), 8000).catch(() => {});
+    } finally { await L.done(); }
+  })();
+}
+
 async function viewPlayers(me = ME) {
+  await warmGame();
   const here = () => !location.hash.split('/')[1]; // ainda na escolha de jogador (não tocou num card nem foi para o painel)
   const cached = keep.get('kids');
   if (cached?.length) {
@@ -1174,6 +1241,7 @@ function drawPlayers(me, kids, calm) {
 // ---------- Lobby da criança ----------
 // A criança vê o ganho na hora (moedas, minutos, meta). O pai confere depois; se rejeitar, o ganho sai.
 async function viewKid(id) {
+  await warmGame(); // abriu o app direto num perfil: carrega o jogo antes
   store.set('gt-block-kid', String(id)); blockSig = ''; // este aparelho passa a ser desta criança (cronômetro dela libera os apps)
   let first = true, showDone = false, latest = null, iv = 0;
   const doneLike = (s) => s === 'approved' || s === 'pending';
@@ -1503,7 +1571,8 @@ const full = () => !!ME.actor?.full;
 const DAILY_TABS = ['pending', 'wallet', 'settings']; // quem só tem o dia a dia (ex.: babá)
 let adminShown = null; // aba que está na tela: ao salvar, a mesma aba se redesenha e volta para onde estava
 async function viewAdmin() {
-  const keepY = adminShown === tab && $('.admin') ? scrollY : 0;
+  await warmAdmin();
+  const keepY =adminShown === tab && $('.admin') ? scrollY : 0;
   const pendingN = (await api('GET', '/admin/pending')).length;
   const ac = ME.access || {};
   const tabs = TABS.filter(([k]) => full() || DAILY_TABS.includes(k));

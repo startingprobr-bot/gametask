@@ -275,6 +275,13 @@ public class AlarmPlugin extends Plugin {
         getBridge().setServerBasePath(dir.getAbsolutePath());
     }
 
+    /** Liga a voz durante o carregamento, para a primeira leitura de tarefa não demorar */
+    @PluginMethod
+    public void voiceWarm(PluginCall call) {
+        Speaker.warm(getContext());
+        call.resolve();
+    }
+
     private static java.util.Map<String, String> hashes(String json) {
         java.util.Map<String, String> m = new java.util.HashMap<>();
         if (json == null) return m;

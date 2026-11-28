@@ -42,6 +42,19 @@ public class Speaker {
 
     static boolean isReady() { return tts != null && ready; }
 
+    /** Liga a voz antes de precisar (no carregamento do app): o primeiro toque na tarefa já fala na hora. */
+    static synchronized void warm(Context ctx) {
+        if (tts != null) return;
+        tts = new TextToSpeech(ctx.getApplicationContext(), status -> {
+            synchronized (Speaker.class) {
+                ready = status == TextToSpeech.SUCCESS;
+                if (ready) tts.setLanguage(new Locale("pt", "BR"));
+                else tts = null;
+                if (ready && pending != null) { String p = pending; Runnable d = pendingDone; pending = null; pendingDone = null; speak(p, d); }
+            }
+        });
+    }
+
     private static void speak(String text, Runnable done) {
         if (!ready || tts == null) { ready = false; if (done != null) done.run(); return; }
         tts.setAudioAttributes(new AudioAttributes.Builder()

@@ -1,5 +1,17 @@
 require('dotenv').config();
 const express = require('express');
+// Erro dentro de uma rota "async" (ex.: o banco demorou ou caiu um instante) NÃO pode derrubar o servidor inteiro.
+// No Express 4 esse erro escapa e o Node encerra o processo; o EasyPanel religa, e enquanto isso todo mundo vê
+// "Algo deu errado" e lentidão. Aqui o erro vai para o tratador no fim do arquivo, que responde e registra no log.
+{
+  const Layer = require('express/lib/router/layer');
+  const run = Layer.prototype.handle_request;
+  Layer.prototype.handle_request = function (req, res, next) {
+    if (this.handle.length > 3) return run.call(this, req, res, next);
+    try { const r = this.handle(req, res, next); if (r && typeof r.catch === 'function') r.catch(next); } catch (e) { next(e); }
+  };
+}
+process.on('unhandledRejection', (e) => console.error('erro não tratado (servidor continua no ar):', e?.stack || e));
 const cookieSession = require('cookie-session');
 const bcrypt = require('bcryptjs');
 const path = require('path');
@@ -233,6 +245,13 @@ app.get('/painel/manifest.json', (req, res) => {
 });
 app.use(express.static(PUB, { index: false }));
 app.get('*', sendApp);
+// qualquer erro de rota termina aqui: responde em JSON (o app mostra uma frase clara) e o servidor segue no ar
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  const st = err?.status || err?.statusCode || 500; // ex.: 413 arquivo grande demais, 400 JSON inválido
+  if (st >= 500) console.error(`erro ${req.method} ${req.path}:`, err?.stack || err);
+  if (res.headersSent) return;
+  res.status(st).json({ error: st === 413 ? 'O arquivo é grande demais.' : st < 500 ? 'Pedido inválido.' : 'O servidor teve um problema agora. Tente de novo.' });
+});
 
 const port = process.env.PORT || 3000;
 if (require.main === module) {
