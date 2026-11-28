@@ -6,3 +6,4 @@ GameTaske/
 *.apk
 !public/android/GameTask.apk
 app-android/www/
+!public/android/GameTask-anterior.apk
