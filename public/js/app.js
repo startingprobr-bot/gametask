@@ -6,7 +6,13 @@ const num = (n) => (Math.round((+n || 0) * 100) / 100).toLocaleString('pt-BR');
 const brl = (n) => (+n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const dmy = (d) => String(d).slice(0, 10).split('-').reverse().join('/');
 const app = $('#app');
-const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+// App Android com o app guardado DENTRO do celular (abre em https://localhost): telas, ícones e fontes saem do aparelho
+// e só os dados (tarefas, moedas, cronômetros) vêm do site, pelo canal nativo do Android.
+const SITE = 'https://gametask.startingpro.com.br';
+const LOCAL = !!window.Capacitor?.isNativePlatform?.() && location.hostname === 'localhost';
+const ORIGIN = LOCAL ? SITE : location.origin;
+if (LOCAL) { const f0 = window.fetch; window.fetch = (u, o) => f0(typeof u === 'string' && /^\/(api|android)\//.test(u) ? SITE + u : u, o); }
+const store ={ get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 // Cópia no celular da última tela vista (lista de jogadores e tela de cada criança), do mesmo dia:
 // a tela aparece na hora e o servidor só atualiza por cima. Virou o dia, a cópia não vale mais.
 const localDay = () => new Date().toLocaleDateString('sv');
@@ -59,7 +65,8 @@ async function api(method, url, body) {
   if (url.startsWith('/auth/') && method !== 'GET') meAt = 0; // entrou, saiu ou trocou PIN: pergunta de novo quem é
   // sem resposta em 15 s: avisa em vez de deixar a tela parada para sempre
   const ab = new AbortController(), to = setTimeout(() => ab.abort(), 15000);
-  try { r = await fetch('/api' + url, { method, signal: ab.signal, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
+  const late = new Promise((_, no) => setTimeout(() => no(Object.assign(new Error('demorou'), { name: 'AbortError' })), 15500)); // o canal nativo não aceita abort
+  try { r = await Promise.race([late, fetch('/api' + url, { method, signal: ab.signal, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined })]); }
   catch (e) { throw new Error(e?.name === 'AbortError' ? 'O GameTask está demorando para responder. Confira a internet e tente de novo.' : 'Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
   finally { clearTimeout(to); }
   const d = await r.json().catch(() => ({}));
@@ -852,7 +859,7 @@ async function doAppUpdate() {
   document.body.append(ov);
   const h = await GtAlarm.addListener('updateProgress', (e) => { $('.lbar i', ov).style.width = Math.max(3, e.pct) + '%'; $('span', ov).textContent = e.pct + '%'; });
   try {
-    await GtAlarm.updateApp({ url: location.origin + '/android/GameTask.apk' });
+    await GtAlarm.updateApp({ url: ORIGIN + '/android/GameTask.apk' });
     $('b', ov).textContent = 'Instalando…'; $('span', ov).textContent = 'Confirme se o Android perguntar';
     setTimeout(() => ov.remove(), 15000); // se a instalação não abrir, não deixa a tela presa
   } catch (e) {
@@ -966,10 +973,15 @@ async function checkUpdate() {
     const { v } = await (await fetch('/api/version', { cache: 'no-store' })).json();
     if (!v || v === APP_V) return;
     swReg?.update().catch(() => {});
-    const go = () => { if ($('.sheet-bg,.burst,.alarm-bg')) return setTimeout(go, 5000); location.reload(); };
+    // app com os arquivos no celular: baixa só o que mudou e troca quando a tela estiver livre
+    const w = LOCAL && GtAlarm?.webSync ? await GtAlarm.webSync() : null;
+    if (LOCAL && !w) return;
+    const busy = () => $('.sheet-bg,.burst,.alarm-bg,.call-bg,.timer-bg') || (LOCAL && location.hash.split('/')[1] === 'kid' && clocks.size);
+    const go = () => { if (busy()) return setTimeout(go, 5000); w ? GtAlarm.webApply({ path: w.path }).catch(() => {}) : location.reload(); };
     go();
   } catch {}
 }
+if (LOCAL) setTimeout(checkUpdate, 4000); // ao abrir o app: confere se saiu versão nova
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 addEventListener('focus', checkUpdate);
 setInterval(checkUpdate, 10 * 60000);
@@ -999,7 +1011,7 @@ function installBanner() {
 }
 if (onIOS) setTimeout(installBanner, 3000);
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && !LOCAL) { // no app com os arquivos no celular não precisa
   navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(r => { swReg = r; }).catch(() => {});
   // clique numa notificação com o app já aberto: vai para a tela do aviso
   navigator.serviceWorker.addEventListener('message', (e) => {
@@ -1124,7 +1136,9 @@ async function viewPlayers(me = ME) {
   const cached = keep.get('kids');
   if (cached?.length) {
     drawPlayers(me, cached); // aparece na hora com o que o celular guardou hoje
-    api('GET', '/kids').then(kids => { keep.set('kids', kids); kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); }); if (here() && !$('.sheet-bg')) drawPlayers(me, kids); })
+    // chegou o dado novo: só redesenha se algo mudou, e sem repetir a animação de entrada (não "pisca")
+    const look = (l) => JSON.stringify(l.map(k => [k.id, k.name, k.avatar, k.color, k.coins, k.done, k.total, k.msgs]));
+    api('GET', '/kids').then(kids => { keep.set('kids', kids); kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); }); if (here() && !$('.sheet-bg') && look(kids) !== look(cached)) drawPlayers(me, kids, true); })
       .catch(e => { if (!e.silent) toast(plainErr(e), true); });
     return;
   }
@@ -1136,8 +1150,8 @@ async function viewPlayers(me = ME) {
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
   drawPlayers(me, kids);
 }
-function drawPlayers(me, kids) {
-  app.innerHTML = `<div class="lobby"><div class="rays"></div>
+function drawPlayers(me, kids, calm) {
+  app.innerHTML = `<div class="lobby${calm ? ' calm' : ''}"><div class="rays"></div>
     <div class="lobby-bar">${soundBtn()}</div>
     <div class="wrap">
       <div class="select-title"><h1 class="d stroke">GameTask</h1><p>${kids.length ? 'Quem vai jogar agora?' : 'Nenhum jogador ainda'}</p></div>
@@ -1499,7 +1513,7 @@ async function viewAdmin() {
   const offerFp = !pkIds().length && !store.get('gt-pk-skip') && await pkCan();
   app.innerHTML = `<div class="admin"><header class="admin-top"><div class="row1"><h1 class="d stroke-sm">Painel dos pais</h1>
       ${ME.actor ? `<span class="who-chip">Olá, ${esc(ME.actor.name)}</span>` : ''}
-      ${plan}<a class="btn ghost sm help-link" href="/ajuda" target="_blank" rel="noopener">Ajuda</a>${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
+      ${plan}<a class="btn ghost sm help-link" href="${ORIGIN}/ajuda" target="_blank" rel="noopener">Ajuda</a>${ME.owner ? `<a class="btn sm" href="#/dono">${im('chart')}Dono</a>` : ''}
       ${PAINEL ? '' : '<button class="btn ghost sm" id="exit">Voltar ao jogo</button>'}</div>
     ${offerFp ? `<div class="fp-offer">${SVG.finger}<span><b>Abrir o painel com a digital neste aparelho?</b> Mais rápido que digitar o PIN.</span><button class="btn green sm" id="fpOn">Ativar</button><button class="btn ghost sm" id="fpNo">Agora não</button></div>` : ''}
     <nav class="tabs" aria-label="Seções">${tabs.map(([k, ic, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-tab="${k}" ${k === tab ? 'aria-current="page"' : ''}>${im(ic)}${l}${k === 'pending' && pendingN ? `<span class="cnt">${pendingN}</span>` : ''}</button>`).join('')}</nav></header>
@@ -2009,7 +2023,7 @@ async function adminSettings(pane, refresh) {
     ${full() ? `<section class="box" data-sum="${ME.access?.status === 'paid' ? 'Ativa' : ME.access?.status === 'trial' ? 'Período grátis' : 'Ver planos'}"><div class="box-h"><h2 class="d">Assinatura</h2><a class="btn sm" href="#/assinar">${ME.access?.status === 'paid' ? 'Renovar' : 'Ver planos'}</a></div><p class="lead">${planText(ME.access)}</p><div id="guar"></div></section>` : ''}
     <section class="box" data-sum="Desconectar ou voltar a pedir o PIN"><div class="box-h"><h2 class="d">Este aparelho</h2></div><p class="lead">${PAINEL && store.get('gt-pdev') ? 'Este app abre o painel direto, sem PIN. ' : ''}Desconectar faz o aparelho pedir o e-mail e a senha de novo.</p><div class="actions">${PAINEL && store.get('gt-pdev') ? '<button class="btn ghost sm" id="forget">Voltar a pedir o PIN</button>' : ''}<button class="btn red sm" id="out">Desconectar</button></div></section>`;
   const fg = $('#forget', pane); if (fg) fg.onclick = guard(async () => { await api('DELETE', '/auth/parent/device'); store.set('gt-pdev', ''); toast('Pronto: o app vai pedir o PIN ao abrir'); await route(); });
-  const dgUrl = () => `${location.origin}/painel?i=${$('[name=dg]:checked', pane).value}`;
+  const dgUrl = () => `${ORIGIN}/painel?i=${$('[name=dg]:checked', pane).value}`;
   $$('[name=dg]', pane).forEach(r => r.onchange = () => sfx.tap());
   $('#sepGo', pane).onclick = () => { sfx.tap(); if (!window.open(dgUrl(), '_blank')) location.href = dgUrl(); };
   $('#sepCopy', pane).onclick = async () => { try { await navigator.clipboard.writeText(dgUrl()); toast('Link copiado'); } catch { toast(dgUrl()); } };
@@ -2210,7 +2224,7 @@ async function viewPaywall() {
   const keep = $('#keepFree'); if (keep) keep.onclick = () => { sfx.tap(); location.hash = '#/'; };
   const want = store.get('gt-plan'); if (want) { $(`[data-plan="${want}"]`)?.closest('.plan').classList.add('pick'); setTimeout(() => store.set('gt-plan', ''), 1500); }
   $('#out').onclick = () => sheet('Desconectar este aparelho?', '<p class="lead" style="margin-top:6px">Será preciso entrar com o e-mail e a senha da família de novo.</p>',
-    async () => { await api('POST', '/auth/logout'); location.href = PAINEL ? location.pathname + location.search : '/app'; }, { saveLabel: 'Desconectar', danger: true });
+    async () => { await api('POST', '/auth/logout'); location.href = PAINEL ? location.pathname + location.search : LOCAL ? '/' : '/app'; }, { saveLabel: 'Desconectar', danger: true });
 }
 
 // ---------- Catálogo de tarefas ----------
@@ -2445,7 +2459,7 @@ async function ownerFlows(pane) {
 }
 async function ownerCoupons(pane) {
   const rows = await api('GET', '/owner/coupons');
-  const link = (c) => `${location.origin}/app#/comprar/annual/${c.code}`;
+  const link = (c) => `${ORIGIN}/app#/comprar/annual/${c.code}`;
   const used = (c) => c.max_uses ? `usado ${c.uses} de ${c.max_uses}` : `usado ${c.uses} ${c.uses === 1 ? 'vez' : 'vezes'}`;
   pane.innerHTML = `<form class="box" id="cf" novalidate><div class="box-h"><h2 class="d">Novo cupom</h2></div>
       <div class="cup-new">

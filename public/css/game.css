@@ -94,6 +94,7 @@ body:has(.lobby){background:radial-gradient(120% 80% at 50% 0%,var(--sky-1) 0%,v
   background:radial-gradient(90% 60% at 50% 30%,color-mix(in srgb,var(--c) 55%,#fff) 0%,var(--c) 55%,color-mix(in srgb,var(--c) 70%,#000) 100%);
   box-shadow:0 4px 0 var(--navy),var(--drop);display:flex;flex-direction:column;justify-content:flex-end;
   transition:transform .35s var(--spring);animation:rise .6s var(--spring) both}
+.lobby.calm .hero{animation:none} /* lista atualizada pelo servidor: troca os números sem repetir a entrada */
 .hero:nth-child(2){animation-delay:.07s}.hero:nth-child(3){animation-delay:.14s}.hero:nth-child(4){animation-delay:.21s}.hero:nth-child(n+5){animation-delay:.28s}
 @keyframes rise{from{transform:translateY(40px) scale(.9);opacity:0}}
 .hero::before{content:'';position:absolute;inset:10px 10px 30%;border-radius:18px;background:repeating-linear-gradient(-45deg,rgba(255,255,255,.18) 0 10px,transparent 10px 24px)}

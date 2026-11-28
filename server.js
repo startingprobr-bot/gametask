@@ -172,6 +172,8 @@ const needOwner = (req, res, next) => pool.query('SELECT email FROM families WHE
   .then(([[f]]) => billing.isOwner(f) ? next() : res.status(403).json({ error: 'Área do dono do sistema' }), next);
 
 app.get('/api/version', (req, res) => res.set('cache-control', 'no-store').json({ v: VERSION }));
+// lista dos arquivos do app com a impressão digital de cada um: o app Android baixa só o que mudou
+app.get('/api/web-manifest', (req, res) => res.set('cache-control', 'no-store').json(WEB.manifest));
 app.use(site.router); // robots.txt, sitemap.xml, páginas de conteúdo e leads
 app.use(require('./whatsapp').router); // mensagens que chegam no WhatsApp (Evolution) com o código das iscas
 app.get('/api/public/pricing', wrap(async (req, res) => res.json({ ...await billing.prices(), card: billing.cardKey() })));
@@ -189,12 +191,11 @@ const PUB = path.join(__dirname, 'public');
 const brl = (n) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Versão do app = impressão digital dos arquivos do front. Vai na URL do JS/CSS (fura cache) e o app
 // aberto no celular compara com /api/version para se atualizar sozinho depois de um deploy.
-const VERSION = require('crypto').createHash('sha1')
-  .update(['js/app.js', 'css/game.css', 'sw.js', 'index.html'].map(f => fs.readFileSync(path.join(PUB, f))).join('')).digest('hex').slice(0, 10);
+const WEB = require('./webbundle').build(PUB); // mesma conta do app Android (arquivos dentro do celular)
+const VERSION = WEB.v;
 // a página de vendas também precisa furar o cache do CSS, senão o navegador mistura HTML novo com CSS velho
 const LANDING_CSS_V = require('crypto').createHash('sha1').update(fs.readFileSync(path.join(PUB, 'css/landing.css'))).digest('hex').slice(0, 10);
-const INDEX = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8')
-  .replace('/js/app.js"', `/js/app.js?v=${VERSION}"`).replace('/css/game.css"', `/css/game.css?v=${VERSION}"`);
+const INDEX = WEB.index;
 // o app (e o painel disfarçado) não entra no Google: só a página de vendas e as páginas de conteúdo
 const sendApp = (req, res) => res.set({ 'cache-control': 'no-cache', 'x-robots-tag': 'noindex' }).type('html').send(INDEX);
 app.get('/', wrap(async (req, res) => {

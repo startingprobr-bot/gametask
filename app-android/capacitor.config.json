@@ -3,8 +3,11 @@
   "appName": "GameTask",
   "webDir": "www",
   "server": {
-    "url": "https://gametask.startingpro.com.br/app",
+    "androidScheme": "https",
     "allowNavigation": ["gametask.startingpro.com.br"]
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true }
   },
   "android": { "backgroundColor": "#16296b" }
 }

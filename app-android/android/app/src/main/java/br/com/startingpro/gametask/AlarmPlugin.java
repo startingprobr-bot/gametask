@@ -204,6 +204,110 @@ public class AlarmPlugin extends Plugin {
         }).start();
     }
 
+    // ---------- Arquivos do app dentro do celular ----------
+    /**
+     * Depois de um Deploy: lê a lista do servidor, baixa só os arquivos que mudaram (o resto copia do que já está no
+     * celular) e devolve a pasta pronta. A troca acontece em webApply, quando a tela estiver livre.
+     */
+    @PluginMethod
+    public void webSync(PluginCall call) {
+        final Context ctx = getContext();
+        new Thread(() -> {
+            try {
+                org.json.JSONObject man = new org.json.JSONObject(readText(new java.net.URL(SITE + "/api/web-manifest").openStream()));
+                String v = man.getString("v");
+                if (!v.matches("[0-9a-f]{6,40}")) throw new Exception("versão inválida");
+                java.io.File root = new java.io.File(ctx.getFilesDir(), "web"), dir = new java.io.File(root, v);
+                if (new java.io.File(dir, ".ok").exists()) { JSObject r = new JSObject(); r.put("path", dir.getAbsolutePath()); r.put("v", v); r.put("got", 0); call.resolve(r); return; }
+                // o que já existe: a pasta em uso (se houver) e os arquivos que vieram dentro do APK
+                android.content.SharedPreferences prefs = ctx.getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE);
+                String cur = prefs.getString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, "");
+                java.io.File curDir = cur == null || cur.isEmpty() ? null : new java.io.File(cur);
+                java.io.File curMan = curDir == null ? null : new java.io.File(curDir, "web-manifest.json");
+                java.util.Map<String, String> curH = hashes(curMan != null && curMan.exists() ? readText(new java.io.FileInputStream(curMan)) : null);
+                java.util.Map<String, String> apkH = new java.util.HashMap<>();
+                try { apkH = hashes(readText(ctx.getAssets().open("public/web-manifest.json"))); } catch (Exception ignored) { }
+                java.io.File tmp = new java.io.File(root, v + ".tmp");
+                wipe(tmp); tmp.mkdirs();
+                org.json.JSONArray files = man.getJSONArray("files");
+                int got = 0;
+                for (int i = 0; i < files.length(); i++) {
+                    org.json.JSONObject f = files.getJSONObject(i);
+                    String p = f.getString("p"), h = f.getString("h");
+                    if (p.contains("..") || p.startsWith("/")) continue;
+                    java.io.File out = new java.io.File(tmp, p);
+                    out.getParentFile().mkdirs();
+                    if (curDir != null && h.equals(curH.get(p)) && new java.io.File(curDir, p).exists()) copy(new java.io.FileInputStream(new java.io.File(curDir, p)), out);
+                    else if (h.equals(apkH.get(p))) copy(ctx.getAssets().open("public/" + p), out);
+                    else {
+                        java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(SITE + f.optString("u", "/" + Uri.encode(p, "/"))).openConnection();
+                        c.setConnectTimeout(10000); c.setReadTimeout(20000);
+                        if (c.getResponseCode() != 200) throw new Exception("arquivo " + p + ": " + c.getResponseCode());
+                        copy(c.getInputStream(), out); c.disconnect(); got++;
+                    }
+                }
+                java.io.FileOutputStream mo = new java.io.FileOutputStream(new java.io.File(tmp, "web-manifest.json"));
+                mo.write(man.toString().getBytes("UTF-8")); mo.close();
+                wipe(dir);
+                if (!tmp.renameTo(dir)) throw new Exception("não deu para trocar a pasta");
+                new java.io.File(dir, ".ok").createNewFile();
+                // limpa versões antigas (fica só a nova e a que está em uso)
+                java.io.File[] old = root.listFiles();
+                if (old != null) for (java.io.File o : old) if (!o.equals(dir) && (curDir == null || !o.equals(curDir))) wipe(o);
+                JSObject r = new JSObject(); r.put("path", dir.getAbsolutePath()); r.put("v", v); r.put("got", got);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Não deu para baixar a versão nova: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    /** Passa a abrir o app pela pasta baixada (vale também nas próximas aberturas) e recarrega a tela. */
+    @PluginMethod
+    public void webApply(PluginCall call) {
+        String p = call.getString("path", "");
+        java.io.File dir = new java.io.File(p);
+        java.io.File root = new java.io.File(getContext().getFilesDir(), "web");
+        if (!new java.io.File(dir, ".ok").exists() || !root.equals(dir.getParentFile())) { call.reject("Pasta inválida"); return; }
+        getContext().getSharedPreferences(com.getcapacitor.plugin.WebView.WEBVIEW_PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(com.getcapacitor.plugin.WebView.CAP_SERVER_PATH, dir.getAbsolutePath()).apply();
+        call.resolve();
+        getBridge().setServerBasePath(dir.getAbsolutePath());
+    }
+
+    private static java.util.Map<String, String> hashes(String json) {
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        if (json == null) return m;
+        try {
+            org.json.JSONArray a = new org.json.JSONObject(json).getJSONArray("files");
+            for (int i = 0; i < a.length(); i++) m.put(a.getJSONObject(i).getString("p"), a.getJSONObject(i).getString("h"));
+        } catch (Exception ignored) { }
+        return m;
+    }
+
+    private static String readText(java.io.InputStream in) throws java.io.IOException {
+        try (java.io.InputStream i = in) {
+            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[16384]; int n;
+            while ((n = i.read(buf)) > 0) b.write(buf, 0, n);
+            return b.toString("UTF-8");
+        }
+    }
+
+    private static void copy(java.io.InputStream in, java.io.File out) throws java.io.IOException {
+        try (java.io.InputStream i = in; java.io.OutputStream o = new java.io.FileOutputStream(out)) {
+            byte[] buf = new byte[65536]; int n;
+            while ((n = i.read(buf)) > 0) o.write(buf, 0, n);
+        }
+    }
+
+    private static void wipe(java.io.File f) {
+        if (f == null || !f.exists()) return;
+        java.io.File[] k = f.listFiles();
+        if (k != null) for (java.io.File c : k) wipe(c);
+        f.delete();
+    }
+
     static final String SITE = "https://gametask.startingpro.com.br";
 
     // ---------- Som do fim do tempo escolhido pela família ----------
