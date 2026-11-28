@@ -7,6 +7,15 @@ const brl = (n) => (+n || 0).toLocaleString('pt-BR', { style: 'currency', curren
 const dmy = (d) => String(d).slice(0, 10).split('-').reverse().join('/');
 const app = $('#app');
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+// Cópia no celular da última tela vista (lista de jogadores e tela de cada criança), do mesmo dia:
+// a tela aparece na hora e o servidor só atualiza por cima. Virou o dia, a cópia não vale mais.
+const localDay = () => new Date().toLocaleDateString('sv');
+const keep = {
+  get(k) { try { const x = JSON.parse(store.get('gt-c-' + k) || 'null'); return x && x.day === localDay() && x.fam === keep.fam ? x.d : null; } catch { return null; } },
+  set(k, d) { if (keep.fam) store.set('gt-c-' + k, JSON.stringify({ day: localDay(), fam: keep.fam, d })); },
+  fam: '',
+};
+let meAt = 0; // quando perguntamos ao servidor "quem é esta família" pela última vez
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ---------- Ícones 3D (Fluent Emoji, MIT) ----------
@@ -47,10 +56,14 @@ async function api(method, url, body) {
   const pdev = PAINEL && store.get('gt-pdev');
   let r;
   const me = devId();
-  try { r = await fetch('/api' + url, { method, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
-  catch { throw new Error('Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
+  if (url.startsWith('/auth/') && method !== 'GET') meAt = 0; // entrou, saiu ou trocou PIN: pergunta de novo quem é
+  // sem resposta em 15 s: avisa em vez de deixar a tela parada para sempre
+  const ab = new AbortController(), to = setTimeout(() => ab.abort(), 15000);
+  try { r = await fetch('/api' + url, { method, signal: ab.signal, headers: { 'content-type': 'application/json', ...(pdev ? { 'x-parent-device': pdev } : {}), ...(me ? { 'x-gt-dev': me } : {}) }, body: body ? JSON.stringify(body) : undefined }); }
+  catch (e) { throw new Error(e?.name === 'AbortError' ? 'O GameTask está demorando para responder. Confira a internet e tente de novo.' : 'Sem conexão com o GameTask. Confira a internet e tente de novo.'); }
+  finally { clearTimeout(to); }
   const d = await r.json().catch(() => ({}));
-  if (r.status === 401 && !url.startsWith('/auth/')) { location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
+  if (r.status === 401 && !url.startsWith('/auth/')) { meAt = 0; location.hash = '#/login'; throw new Error(d.error || 'Sessão expirada'); }
   if (r.status === 402) { if (location.hash !== '#/assinar') location.hash = '#/assinar'; throw Object.assign(new Error(d.error), { silent: true }); }
   if (!r.ok) throw Object.assign(new Error(d.error || 'Algo deu errado. Tente de novo.'), { code: d.code, status: r.status });
   return d;
@@ -159,9 +172,11 @@ function alarm(kid, x, kind = '') {
   bg.innerHTML = `<div class="alarm-card">${im('alarm', 'alarm-ic')}<h2 class="d stroke">${kind ? 'Missão cumprida!' : 'Acabou o tempo!'}</h2><p>${esc(text)}</p><button class="btn big" id="alarmOff">Desligar</button></div>`;
   document.body.append(bg);
   const ring = () => { tone([[880, .28], [660, .28], [880, .28], [660, .28], [880, .28], [660, .45]], 'square', .3, true); navigator.vibrate?.([400, 200, 400, 200, 400]); setTimeout(() => bg.isConnected && say(text), 1500); };
-  ring(); const iv = setInterval(ring, 6000);
-  const off = $('#alarmOff', bg); off.focus();
-  off.onclick = () => { clearInterval(iv); hush(); bg.remove(); };
+  // fim do tempo (tela ou missão) avisa UMA vez: a criança pode já estar em outro app e não achar o Desligar.
+  // Alarme que repete até desligar fica para os horários marcados (hora de dormir, de ler...).
+  ring(); const iv = 0, auto = setTimeout(() => { if (bg.isConnected) bg.remove(); }, 15000);
+  const off = $('#alarmOff', bg); off.focus(); off.textContent = 'OK';
+  off.onclick = () => { clearInterval(iv); clearTimeout(auto); hush(); bg.remove(); };
 }
 
 // ---------- Efeitos ----------
@@ -897,7 +912,11 @@ async function route() {
   clearInterval(timer); refreshView = null;
   $$('.sheet-bg,.burst').forEach(e => e.remove());
   const paid = await paymentReturn();
-  const me = ME = await api('GET', '/auth/me');
+  // "quem é esta família" muda pouco: dentro de 2 min usa a resposta guardada e atualiza por trás
+  let me;
+  if (ME.family && meAt && Date.now() - meAt < 120000) { me = ME; api('GET', '/auth/me').then(x => { ME = x; meAt = Date.now(); }).catch(() => {}); }
+  else { me = ME = await api('GET', '/auth/me'); meAt = me.family ? Date.now() : 0; }
+  keep.fam = me.family && me.fid ? String(me.fid) : '';
   const [, a, b] = location.hash.split('/');
   if (['annual', 'monthly', 'plus'].includes(b) &&['criar', 'login', 'comprar'].includes(a)) store.set('gt-plan', b); // veio de "Assinar" na página de vendas
   if (a === 'redefinir' && b) return viewReset(b);
@@ -1101,10 +1120,23 @@ async function preload(srcs) {
 }
 
 async function viewPlayers(me = ME) {
+  const here = () => !location.hash.split('/')[1]; // ainda na escolha de jogador (não tocou num card nem foi para o painel)
+  const cached = keep.get('kids');
+  if (cached?.length) {
+    drawPlayers(me, cached); // aparece na hora com o que o celular guardou hoje
+    api('GET', '/kids').then(kids => { keep.set('kids', kids); kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); }); if (here() && !$('.sheet-bg')) drawPlayers(me, kids); })
+      .catch(e => { if (!e.silent) toast(plainErr(e), true); });
+    return;
+  }
   const kids = await api('GET', '/kids');
+  keep.set('kids', kids);
   await preload([...kids.map(k => iconUrl(k.avatar, 'fox')), iconUrl('coin'), iconUrl('check'), iconUrl('lock'), iconUrl('bell')]);
   kids.forEach(k => { syncClocks(k, k.timers); syncClocks(k, k.taskTimers, 't'); });
+  if (!here()) return; // a criança já tocou num card: não cobre a tela dela com a lista
   if (!kids.length && !me.onboarded) { location.hash = '#/setup'; return; }
+  drawPlayers(me, kids);
+}
+function drawPlayers(me, kids) {
   app.innerHTML = `<div class="lobby"><div class="rays"></div>
     <div class="lobby-bar">${soundBtn()}</div>
     <div class="wrap">
@@ -1134,6 +1166,7 @@ async function viewKid(id) {
   const here = () => { const [, a, b] = location.hash.split('/'); return a === 'kid' && +b === id; };
   const load = async () => {
     const d = await api('GET', `/kids/${id}/home`);
+    keep.set('home' + id, d);
     syncClocks(d.kid, d.time); syncClocks(d.kid, taskClocks(d.tasks), 't');
     if (!here()) { clearInterval(iv); return d; }
     latest = d; $('.timer-bg')?.paint?.();
@@ -1294,7 +1327,12 @@ async function viewKid(id) {
     };
     $$('[data-say],[data-tile]').forEach(el => el.onclick = (e) => { e.stopPropagation(); speak(el.dataset.say || el.dataset.tile); });
   };
-  await load();
+  // a tela de hoje guardada no celular aparece na hora; os números certos chegam do servidor logo depois
+  const cached = keep.get('home' + id);
+  if (cached) {
+    try { latest = cached; render(cached); first = false; } catch { latest = null; first = true; }
+    load().catch(e => { if (!e.silent) toast(plainErr(e), true); });
+  } else await load();
   if (!here()) return;
   iv = timer = setInterval(() => load().catch(() => {}), 20000);
 }

@@ -31,7 +31,13 @@ app.use(cookieSession({
 }));
 // App dos pais lembrado neste aparelho: o cabeçalho abre o painel só nos pedidos que vêm dele.
 // O app das crianças no mesmo celular não manda o cabeçalho, então continua trancado.
-const sha = (t) => require('crypto').createHash('sha256').update(String(t)).digest('hex');
+// Pedido que demorou mais de 1,5 s aparece no log do EasyPanel (para saber se a lentidão vem do servidor/banco)
+app.use('/api', (req, res, next) => {
+  const t0 = Date.now();
+  res.on('finish', () => { const ms = Date.now() - t0; if (ms > 1500) console.warn(`lento ${ms}ms ${req.method} ${req.path.replace(/\d+/g, ':n')} ${res.statusCode}`); });
+  next();
+});
+const sha =(t) => require('crypto').createHash('sha256').update(String(t)).digest('hex');
 app.use('/api', (req, res, next) => {
   const t = req.get('x-parent-device');
   if (!t || !req.session?.fid) return next();
@@ -113,7 +119,7 @@ app.get('/api/auth/me', wrap(async (req, res) => {
   const access = billing.access(f), parent = parentReq(req);
   const actor = parent ? members.pub(await members.member(req.session.fid, await actorId(req))) : null;
   const me = members.pub(await members.member(req.session.fid, req.session.mid));
-  res.json({ family: f.name, pending: !!f.setup_pending, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
+  res.json({ family: f.name, fid: req.session.fid, pending: !!f.setup_pending, parent: parent && !!actor, actor, me, access, owner: !!access.owner && !!actor?.full, onboarded: !!f.onboarded });
 }));
 
 const needFamily = (req, res, next) => {

@@ -21,15 +21,19 @@ async function pendingGains(kidId, sh, day) {
 router.get('/kids', async (req, res) => {
   const [kids] = await pool.query('SELECT id,name,avatar,color,adult FROM kids WHERE family_id=? AND active=1 ORDER BY adult,sort,id', [req.fid]);
   const day = today();
-  for (const k of kids) {
-    const tasks = await dayTasks(req.fid, k.id, day);
-    const [[c]] = await pool.query(`SELECT COUNT(*) n FROM completions WHERE kid_id=? AND day=? AND status<>'rejected'`, [k.id, day]);
-    const sh = await shares(req.fid, k.id);
-    k.coins = k.adult ? null : r2(await balance(req.fid, k.id) + (await pendingGains(k.id, sh, day)).pendingCoins);
+  // cada criança é buscada ao mesmo tempo (antes era uma depois da outra: com 3 filhos, 3x a espera)
+  await Promise.all(kids.map(async (k) => {
+    const [tasks, [[c]], sh, bal, [[m]]] = await Promise.all([
+      dayTasks(req.fid, k.id, day),
+      pool.query(`SELECT COUNT(*) n FROM completions WHERE kid_id=? AND day=? AND status<>'rejected'`, [k.id, day]),
+      shares(req.fid, k.id),
+      k.adult ? 0 : balance(req.fid, k.id),
+      pool.query('SELECT COUNT(*) n FROM messages WHERE family_id=? AND (kid_id=? OR kid_id IS NULL) AND read_at IS NULL', [req.fid, k.id]),
+    ]);
+    k.coins = k.adult ? null : r2(bal + (await pendingGains(k.id, sh, day)).pendingCoins);
     k.total = tasks.length; k.done = Math.min(c.n, tasks.length);
-    const [[m]] = await pool.query('SELECT COUNT(*) n FROM messages WHERE family_id=? AND (kid_id=? OR kid_id IS NULL) AND read_at IS NULL', [req.fid, k.id]);
     k.msgs = m.n;
-  }
+  }));
   const [runs] = await pool.query('SELECT DISTINCT kid_id FROM time_runs WHERE family_id=?', [req.fid]);
   for (const k of kids) k.timers = runs.some(r => r.kid_id === k.id) ? (await kidTime(req.fid, k)).filter(t => t.run !== null || t.ended) : [];
   const [truns] = await pool.query('SELECT DISTINCT kid_id FROM task_runs WHERE family_id=? AND day=? AND started_at IS NOT NULL', [req.fid, today()]);

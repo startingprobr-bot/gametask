@@ -33,7 +33,7 @@ public class AlarmService extends Service {
     private Vibrator vibrator;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String speech = "";
-    private boolean endAlarm;
+    private boolean endAlarm, once;
     private String mode = "sound";
     private boolean on;
 
@@ -47,6 +47,9 @@ public class AlarmService extends Service {
         String call = intent != null ? intent.getStringExtra("call") : null;
         String dk = intent != null ? intent.getStringExtra("dk") : null;
         endAlarm = dk != null && dk.startsWith("tu"); // fim do tempo de tela: usa o som escolhido pela família
+        // fim do tempo de tela ("tu") ou de missão ("tt"): toca e fala UMA vez e desliga sozinho.
+        // A criança pode já estar em outro app sem achar o Desligar. Repetir até desligar é só para horários marcados.
+        once = call == null && dk != null && (dk.startsWith("tu") || dk.startsWith("tt"));
         String mx = intent != null ? intent.getStringExtra("mode") : null;
         mode = call != null ? "sound" : (mx != null && !mx.isEmpty() ? mx : BlockStore.mode(this)); // ligação sempre toca
         Intent full = new Intent(this, call != null ? CallActivity.class : AlarmActivity.class).putExtra("call", call).putExtra("title", title).putExtra("body", body).putExtra("icon", intent != null ? intent.getStringExtra("icon") : null)
@@ -72,7 +75,7 @@ public class AlarmService extends Service {
         if (mode.equals("sound")) louder();
         if (!mode.equals("silent")) vibrate();
         if (mode.equals("sound")) cycle();
-        handler.postDelayed(this::stopSelf, call != null ? 45 * 1000 : mode.equals("sound") ? 3 * 60 * 1000 : mode.equals("vibrate") ? 40 * 1000 : 90 * 1000); // ligação toca 45 s
+        handler.postDelayed(this::stopSelf, call != null ? 45 * 1000 : once ? 40 * 1000 : mode.equals("sound") ? 3 * 60 * 1000 : mode.equals("vibrate") ? 40 * 1000 : 90 * 1000); // ligação toca 45 s
         return START_NOT_STICKY;
     }
 
@@ -88,11 +91,11 @@ public class AlarmService extends Service {
             java.io.File mine = new java.io.File(getFilesDir(), "end_sound");
             if (endAlarm && mine.exists()) { try { player.setDataSource(mine.getAbsolutePath()); } catch (Exception e) { player.reset(); player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()); player.setDataSource(this, uri); } }
             else player.setDataSource(this, uri);
-            player.setOnCompletionListener(mp -> Speaker.say(this, speech, () -> handler.postDelayed(this::cycle, 900)));
+            player.setOnCompletionListener(mp -> Speaker.say(this, speech, () -> handler.postDelayed(once ? this::stopSelf : this::cycle, once ? 1500 : 900)));
             player.prepare();
             player.start();
         } catch (Exception e) {
-            Speaker.say(this, speech, () -> handler.postDelayed(this::cycle, 1500));
+            Speaker.say(this, speech, () -> handler.postDelayed(once ? this::stopSelf : this::cycle, 1500));
         }
     }
 
@@ -109,7 +112,8 @@ public class AlarmService extends Service {
         try {
             vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
             long[] p = { 0, 600, 300, 600, 300, 600, 1200 };
-            if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createWaveform(p, 0)); else vibrator.vibrate(p, 0);
+            int rep = once ? -1 : 0; // aviso único vibra uma vez só
+            if (Build.VERSION.SDK_INT >= 26) vibrator.vibrate(VibrationEffect.createWaveform(p, rep)); else vibrator.vibrate(p, rep);
         } catch (Exception ignored) { }
     }
 
